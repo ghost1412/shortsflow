@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clips made with ShortsFlow | ShortsFlow</title>
+<meta name="description" content="Five captioned vertical clips made by ShortsFlow from a public-domain NASA video. Watch them, then try it on your own podcast: free, open source, no upload.">
+<link rel="canonical" href="https://ghost1412.github.io/shortsflow/gallery.html">
+<meta property="og:title" content="Clips made with ShortsFlow">
+<meta property="og:description" content="Five captioned vertical clips from a public-domain NASA video, made on a PC with free, open-source ShortsFlow.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ghost1412.github.io/shortsflow/gallery.html">
+<meta property="og:image" content="https://ghost1412.github.io/shortsflow/demos/gallery/space_clip_1.jpg">
+<style>
+  :root {
+    --bg: #fbfaf7; --surface: #ffffff; --ink: #1c1b19; --muted: #5d5a54; --line: #e4e0d8;
+    --accent: #d9480f; --accent-ink: #ffffff; --soft: #fff1e8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151412; --surface: #1f1d1a; --ink: #f1eee8; --muted: #b3aea4; --line: #34312c; --accent: #ff7a3d; --accent-ink: #1a1308; --soft: #2a1d14; }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+  header.top { display: flex; justify-content: space-between; align-items: center; padding: 18px 0; gap: 12px; flex-wrap: wrap; }
+  .brand { font-weight: 800; font-size: 1.2rem; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); }
+  nav a { margin-left: 16px; text-decoration: none; color: var(--muted); font-size: 0.95rem; }
+  nav a:hover { color: var(--ink); }
+  .hero { display: grid; gap: 32px; align-items: center; padding: 28px 0 48px; grid-template-columns: 1fr; }
+  @media (min-width: 820px) { .hero { grid-template-columns: 1.1fr 0.9fr; } }
+  h1 { font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.08; margin: 0 0 16px; letter-spacing: -0.02em; }
+  .lead { font-size: 1.15rem; color: var(--muted); margin: 0 0 24px; max-width: 34em; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { display: inline-block; padding: 12px 20px; border-radius: 10px; font-weight: 700; text-decoration: none; border: 2px solid var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .btn.ghost { color: var(--accent); background: transparent; }
+  .btn:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .hero figure { margin: 0; text-align: center; }
+  .hero img { width: min(300px, 100%); height: auto; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); }
+  figcaption { color: var(--muted); font-size: 0.85rem; margin-top: 8px; }
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 1.6rem; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .ba { display: flex; gap: 20px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .ba figure { margin: 0; text-align: center; }
+  .ba img { max-width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); }
+  .ba figure:first-child { flex: 0 1 520px; min-width: 0; }
+  .ba figure:last-child { flex: 0 1 240px; min-width: 0; }
+  .ba figure img { width: 100%; }
+  .ba .arrow { font-size: 2rem; color: var(--accent); font-weight: 800; }
+  @media (max-width: 700px) { .ba .arrow { transform: rotate(90deg); } }
+  .grid.wide { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .card h3 { margin: 0 0 6px; font-size: 1.05rem; }
+  .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+  .step { counter-increment: s; position: relative; padding-top: 44px; }
+  .step::before { content: counter(s); position: absolute; top: 12px; left: 18px; width: 28px; height: 28px; border-radius: 50%; background: var(--soft); color: var(--accent); font-weight: 800; display: grid; place-items: center; }
+  .steps { counter-reset: s; }
+  .demos { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  .demos figure { margin: 0; }
+  .demos img { width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9rem; }
+  pre { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow-x: auto; margin: 10px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .note { background: var(--soft); border-radius: 12px; padding: 14px 18px; color: var(--ink); }
+  footer { padding: 32px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+  footer p { margin: 0 0 8px; }
+
+  .clips { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .clip { margin: 0; text-align: center; }
+  .clip video { width: 100%; max-width: 300px; height: auto; aspect-ratio: 9 / 16; border-radius: 14px; border: 1px solid var(--line); background: #000; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./">ShortsFlow</a>
+    <nav aria-label="Sections"><a href="./">Home</a><a href="clip-a-podcast-without-uploading.html">Podcast clips, no upload</a><a href="https://github.com/ghost1412/shortsflow">GitHub</a></nav>
+  </header>
+  <main>
+    <h1>Clips made with ShortsFlow</h1>
+    <p class="lead">Five captioned vertical clips (1080x1920) from one long, public-domain NASA video, made on a PC. The crop follows whoever is speaking and the captions are timed word by word.</p>
+    <section aria-labelledby="clips">
+      <h2 id="clips">Watch them</h2>
+      <p class="sub">Each video is a 540x960 copy so it loads fast; the real clips are 1080x1920. Tap play on any of them.</p>
+      <div class="clips">
+      <figure class="clip">
+        <video controls preload="none" playsinline poster="demos/gallery/space_clip_1.jpg" width="270" height="480">
+          <source src="https://github.com/ghost1412/shortsflow/releases/download/gallery-v1/space_clip_1.mp4" type="video/mp4">
+        </video>
+        <figcaption>Clip 1</figcaption>
+      </figure>
+      <figure class="clip">
+        <video controls preload="none" playsinline poster="demos/gallery/space_clip_2.jpg" width="270" height="480">
+          <source src="https://github.com/ghost1412/shortsflow/releases/download/gallery-v1/space_clip_2.mp4" type="video/mp4">
+        </video>
+        <figcaption>Clip 2</figcaption>
+      </figure>
+      <figure class="clip">
+        <video controls preload="none" playsinline poster="demos/gallery/space_clip_3.jpg" width="270" height="480">
+          <source src="https://github.com/ghost1412/shortsflow/releases/download/gallery-v1/space_clip_3.mp4" type="video/mp4">
+        </video>
+        <figcaption>Clip 3</figcaption>
+      </figure>
+      <figure class="clip">
+        <video controls preload="none" playsinline poster="demos/gallery/space_clip_4.jpg" width="270" height="480">
+          <source src="https://github.com/ghost1412/shortsflow/releases/download/gallery-v1/space_clip_4.mp4" type="video/mp4">
+        </video>
+        <figcaption>Clip 4</figcaption>
+      </figure>
+      <figure class="clip">
+        <video controls preload="none" playsinline poster="demos/gallery/space_clip_5.jpg" width="270" height="480">
+          <source src="https://github.com/ghost1412/shortsflow/releases/download/gallery-v1/space_clip_5.mp4" type="video/mp4">
+        </video>
+        <figcaption>Clip 5</figcaption>
+      </figure>
+      </div>
+      <p class="sub" style="margin-top:20px">Footage: NASA, public domain ("Podcast Live from Space: Astronaut Photography", Wikimedia Commons). It is an example of the output, not a claim about every video: results depend on the audio, the speakers and the picture.</p>
+    </section>
+    <section aria-labelledby="try">
+      <h2 id="try">Try it on your own podcast</h2>
+      <p class="sub">Free and open source (MIT). No account, no API key needed, no watermark, and your video is not uploaded anywhere unless you choose an optional online AI helper.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/ghost1412/shortsflow/releases/latest/download/ShortsFlow-Setup.exe">Download for Windows</a>
+        <a class="btn ghost" href="https://github.com/ghost1412/shortsflow#try-it-in-two-minutes">Mac, Linux, pip or Colab</a>
+        <a class="btn ghost" href="clip-a-podcast-without-uploading.html">How it works</a>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
