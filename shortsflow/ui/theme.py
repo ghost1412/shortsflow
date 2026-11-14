@@ -73,7 +73,7 @@ EXTRA_CSS = """
 @media (max-width: 900px) { #sf-projects .grid-container, #sf-templates .grid-container { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }
 @media (max-width: 560px) { #sf-projects .grid-container, #sf-templates .grid-container { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
 #sf-projects .grid-container { max-height: 460px; overflow-y: auto; }          /* a long history scrolls inside its box instead of pushing the page down */
-body:not(.dark) .gradio-container, body:not(.dark) { background: #f4f1ec !important; }          /* light mode: a warm page behind white cards, so the sections stand out */
+html:has(body:not(.dark)), body:not(.dark), body:not(.dark) gradio-app, body:not(.dark) .gradio-container { background: #f4f1ec !important; }          /* light mode: a warm page behind white cards, so the sections stand out */
 body:not(.dark) .gradio-container .form { background: #ffffff; }
 body:not(.dark) .gradio-container .block, body:not(.dark) .gradio-container .form { border-color: rgba(60, 50, 40, .20) !important; }
 .sf-progress { padding: 14px 16px 12px; border-radius: 14px; border: 1px solid rgba(128,128,128,.25); background: rgba(128,128,128,.06); }

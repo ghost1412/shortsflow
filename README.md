@@ -1,4 +1,6 @@
-# ⚡ ShortsFlow
+<p align="center"><img src="assets/branding/logo-192.png" width="96" height="96" alt="ShortsFlow logo" /></p>
+
+# ShortsFlow
 
 > **Drop in a podcast or interview, get captioned vertical clips. No account, no API key, no upload.**
 > Free and open source (MIT): no watermark, no credits, no subscription. Runs on your own PC.

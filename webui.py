@@ -63,6 +63,12 @@ def _blocks_theme():
     return {} if _gradio_major() >= 6 else {"theme": _app_theme()}
 
 
+def _favicon():
+    """The logo as the browser tab icon, when the file is there (a checkout; a pip install may not ship assets)."""
+    path = os.path.join(ROOT, "assets", "branding", "logo-64.png")
+    return {"favicon_path": path} if os.path.isfile(path) else {}
+
+
 def _launch_theme():
     return {"theme": _app_theme()} if _gradio_major() >= 6 else {}
 
@@ -1079,7 +1085,7 @@ def build_ui():
     from shortsflow.ui import dialogs as _dialogs
     browse_ok = _dialogs.available()            # the Browse buttons only where a desktop dialog can be shown (not Docker, not remote)
     with gr.Blocks(title="ShortsFlow AI Studio", **_blocks_theme()) as demo:
-        gr.HTML('<div class="sf-hero"><h1>ShortsFlow</h1><p>Turn a long video into shorts. It runs on this PC and nothing leaves it unless you switch on an '
+        gr.HTML('<div class="sf-hero"><h1><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="34" height="34" aria-hidden="true" style="display:inline-block;vertical-align:-7px;margin-right:10px"><rect x="6" y="6" width="500" height="500" rx="106" fill="#111827" stroke="#ffffff" stroke-opacity=".22" stroke-width="12"/><rect x="64" y="88" width="384" height="88" rx="26" fill="#fff"/><rect x="64" y="224" width="108" height="208" rx="26" fill="#f97316"/><rect x="202" y="224" width="108" height="208" rx="26" fill="#f97316"/><rect x="340" y="224" width="108" height="208" rx="26" fill="#f97316"/></svg>ShortsFlow</h1><p>Turn a long video into shorts. It runs on this PC and nothing leaves it unless you switch on an '
                 'online helper. <a href="https://github.com/ghost1412/shortsflow" target="_blank">GitHub</a></p></div>')
         gr.HTML(WORDS_CSS)
         from shortsflow.timeline import DRAG_JS
@@ -1707,7 +1713,7 @@ def main(argv=None):
         print(f"[Login] username: {creds[0]}   password: {creds[1]}   (new on every start; use --auth user:pass to choose your own)", flush=True)
     build_ui().queue(default_concurrency_limit=1).launch(
         server_name=cli.host, server_port=cli.port, share=cli.share, inbrowser=cli.open,
-        **({"auth": creds} if creds else {}), **_launch_theme()
+        **({"auth": creds} if creds else {}), **_launch_theme(), **_favicon()
     )
 
 

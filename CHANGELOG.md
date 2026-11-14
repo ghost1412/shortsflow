@@ -24,6 +24,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 - Browser app: the Stop button only shows while a run is going, and light mode has a warm page behind white cards so the sections stand out (dark mode unchanged).
 
+- A project logo (one wide bar over three tall bars: a long video becoming shorts) in the browser app header and tab icon, the README, the website and a social preview card (`assets/branding/`).
+
 
 ## 0.7.8 (2026-11-13)
 
