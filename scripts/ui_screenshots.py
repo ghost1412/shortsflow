@@ -61,6 +61,25 @@ with open(os.path.join(session, "results.json"), "w", encoding="utf-8") as f:
                             "use_remotion": True, "caption_style": "HORMOZI", "subtitle_y_pos": 1150, "brand": None},
                "clips": clips}, f)
 
+# Optional: SF_DEMO_SESSION=<a finished session folder> uses the first two clips, their titles and the transcript of a real run instead of the
+# canned facts clips above (for README pictures that match the podcast story). Local use only: CI has no such folder.
+_demo = os.environ.get("SF_DEMO_SESSION")
+if _demo and os.path.isfile(os.path.join(_demo, "results.json")):
+    import shutil as _sh
+    with open(os.path.join(_demo, "results.json"), encoding="utf-8") as f:
+        real = json.load(f)
+    real_clips = []
+    for c in real["clips"][:2]:
+        src = c["video_path"] if os.path.isabs(c["video_path"]) else os.path.join(ROOT, c["video_path"])
+        dst = os.path.join(session, f"video_clip_{c['clip_index']}.mp4")
+        _sh.copyfile(src, dst)
+        real_clips.append(dict(c, video_path=dst, thumbnail=None))
+    real.update(clips=real_clips, total_clips=len(real_clips), session_dir=session)
+    with open(os.path.join(session, "results.json"), "w", encoding="utf-8") as f:
+        json.dump(real, f)
+    if os.path.isfile(os.path.join(_demo, "transcript.json")):
+        _sh.copyfile(os.path.join(_demo, "transcript.json"), os.path.join(session, "transcript.json"))
+
 # the workspace of a real install gets these copied in from the package; mirror that
 import shutil
 shutil.copytree(os.path.join(ROOT, "assets", "caption_previews"), os.path.join(home, "assets", "caption_previews"))

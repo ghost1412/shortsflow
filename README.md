@@ -26,6 +26,11 @@
 
 No account or API key is needed to clip a video. A key (or a free local Ollama) adds AI-written titles and descriptions and lets the AI pick and score the moments (a cloud provider then receives the transcript text).
 
+<p align="center">
+  <img src="demos/webui_review.jpg" width="640" alt="The browser app after a run: two finished shorts with their score, a plain reason, good/not-good buttons and an editor for each" />
+  <br/><sub>The browser app after a run on a public-domain NASA video: each short has a score, the reason it was picked and an editor. Tick "Let me review the moments first" to check the picks before anything is rendered.</sub>
+</p>
+
 ## What you get from one long video
 
 - **The moments.** Local Whisper reads the speech; clips start and end on sentences, skip a mic check or a mumbled opening, and never overlap. Every clip says why it was picked.

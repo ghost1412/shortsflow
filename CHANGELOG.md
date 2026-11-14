@@ -22,6 +22,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 - Game footage with `--visual_context`: a moment that looks like real filmed footage (a just-chatting part of a stream recording, for example) is flagged in the plan and on the review card instead of passing as a story moment. It is only flagged, never removed.
 - `--join_reel` (shorts): after the clips are made, they are also joined into one video, `reel_joined.mp4` in the session folder, with crossfades or the look chosen with `--transitions`. The shorts stay as they are. This is the vertical counterpart of the highlights video, which was landscape only.
 
+- Browser app: the Stop button only shows while a run is going, and light mode has a warm page behind white cards so the sections stand out (dark mode unchanged).
+
 
 ## 0.7.8 (2026-11-13)
 

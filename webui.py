@@ -1200,7 +1200,7 @@ def build_ui():
                         q_plan_first = gr.Checkbox(label="Let me review the moments first", value=False,
                                                    info="Finds the moments, then stops: you see each one on a timeline, adjust start and end or drop it, and only then it is rendered. Short clips only.")
                         q_btn = gr.Button("✨ Make my shorts", variant="primary")
-                        q_stop = gr.Button("⏹ Stop", variant="stop")
+                        q_stop = gr.Button("⏹ Stop", variant="stop", visible=False)          # shown only while a run is going
                         q_status = gr.Markdown("Waiting for a video...")
                 q_cards = gr.State([])
                 q_plan = gr.State(None)
@@ -1403,9 +1403,13 @@ def build_ui():
                 q_run = q_btn.click(quick_clip, [q_url, q_upload, q_count, q_captions, q_style, q_brand_on, q_logo, q_handle, q_endcard, q_color, q_pos, q_mode, q_minutes, q_find, q_cut, q_spoken, q_caption_lang,
                              q_clean, q_hook, q_emoji, q_filler, q_filler_file, q_broll, q_zoom, q_cold, q_edit, q_edit_strength, q_stats, q_length, q_moments, q_about, q_visual, q_reuse, q_reuse_all, q_drive, q_enhance, q_grade,
                              q_game, q_game_mix, q_cap_pos, q_cap_size, q_game_frame, q_llm, *q_look, q_plan_first, q_between, q_picture],
-                            [q_status, q_log, q_cards]).then(load_plan, None, q_plan).then(projects_update, None, [q_projects, q_proj_paths, q_proj_title])
-                q_cont_run = q_continue.click(continue_run, q_unfinished, [q_status, q_log, q_cards])
-                q_stop.click(stop_jobs, None, q_status, cancels=[q_run, q_cont_run]).then(unfinished_update, None, q_unfinished)
+                            [q_status, q_log, q_cards]).then(load_plan, None, q_plan).then(projects_update, None, [q_projects, q_proj_paths, q_proj_title]).then(
+                    lambda: gr.update(visible=False), None, q_stop)
+                q_btn.click(lambda: gr.update(visible=True), None, q_stop)
+                q_cont_run = q_continue.click(continue_run, q_unfinished, [q_status, q_log, q_cards]).then(lambda: gr.update(visible=False), None, q_stop)
+                q_continue.click(lambda: gr.update(visible=True), None, q_stop)
+                q_stop.click(stop_jobs, None, q_status, cancels=[q_run, q_cont_run]).then(unfinished_update, None, q_unfinished).then(
+                    lambda: gr.update(visible=False), None, q_stop)
                 demo.load(unfinished_update, None, q_unfinished)
                 demo.load(load_plan, None, q_plan)
                 demo.load(projects_update, None, [q_projects, q_proj_paths, q_proj_title])
