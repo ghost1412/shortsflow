@@ -293,7 +293,7 @@ def dub_video(upload, url, target_lang, spoken="auto", burn_captions=False, tts_
 def trip_recap(files, name, stops, note, hook, length, style, music, reuse="", drive="", look=False, both=False, name_places=True, enhance=False, kind="trip", keep_sound=False,
                grade="default", edit="none", edit_strength="medium", clean_sound=False, sample="auto", transitions="auto", subject_look="auto", subject_color="auto", subject_max=2, lines="", open_result=False, llm_provider="auto", steps="", font="default",
                visual_template="none", intro_animation="none", outro_animation="none",
-               tpl_speaker="", tpl_role="", tpl_show="", tpl_handle="", tpl_headline="", tpl_cta="", paths="", like=""):
+               tpl_speaker="", tpl_role="", tpl_show="", tpl_handle="", tpl_headline="", tpl_cta="", paths="", like="", review_first=False):
     """Recap tab (trip, wedding, event, family): several videos in filming order -> one recap with a hook, title cards and an itinerary."""
     import time
     from shortsflow import reuse as _reuse
@@ -317,6 +317,8 @@ def trip_recap(files, name, stops, note, hook, length, style, music, reuse="", d
     cmd = [*_pipeline_cmd(), *web_args.trip_args(files, session, name, stops, note, hook, length, style, music, look=look, both=both, name_places=name_places, enhance=enhance, kind=kind, keep_sound=keep_sound,
                                                             grade=grade, edit=edit, edit_strength=edit_strength, clean_sound=clean_sound, sample=sample, transitions=transitions, subject_look=subject_look, subject_color=subject_color, subject_max=subject_max, lines=lines, open_result=open_result, llm_provider=llm_provider, steps_file=steps_file, font=font),
            *web_args.template_args(visual_template, intro_animation, outro_animation, tpl_speaker, tpl_role, web_args.recap_template_show(tpl_show, name), tpl_handle, tpl_headline, tpl_cta)]
+    if review_first:
+        cmd += ["--recap_plan_only"]                         # pick the shots and stop: they are shown for review before anything is rendered
     if (like or "").strip():
         if web_args.remote_access() and not web_args.is_web_link(like):
             raise gr.Error(PC_PATH_MESSAGE)
@@ -331,6 +333,14 @@ def trip_recap(files, name, stops, note, hook, length, style, music, reuse="", d
     for log, _videos in _run(cmd):
         last = next((ln.split("]", 1)[1].strip() for ln in reversed(log.splitlines()) if ln.startswith("[Log]")), "")
         yield f"Working... {last}"[:200], log, None, None
+    if review_first:
+        from engine.trip_recap import read_recap_plan
+        if read_recap_plan(session):
+            yield "📝 The shots are picked. Nothing is rendered yet: check them in the **Review the shots** section below, then press **Render these shots**.", log, None, None
+        else:
+            reason = next((ln.split("]", 1)[1].strip() for ln in reversed(log.splitlines()) if ln.startswith("[Error]")), "")
+            yield "❌ No shots were picked." + (f" {reason}" if reason else " Open 'Technical details' for the reason."), log, None, None
+        return
     video, md = web_args.find_trip_outputs(session)
     if video:
         videos = web_args.find_trip_videos(session)
@@ -343,6 +353,116 @@ def trip_recap(files, name, stops, note, hook, length, style, music, reuse="", d
         return
     reason = next((ln.split("]", 1)[1].strip() for ln in reversed(log.splitlines()) if ln.startswith("[Error]")), "")
     yield "❌ No recap was made." + (f" {reason}" if reason else " Open 'Technical details' for the reason."), log, None, None
+
+
+def latest_recap_plan(root):
+    """The newest Recap session with a reviewable plan that was not rendered yet: {"session", "title", "aspect", "framing", "days"} or None.
+    Each shot gets small previews (the picked one and the alternatives) in the shape of the final recap."""
+    import time
+    from engine.plan import make_preview
+    from engine.trip_recap import read_recap_plan
+    for d in sorted(glob.glob(os.path.join(root, "sessions", "trip_*")), reverse=True)[:1]:
+        plan = read_recap_plan(d)
+        path = os.path.join(d, "recap_plan.json")
+        if not plan or time.time() - os.path.getmtime(path) > 24 * 3600 or os.path.isfile(os.path.join(d, "recap.mp4")) \
+                or os.path.isfile(os.path.join(d, "recap_plan_done")) or any(n.startswith("recap") and n.endswith(".mp4") for n in os.listdir(d)):
+            return None
+        cmd = [str(x) for x in ((_read_command(d) or {}).get("cmd") or [])]
+        aspect = cmd[cmd.index("--recap_aspect") + 1] if "--recap_aspect" in cmd and cmd.index("--recap_aspect") + 1 < len(cmd) else "9:16"
+        framing = "crop" if "--layout" in cmd and cmd[cmd.index("--layout") + 1:cmd.index("--layout") + 2] == ["crop"] else "fit"
+
+        def preview(shot, tag):
+            out = os.path.join(d, "previews", f"{tag}_{int(shot['start'])}_{int(shot['end'])}_{framing}.mp4")
+            return out if os.path.isfile(out) else make_preview(shot["file"], shot["start"], shot["end"], out, framing=framing, aspect=aspect)
+        for row in plan["days"]:
+            for i, m in enumerate(row["moments"], 1):
+                m["preview"] = preview(m, f"d{row['day']}m{i}")
+            for i, a in enumerate(row["alternatives"], 1):
+                a["preview"] = preview(a, f"d{row['day']}a{i}")
+        return {"session": d, "title": plan.get("title") or "", "aspect": aspect, "framing": framing, "days": plan["days"]}
+    return None
+
+
+def load_recap_plan():
+    return latest_recap_plan(ROOT)
+
+
+def render_recap_plan(session, *values):
+    """Render the reviewed shots. values: for every shot in plan order: keep flag, choice (current or alternative number), start, end."""
+    from engine.trip_recap import read_recap_plan
+    plan = read_recap_plan(session)
+    if not plan:
+        raise gr.Error("That plan could not be read.")
+    shots = [(row["day"], m) for row in plan["days"] for m in row["moments"]]
+    if len(values) != 4 * len(shots):
+        raise gr.Error("The review is out of date. Start the recap again.")
+    keeps, choices, starts, ends = (values[k * len(shots):(k + 1) * len(shots)] for k in range(4))
+    by_day = {row["day"]: [] for row in plan["days"]}
+    alts = {row["day"]: row["alternatives"] for row in plan["days"]}
+    for (day, m), keep, choice, a, b in zip(shots, keeps, choices, starts, ends):
+        if not keep:
+            continue
+        if choice and str(choice).isdigit() and 1 <= int(choice) <= len(alts[day]):
+            alt = alts[day][int(choice) - 1]
+            by_day[day].append({"file": alt["file"], "start": alt["start"], "end": alt["end"]})
+        else:
+            if a is None or b is None or float(b) - float(a) < 0.5:
+                raise gr.Error(f"Day {day}: the end must be at least half a second after the start.")
+            by_day[day].append({"file": m["file"], "start": float(a), "end": float(b)})
+    empty = [d for d, rows in by_day.items() if not rows]
+    if empty:
+        raise gr.Error(f"Day {empty[0]} has no shot left. Keep at least one shot for every day.")
+    chosen = os.path.join(session, "recap_moments.json")
+    with open(chosen, "w", encoding="utf-8") as f:
+        json.dump({"days": [by_day[row["day"]] for row in plan["days"]]}, f)
+    with open(os.path.join(session, "command.json"), encoding="utf-8") as f:
+        cmd = list(json.load(f)["cmd"])
+    while "--recap_plan_only" in cmd:
+        cmd.remove("--recap_plan_only")
+    while "--recap_moments" in cmd:
+        i = cmd.index("--recap_moments")
+        del cmd[i:i + 2]
+    cmd += ["--recap_moments", chosen]
+    save_command(session, cmd)
+    yield "Rendering the shots you chose...", "", None, None
+    log = ""
+    for log, _videos in _run(cmd):
+        last = next((ln.split("]", 1)[1].strip() for ln in reversed(log.splitlines()) if ln.startswith("[Log]")), "")
+        yield f"Working... {last}"[:200], log, None, None
+    video, md = web_args.find_trip_outputs(session)
+    if video:
+        yield "✅ Done! Your trip recap is ready below.", log, video, ([md] if md else None)
+        return
+    reason = next((ln.split("]", 1)[1].strip() for ln in reversed(log.splitlines()) if ln.startswith("[Error]")), "")
+    yield "❌ No recap was made." + (f" {reason}" if reason else " Open 'Technical details' for the reason."), log, None, None
+
+
+def render_recap_plan_handler(session):
+    """A generator function, like render_plan_handler (Gradio streams progress only from a real generator function)."""
+    def run(*values):
+        yield from render_recap_plan(session, *values)
+    return run
+
+
+def dismiss_recap_plan_handler(session):
+    def run():
+        try:
+            open(os.path.join(session, "recap_plan_done"), "w").close()      # a marker, nothing is deleted
+        except OSError:
+            pass
+        return None
+    return run
+
+
+def recap_preview_handler(session, shot, tag, framing, aspect):
+    def run(start, end):
+        from engine.plan import make_preview
+        path = make_preview(shot["file"], start, end, os.path.join(session, "previews", f"{tag}_{int(float(start or 0))}_{int(float(end or 0))}_{framing}_edit.mp4"),
+                            framing=framing, aspect=aspect)
+        if not path:
+            raise gr.Error("Could not make a preview for those times.")
+        return path
+    return run
 
 
 def recap_kind_changed(kind):
@@ -1671,6 +1791,8 @@ def build_ui():
                                                   info="Picture descriptions and place names are reused, and its videos too if you add none above.")
                             t_drive = gr.Textbox(label="Upload to a Google Drive folder (optional)", placeholder="https://drive.google.com/drive/folders/...",
                                                  info="Needs a one-time Google sign-in; see the top of engine/drive_upload.py.")
+                        t_review = gr.Checkbox(label="Let me review the shots first", value=False,
+                                               info="Picks the shots, then stops: you see the shot for each day with a preview, can swap it for an alternative, trim it or drop it, and only then it is rendered.")
                         t_btn = gr.Button("🧳 Make my recap", variant="primary")
                         t_stop = gr.Button("⏹ Stop", variant="stop")
                         t_status = gr.Markdown("Waiting for your videos...")
@@ -1678,8 +1800,49 @@ def build_ui():
                         t_md = gr.File(label="Itinerary (.md) and all versions", file_count="multiple", interactive=False, height=110)
                 with gr.Accordion("Technical details", open=False):
                     t_log = gr.Textbox(label="Full log", lines=14, max_lines=14, autoscroll=True)
-                t_run = t_btn.click(trip_recap, [t_files, t_name, t_stops, t_note, t_hook, t_length, t_style, t_music, t_reuse, t_drive, t_look, t_both, t_places, t_enhance, t_kind, t_keep, t_grade, t_edit, t_edit_strength, t_clean, t_sample, t_trans, t_look_fx, t_look_color, t_subject_max, t_lines, t_open_result, t_llm, t_steps, t_font, *t_look_ctl, t_paths, t_like],
+                t_plan = gr.State(None)
+
+                @gr.render(inputs=t_plan)
+                def show_recap_plan(plan):
+                    """Before rendering: each day's picked shot with a preview, alternatives, trim boxes and a keep box."""
+                    if not plan or not plan.get("days"):
+                        return
+                    gr.Markdown("### Review the shots\nNothing is rendered yet. Watch each shot, pick another one if you like, trim it or untick it to drop it, then render.")
+                    keeps, choices, t0s, t1s = [], [], [], []
+                    for row in plan["days"]:
+                        for mi, m in enumerate(row["moments"], 1):
+                            tag = f"d{row['day']}m{mi}"
+                            with gr.Group():
+                                title = f"Day {row['day']}" + (f" · {m.get('place') or row['place']}" if (m.get("place") or row["place"]) else "") + (f" · shot {mi}" if len(row["moments"]) > 1 else "")
+                                keep = gr.Checkbox(value=True, label=title, interactive=True)
+                                with gr.Row(equal_height=False):
+                                    with gr.Column(scale=2, min_width=220):
+                                        vid = gr.Video(value=m.get("preview"), height=230, interactive=False, show_label=False)
+                                    with gr.Column(scale=3, min_width=280):
+                                        with gr.Row():
+                                            t0 = gr.Number(value=m["start"], label="Start (seconds in the video)", precision=1, minimum=0, interactive=True)
+                                            t1 = gr.Number(value=m["end"], label="End (seconds)", precision=1, minimum=0, interactive=True)
+                                        upd = gr.Button("▶ Update the preview for these times", size="sm")
+                                        upd.click(recap_preview_handler(plan["session"], m, tag, plan["framing"], plan["aspect"]), [t0, t1], vid)
+                                        opts = [("This shot (as picked)", "current")] + [(f"Alternative {i}", str(i)) for i, a in enumerate(row["alternatives"], 1)]
+                                        choice = gr.Radio(opts, value="current", label="Use", interactive=True)
+                                        if row["alternatives"]:
+                                            with gr.Row():
+                                                for i, a in enumerate(row["alternatives"], 1):
+                                                    gr.Video(value=a.get("preview"), height=130, interactive=False, label=f"Alternative {i}")
+                            keeps.append(keep)
+                            choices.append(choice)
+                            t0s.append(t0)
+                            t1s.append(t1)
+                    dismiss = gr.Button("Discard this plan", size="sm")
+                    dismiss.click(dismiss_recap_plan_handler(plan["session"]), None, t_plan)
+                    go = gr.Button("Render these shots", variant="primary")
+                    go.click(render_recap_plan_handler(plan["session"]), [*keeps, *choices, *t0s, *t1s], [t_status, t_log, t_video, t_md]).then(lambda: None, None, t_plan)
+
+                t_run = t_btn.click(trip_recap, [t_files, t_name, t_stops, t_note, t_hook, t_length, t_style, t_music, t_reuse, t_drive, t_look, t_both, t_places, t_enhance, t_kind, t_keep, t_grade, t_edit, t_edit_strength, t_clean, t_sample, t_trans, t_look_fx, t_look_color, t_subject_max, t_lines, t_open_result, t_llm, t_steps, t_font, *t_look_ctl, t_paths, t_like, t_review],
                                     [t_status, t_log, t_video, t_md])
+                t_run.then(load_recap_plan, None, t_plan)
+                demo.load(load_recap_plan, None, t_plan)
                 t_kind.change(recap_kind_changed, t_kind, [t_name, t_stops, t_note, t_places, t_keep])
                 t_stop.click(stop_jobs, None, t_status, cancels=[t_run])
                 demo.load(lambda: reusable_update('trip'), None, t_reuse)

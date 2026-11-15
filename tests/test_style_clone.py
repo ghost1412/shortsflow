@@ -258,3 +258,68 @@ def test_itinerary_typography_uses_the_display_font_and_a_tiered_headline(tmp_pa
     finally:
         tr.set_text_font("default")
     assert tr._text_font_file("Charyn Canyon")[0] == "Anton-Regular.ttf"
+
+
+def test_itinerary_picks_the_most_scenic_shot_of_a_day():
+    from engine import trip_recap as tr
+    cands = [{"file": f"v{i}.mp4", "start": 0.0, "end": 3.0} for i in range(5)]
+    colour = {f"v{i}.mp4": s for i, s in enumerate([0.2, 0.9, 0.5, 0.8, 0.1])}
+    grab = lambda f, a, b: [f.encode()]                                  # the "frame" is just the file name
+    chosen, others = tr.pick_scenic(cands, 1, grab, rate=None, score=lambda jpg: colour[jpg.decode()])
+    assert chosen[0]["file"] == "v1.mp4" and others[0]["file"] == "v3.mp4"          # best first, the rest as alternatives
+    # the vision model overrules the colour score: it finds v3 a real view and v1 a face close-up, and drops v2 (added text)
+    ratings = {"v1.mp4": {"score": 1, "overlay": False}, "v3.mp4": {"score": 9, "overlay": False}, "v2.mp4": {"score": 10, "overlay": True}}
+    rate = lambda frames: [ratings.get(f.decode(), {"score": 0, "overlay": False}) for f in frames]
+    chosen, others = tr.pick_scenic(cands, 1, grab, rate=rate, score=lambda jpg: colour[jpg.decode()])
+    assert chosen[0]["file"] == "v3.mp4" and "v2.mp4" not in [c["file"] for c in chosen + others[:2]]
+    two, _ = tr.pick_scenic(cands, 2, grab, rate=None, score=lambda jpg: colour[jpg.decode()])
+    assert [c["file"] for c in two] == ["v1.mp4", "v3.mp4"]                          # time order within the day
+
+
+def test_recap_plan_is_written_and_reviewed_shots_replace_the_picks(tmp_path):
+    import json
+    from engine import trip_recap as tr
+    infos = [("a.mp4", 60.0, 1920, 1080), ("b.mp4", 40.0, 1080, 1920)]
+    days = [{"infos": infos, "moments": [{"file": "a.mp4", "start": 5.0, "end": 8.0, "size": (1920, 1080), "place": "Lake"}],
+             "alts": [{"file": "b.mp4", "start": 10.0, "end": 13.0, "size": (1080, 1920)}] * 5, "places": [{"name": "Lake"}]}]
+    path = tr.write_recap_plan(str(tmp_path), "Trip", days)
+    plan = tr.read_recap_plan(str(tmp_path))
+    assert path.endswith("recap_plan.json") and plan["days"][0]["place"] == "Lake"
+    assert plan["days"][0]["moments"][0]["file"] == "a.mp4" and len(plan["days"][0]["alternatives"]) == 3
+    chosen = tmp_path / "chosen.json"
+    chosen.write_text(json.dumps({"days": [[{"file": "b.mp4", "start": 12, "end": 15.5}]]}), encoding="utf-8")
+    tr.apply_chosen_moments(days, str(chosen))
+    assert days[0]["moments"][0]["file"] == "b.mp4" and days[0]["moments"][0]["size"] == (1080, 1920)
+    for bad in ({"days": []}, {"days": [[]]}, {"days": [[{"file": "x.mp4", "start": 0, "end": 3}]]}, {"days": [[{"file": "a.mp4", "start": 1, "end": 1.2}]]}):
+        chosen.write_text(json.dumps(bad), encoding="utf-8")
+        with pytest.raises(ValueError):
+            tr.apply_chosen_moments(days, str(chosen))
+    assert tr.read_recap_plan(str(tmp_path / "none")) is None
+
+
+def test_web_review_of_recap_shots_builds_the_chosen_file_and_the_command(tmp_path, monkeypatch):
+    import json
+    pytest.importorskip("gradio")
+    import webui
+    from engine import plan as plan_mod
+    monkeypatch.setattr(webui, "ROOT", str(tmp_path))
+    session = tmp_path / "sessions" / "trip_20261115_000000"
+    session.mkdir(parents=True)
+    plan = {"title": "T", "days": [
+        {"day": 1, "place": "Lake", "moments": [{"file": "a.mp4", "start": 5.0, "end": 8.0, "w": 1920, "h": 1080, "place": "Lake"}],
+         "alternatives": [{"file": "b.mp4", "start": 20.0, "end": 23.0, "w": 1080, "h": 1920}]},
+        {"day": 2, "place": "Pass", "moments": [{"file": "c.mp4", "start": 1.0, "end": 4.0, "w": 1920, "h": 1080, "place": "Pass"}], "alternatives": []}]}
+    (session / "recap_plan.json").write_text(json.dumps(plan), encoding="utf-8")
+    webui.save_command(str(session), ["py", "main.py", "--mode", "TRIP", "--recap_plan_only", "--recap_aspect", "9:16"])
+    monkeypatch.setattr(plan_mod, "make_preview", lambda *a, **k: "preview.mp4")
+    shown = webui.latest_recap_plan(str(tmp_path))
+    assert shown["days"][0]["moments"][0]["preview"] == "preview.mp4" and shown["days"][0]["alternatives"][0]["preview"] == "preview.mp4"
+    seen = {}
+    monkeypatch.setattr(webui, "_run", lambda cmd: iter([("log", [])]) if seen.update(cmd=cmd) is None else iter(()))
+    # day 1: take alternative 1; day 2: keep the shot but trim it
+    out = list(webui.render_recap_plan(str(session), True, True, "1", "current", 5.0, 2.0, 8.0, 3.5))
+    assert "--recap_plan_only" not in seen["cmd"] and seen["cmd"][seen["cmd"].index("--recap_moments") + 1].endswith("recap_moments.json")
+    chosen = json.loads((session / "recap_moments.json").read_text(encoding="utf-8"))
+    assert chosen["days"][0] == [{"file": "b.mp4", "start": 20.0, "end": 23.0}] and chosen["days"][1] == [{"file": "c.mp4", "start": 2.0, "end": 3.5}]
+    with pytest.raises(Exception):                                   # no shot left for day 2
+        list(webui.render_recap_plan(str(session), True, False, "current", "current", 5.0, 2.0, 8.0, 3.5))

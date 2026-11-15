@@ -1558,6 +1558,104 @@ def scenic_score(jpeg):
     return round(0.5 * sat + 0.3 * contrast + 0.2 * exposure, 4)
 
 
+RECAP_PLAN_FILE = "recap_plan.json"
+
+
+class PlanWritten(Exception):
+    """--recap_plan_only: the picked shots were written for review and the recap is not rendered."""
+
+
+def _shot_row(m):
+    w, h = m.get("size") or (0, 0)
+    return {"file": m["file"], "start": round(float(m["start"]), 2), "end": round(float(m["end"]), 2), "w": int(w), "h": int(h)}
+
+
+def write_recap_plan(session_dir, trip_name, days, limit_alternatives=3):
+    """recap_plan.json: for every day the picked shots (with the place) and a few alternatives, for the review step. Returns the path."""
+    import json
+    rows = []
+    for di, d in enumerate(days, 1):
+        names = [p.get("name") for p in d.get("places", []) if p.get("name") and not is_plain_area(p.get("name"))]
+        rows.append({"day": di, "place": " · ".join(names[:2]),
+                     "moments": [dict(_shot_row(m), place=m.get("place", "")) for m in d["moments"]],
+                     "alternatives": [_shot_row(m) for m in (d.get("alts") or [])[:limit_alternatives]]})
+    path = os.path.join(session_dir, RECAP_PLAN_FILE)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"title": trip_name, "days": rows}, f, ensure_ascii=False, indent=1)
+    return path
+
+
+def read_recap_plan(session_dir):
+    import json
+    try:
+        with open(os.path.join(session_dir, RECAP_PLAN_FILE), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data.get("days"), list) else None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def apply_chosen_moments(days, chosen_path):
+    """Replace each day's picked shots with the reviewed ones from `chosen_path` ({"days": [[{file, start, end}, ...], ...]} in day order).
+    A shot must come from one of that day's videos. Raises ValueError for a day without shots or a video that is not in that day."""
+    import json
+    with open(chosen_path, encoding="utf-8") as f:
+        data = json.load(f)
+    rows = data.get("days") if isinstance(data, dict) else None
+    if not isinstance(rows, list) or len(rows) != len(days):
+        raise ValueError("The reviewed shots do not match the days of this recap (start the review again).")
+    for di, (d, row) in enumerate(zip(days, rows), 1):
+        known = {i[0]: i for i in d["infos"]}
+        moments = []
+        for s in row:
+            info = known.get(s.get("file"))
+            if not info:
+                raise ValueError(f"Day {di}: a chosen shot is not from that day's videos.")
+            start, end = float(s["start"]), float(s["end"])
+            if end - start < 0.5:
+                raise ValueError(f"Day {di}: a chosen shot is too short.")
+            moments.append({"file": info[0], "start": start, "end": min(end, info[1]) if info[1] else end, "size": (info[2], info[3]), "loc": s.get("loc")})
+        if not moments:
+            raise ValueError(f"Day {di} has no shots left: keep at least one shot for each day.")
+        d["moments"] = moments
+    return days
+
+
+def pick_scenic(cands, n, grab, rate=None, score=scenic_score, shortlist=14):
+    """(chosen, others): the `n` most scenic candidate windows of a part, in time order, and the rest best first (alternatives to swap in).
+    A colour score picks a shortlist; with `rate` (the vision model) the shortlist is judged: wide scenery scores high, close-ups of people,
+    indoor, dark, blurry shots and frames with added text score low or are dropped. Different videos are preferred."""
+    scored = []
+    for c in cands:
+        try:
+            frames = grab(c["file"], c["start"], c["end"])
+        except Exception:
+            frames = None
+        if frames:
+            scored.append((score(frames[0]), c, frames[0]))
+    if not scored:
+        return list(cands[:n]), list(cands[n:])
+    scored.sort(key=lambda t: t[0], reverse=True)
+    top = scored[:shortlist]
+    final = [(s, c) for s, c, _f in top]
+    if rate:
+        rated = rate([f for _s, _c, f in top])
+        if rated and len(rated) == len(top):
+            final = [(float(r.get("score", 0)) + 0.5 * s, c) for (s, c, _f), r in zip(top, rated) if not r.get("overlay")] or final
+    final.sort(key=lambda t: t[0], reverse=True)
+    chosen, used_files = [], set()
+    for s, c in final:
+        if len(chosen) < n and c["file"] not in used_files:
+            chosen.append(c)
+            used_files.add(c["file"])
+    for s, c in final:
+        if len(chosen) < n and c not in chosen:
+            chosen.append(c)
+    others = [c for _s, c in final if c not in chosen] + [c for _s, c, _f in scored[shortlist:]]
+    chosen.sort(key=lambda m: (m["file"], m["start"]))
+    return chosen, others
+
+
 def pick_glimpses(days, k, length, grab=None, score=scenic_score, per_candidates=6, rate=None, shortlist=24):
     """The k most scenic windows over the whole trip: [{file, start, end, size, day}], in trip order.
 
@@ -1698,6 +1796,8 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     result_opening = str(extras.get("opening") or "").lower() == "result"        # --recap_opening result: only the finished dish, then straight into the steps
     if result_opening:
         n_glimpses, glimpse_base, open_with_result = 1, 3.0, True
+    if extras.get("itinerary"):
+        n_glimpses = 0                  # an itinerary reel opens on its headline over the first shot: no hook line, no glimpses before it
     opening = ((n_glimpses * glimpse_base + (0.0 if result_opening else CARD_SECONDS)) if hype else 0.0) + closing_s      # glimpses + the trip title card + the closing card
     all_infos = []
     for files in days_paths:
@@ -1860,7 +1960,13 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         if avoid and len(cands) < n_clips + 2:
             cands += reused[:n_clips + 2 - len(cands)]                       # not enough new moments: a repeat beats a missing shot
         cands.sort(key=lambda m: (infos_order(infos, m["file"]), m["start"]))
-        moments, spares = spread_moments(cands, n_clips)
+        if extras.get("itinerary") and cands:          # an itinerary reel shows each day's most scenic shot, not an evenly spread one
+            from engine.visual_context import grab_frames as _gf
+            moments, spares = pick_scenic(cands, n_clips, grab or (lambda f, s_, e_: _gf(f, s_, e_, n=1, ffmpeg=ffmpeg)),
+                                          rate=__import__("engine.visual_context", fromlist=["rate_scenery"]).rate_scenery if visual else None)
+            print(f"[Log] Day {di}: the most scenic of {len(cands)} candidate shot(s){' (judged by the vision model)' if visual else ' (by colour and contrast)'}.")
+        else:
+            moments, spares = spread_moments(cands, n_clips)
         print(f"[Log] Day {di}: {len(moments)} moment(s) from {len(infos)} video(s).")
         days.append({"files": [i[0] for i in infos], "moments": moments, "spares": spares, "infos": infos})
     if not days:
@@ -1903,7 +2009,11 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         if swapped or len(d["moments"]) < len(before):
             print(f"[Log] Replaced or dropped {swapped + len(before) - len(d['moments'])} shot(s) that looked like a shot just before them or were dark or empty.")
     for d in days:
+        d["alts"] = list(d.get("spares") or [])
         d.pop("spares", None)
+    if extras.get("moments_file"):                    # the shots the owner reviewed replace the picked ones
+        apply_chosen_moments(days, extras["moments_file"])
+        print(f"[Log] Using the {sum(len(d['moments']) for d in days)} shot(s) you reviewed.")
 
     # where each day went: places from the videos' GPS, named from the map and the pictures
     all_places = []
@@ -1934,6 +2044,9 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     if rotations and apply_rotations([m for d in days for m in d["moments"]], rotations):       # (the title shot is taken from these afterwards)
         print(f"[Log] Manual rotation applied: {manual_rotate}.")
 
+    if extras.get("plan_only"):                       # --recap_plan_only: write what was picked, for review, and stop before any rendering
+        plan_path = write_recap_plan(session_dir, trip_name, days)
+        raise PlanWritten(plan_path)
     # the trip title is shown over a shot of its own: the same shot must not open Day 1 again right after it
     title_m = days[0]["moments"].pop(0) if cine and len(days[0]["moments"]) > 1 else None
     if len(days[-1]["moments"]) >= 3:
@@ -2214,7 +2327,7 @@ def run(args, target_bitrate=None, target_preset=None):
                       total_seconds=getattr(args, "recap_length", 60) or 60, music=getattr(args, "music", None),
                       visual=bool(getattr(args, "visual_context", False)), hook=getattr(args, "recap_hook", "") or "",
                       stops=getattr(args, "trip_stops", None), lines=getattr(args, "recap_lines", "") or "", open_with_result=bool(getattr(args, "recap_open_result", False)),
-                      extras={"speed": float(getattr(args, "recap_speed", 1.0) or 1.0), "end": getattr(args, "recap_end", "card") or "card", "end_text": getattr(args, "recap_end_text", "") or "", "counter": bool(getattr(args, "recap_counter", False)), "itinerary": bool(getattr(args, "recap_itinerary", False)), "text_style": getattr(args, "recap_text_style", "") or "", "pace": getattr(args, "recap_pace", "normal") or "normal", "opening": getattr(args, "recap_opening", "normal") or "normal", "ingredients_title": getattr(args, "recap_ingredients_title", "") or "", "safe": bool(getattr(args, "recap_safe_text", False)), "ingredients": getattr(args, "recap_ingredients", "") or "", "ingredients_at": getattr(args, "recap_ingredients_at", "end") or "end"}, geocode=not getattr(args, "recap_no_geocode", False), enhance=getattr(args, "enhance", "off") or "off",
+                      extras={"speed": float(getattr(args, "recap_speed", 1.0) or 1.0), "end": getattr(args, "recap_end", "card") or "card", "end_text": getattr(args, "recap_end_text", "") or "", "counter": bool(getattr(args, "recap_counter", False)), "itinerary": bool(getattr(args, "recap_itinerary", False)), "plan_only": bool(getattr(args, "recap_plan_only", False)), "moments_file": getattr(args, "recap_moments", "") or "", "text_style": getattr(args, "recap_text_style", "") or "", "pace": getattr(args, "recap_pace", "normal") or "normal", "opening": getattr(args, "recap_opening", "normal") or "normal", "ingredients_title": getattr(args, "recap_ingredients_title", "") or "", "safe": bool(getattr(args, "recap_safe_text", False)), "ingredients": getattr(args, "recap_ingredients", "") or "", "ingredients_at": getattr(args, "recap_ingredients_at", "end") or "end"}, geocode=not getattr(args, "recap_no_geocode", False), enhance=getattr(args, "enhance", "off") or "off",
                       enhance_strength=getattr(args, "enhance_strength", "medium") or "medium",
                       manual_rotate=getattr(args, "recap_rotate", "") or "", place_names=getattr(args, "place_names", "") or "", avoid=getattr(args, "recap_avoid", "") or "", kind=getattr(args, "recap_kind", "trip") or "trip", keep_sound=bool(getattr(args, "recap_keep_sound", False)),
                       grade_name=_explicit_filter(args), edit=getattr(args, "auto_edit", "") if getattr(args, "auto_edit", "none") != "none" else "",
@@ -2232,6 +2345,9 @@ def run(args, target_bitrate=None, target_preset=None):
             from engine.drive_upload import upload
             if len(upload(videos, drive)) < len(videos):
                 sys.exit(1)
+    except PlanWritten as e:
+        print(f"[Log] Shots picked and written to {e} for review. Nothing was rendered (--recap_plan_only).")
+        sys.exit(0)
     except (ValueError, RuntimeError) as e:
         print(f"[Error] {e}")
         sys.exit(1)
