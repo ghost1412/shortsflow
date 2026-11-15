@@ -641,6 +641,12 @@ def save_command(session, cmd):
         pass
 
 
+def _why(log):
+    """The likely cause of a failed run in plain words (engine/friendly_errors), or None."""
+    from engine.friendly_errors import explain_run_failure
+    return explain_run_failure(log)
+
+
 def _stream_clip(cmd, results, long_form, minutes, find, plan_only=False):
     """Run the clipping pipeline and stream plain-language progress. Yields (status, log, cards)."""
     from shortsflow import onboarding, review
@@ -661,7 +667,7 @@ def _stream_clip(cmd, results, long_form, minutes, find, plan_only=False):
             yield (f"📝 Found {len(plan['moments'])} moment(s). Nothing is rendered yet: check and adjust them in the **Review the moments** "
                    "section below, then press **Render these moments**."), log, []
         else:
-            yield "❌ No moments were found. Open 'Technical details' below for the reason.", log, []
+            yield "❌ No moments were found. " + (_why(log) or "Open 'Technical details' below for the reason."), log, []
         return
     if long_form:
         cards = _cards_from_videos([v for v in videos if os.path.basename(v).startswith(("highlight_reel", "mashup"))] or videos[:1])
@@ -670,13 +676,13 @@ def _stream_clip(cmd, results, long_form, minutes, find, plan_only=False):
         if cards:
             yield f"✅ Done! Your highlights video is ready below ({_minutes(minutes)} minutes or less).", log, cards
             return
-        yield "❌ No highlights video was made. Open 'Technical details' below for the reason.", log, []
+        yield "❌ No highlights video was made. " + (_why(log) or "Open 'Technical details' below for the reason."), log, []
         return
     cards = review.load_results(results) or _cards_from_videos(videos)
     if not cards and (find or "").strip() and "No moments matching" in log:
         status = f"❌ Nothing in this video matched \"{find.strip()}\". Try other words, or clear that box to let the AI pick the best moments."
     elif not cards and not status.startswith("⚠️"):
-        status = "❌ No shorts were made. Open 'Technical details' below for the reason, or check the setup list above."
+        status = "❌ No shorts were made. " + (_why(log) or "Open 'Technical details' below for the reason, or check the setup list above.")
     elif cards:
         status = f"✅ Done! {len(cards)} short{'s' if len(cards) != 1 else ''} ready: review them below."
     yield status, log, cards

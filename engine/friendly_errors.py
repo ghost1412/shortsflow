@@ -33,3 +33,33 @@ NO_LLM_HELP = (
     "modes need one. Easiest free fixes: (1) get a free key at console.groq.com and add GROQ_API_KEY=... to your .env, "
     "or (2) install Ollama from ollama.com and run `ollama pull qwen2.5:7b`. Run `shortsflow doctor` to check your setup."
 )
+
+
+_RUN_FAILURES = [
+    # (words that must all be in the lower-cased log text (any one of the groups), what to tell the user)
+    ([("ffmpeg", "not found"), ("ffmpeg", "no such file"), ("ffprobe", "not found"), ("'ffmpeg' is not recognized",)],
+     "FFmpeg was not found. Install it (Windows: `winget install Gyan.FFmpeg`; Mac: `brew install ffmpeg`; Linux: `sudo apt install ffmpeg`), "
+     "then close and reopen this program so it is on your PATH."),
+    ([("node", "not found"), ("npm", "not found"), ("'node' is not recognized",), ("remotion", "enoent")],
+     "Node.js was not found, and the animated captions need it. Install Node.js 18 or newer from nodejs.org and restart this program, "
+     "or turn off animated captions."),
+    ([("nvenc",), ("openencodesessionex",), ("no capable devices found",), ("cuda_error_out_of_memory",), ("cuda out of memory",)],
+     "The graphics card could not be used for encoding or transcribing (another program, often a game, may be using it). Close that "
+     "program and run again; the tool retries on the processor automatically for encoding, which is slower."),
+    ([("huggingface.co", "connection"), ("whisper", "urlopen error"), ("snapshot_download",), ("failed to download", "model")],
+     "The speech model could not be downloaded (it is fetched once, a few hundred MB). Check your internet connection and run again."),
+    ([("no space left on device",), ("not enough space on the disk",), ("errno 28",)],
+     "The disk is full. Free some space (the finished videos and the `sessions/` folder are the big ones) and run again."),
+    ([("video unavailable",), ("private video",), ("sign in to confirm",), ("http error 403",), ("unable to download",)],
+     "That link could not be downloaded (private, removed, age- or region-limited, or the site blocked the download). Download the video "
+     "yourself and use the file instead."),
+]
+
+
+def explain_run_failure(log):
+    """One plain sentence for the most likely cause of a failed run, read from its log text; None when nothing matches."""
+    low = str(log or "").lower()
+    for groups, message in _RUN_FAILURES:
+        if any(all(word in low for word in group) for group in groups):
+            return message
+    return None
