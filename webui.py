@@ -1625,6 +1625,15 @@ def build_ui():
                             t_edit = gr.Dropdown(web_args.EDIT_STYLE_CHOICES, value="none", label="Auto-edit style (the director)",
                                                  info="Like on Start here: a slow push-in or pull-out on every shot, sound effects at the cuts and the style's own colour look. "
                                                       "Hype / gaming is the punchiest; Vlog is warm and gentle.")
+                            with gr.Accordion("Copy the style of a reel", open=False):
+                                gr.Markdown("Give a reel whose editing you like (a file, or a link: it is downloaded to this PC first). Its pace and colour are measured here "
+                                            "and saved as an Auto-edit style, chosen above for you. A close match in rhythm and look, **not a copy**: captions, music and footage are not reused. "
+                                            "Note: a clearly cold or dark reel gives a cold or dark colour look, so set the Colour filter below to None if you want your footage's own colours.")
+                                t_ref_file = gr.File(label="Reference reel (upload)", file_types=["video"], type="filepath")
+                                t_ref_path = gr.Textbox(label="Or a link (YouTube, Instagram, TikTok, any public video link) or the path of a video on this PC", max_lines=1)
+                                t_ref_name = gr.Textbox(label="Style name", placeholder="like-that-reel", max_lines=1)
+                                t_ref_btn = gr.Button("Copy this style", variant="secondary")
+                                t_ref_msg = gr.Markdown("")
                             t_edit_strength = gr.Radio(web_args.EDIT_STRENGTH_CHOICES, value="medium", label="How much editing",
                                                        info="Subtle keeps it quiet; Hyped uses everything.")
                             t_grade = gr.Dropdown(web_args.RECAP_GRADE_CHOICES, value="default", label="Colour filter",
@@ -1667,6 +1676,7 @@ def build_ui():
                 t_kind.change(recap_kind_changed, t_kind, [t_name, t_stops, t_note, t_places, t_keep])
                 t_stop.click(stop_jobs, None, t_status, cancels=[t_run])
                 demo.load(lambda: reusable_update('trip'), None, t_reuse)
+                t_ref_btn.click(lambda f, p, n: copy_reel_style(f, p, n, "HORMOZI"), [t_ref_file, t_ref_path, t_ref_name], [t_ref_msg, t_edit])
                 # templates saved or cloned since the app started (a new page load picks them up in every Auto-edit list)
                 demo.load(lambda: (gr.update(choices=web_args.edit_style_choices()),) * 2, None, [t_edit, clip_edit])
 
