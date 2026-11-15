@@ -1667,6 +1667,8 @@ def build_ui():
                 t_kind.change(recap_kind_changed, t_kind, [t_name, t_stops, t_note, t_places, t_keep])
                 t_stop.click(stop_jobs, None, t_status, cancels=[t_run])
                 demo.load(lambda: reusable_update('trip'), None, t_reuse)
+                # templates saved or cloned since the app started (a new page load picks them up in every Auto-edit list)
+                demo.load(lambda: (gr.update(choices=web_args.edit_style_choices()),) * 2, None, [t_edit, clip_edit])
 
             with gr.Column(visible=False) as mode_col_reel:
                 from engine.photo_reel_types import type_labels
