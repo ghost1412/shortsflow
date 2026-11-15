@@ -166,7 +166,7 @@ def parse_args():
     parser.add_argument("--show_banner", action="store_true", help="Overlay visual rounded header banner ('VIRAL MOMENT') on top of commentary intro clips.")
     
     # 🟢 Gap Closure Flags
-    parser.add_argument("--clone_style", metavar="REFERENCE", help="Copy the rhythm and look of a reference reel (a video file on this PC) into a saved template and stop: --clone_style ref.mp4 --save_as my-style. Measured: shot length, colour, loudness; the cutting, zooms and b-roll are inferred from the pace. Captions, graphics and music are not copied. Use the result with --auto_edit my-style.")
+    parser.add_argument("--clone_style", metavar="REFERENCE", help="Copy the rhythm and look of a reference reel (a link such as YouTube, or a video file on this PC) into a saved template and stop: --clone_style ref.mp4 --save_as my-style. Measured: shot length, colour, loudness; the cutting, zooms and b-roll are inferred from the pace. Captions, graphics and music are not copied. Use the result with --auto_edit my-style.")
     parser.add_argument("--save_as", metavar="NAME", help="With --clone_style: the name of the new template.")
     parser.add_argument("--join_reel", action="store_true", help="Also join the finished shorts of this run into one video (reel_<name>.mp4 in the session folder) with crossfades, or the look chosen with --transitions. The shorts themselves stay as they are.")
     parser.add_argument("--srt", action="store_true", help="Export SRT subtitle file alongside each video.")

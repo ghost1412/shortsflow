@@ -124,11 +124,29 @@ def to_template(m, caption_style="HORMOZI"):
     return tpl, lines
 
 
+def fetch_reference(url, download=None):
+    """Download a reference reel from a link (YouTube, TikTok, Instagram, X or a direct video link, whatever yt-dlp reads) into
+    sessions/style_refs and return its path. The reel is only measured, never reused. Raises ValueError with a plain message on failure."""
+    if download is None:
+        from engine.media_gen import download_source_video_from_url as download
+    try:
+        path = download(url, os.path.join("sessions", "style_refs"), filename="reference.mp4")
+    except Exception as e:
+        raise ValueError(f"The link could not be downloaded ({str(e)[:120]}). It may be private, removed or limited to some regions; "
+                         "download the reel yourself and give the file instead.")
+    if not path or not os.path.isfile(path):
+        raise ValueError("The link could not be downloaded. Download the reel yourself and give the file instead.")
+    return path
+
+
 def clone(video, name, caption_style="HORMOZI", folder=None, ffmpeg=None, run=subprocess.run, frames=None):
     """Analyse `video` and save the template `name`. Returns (path, lines). Raises ValueError for a bad name or an unreadable video."""
     from engine import auto_edit
+    video = str(video or "").strip().strip('"')
+    if video.lower().startswith(("http://", "https://", "www.")):
+        video = fetch_reference(video)
     if not video or not os.path.isfile(video):
-        raise ValueError("The reference video was not found. Give the path of a video file on this PC.")
+        raise ValueError("The reference video was not found. Give a link or the path of a video file on this PC.")
     m = analyse(video, ffmpeg, run, frames)
     if not m["duration"]:
         raise ValueError("The reference video could not be read.")
@@ -142,7 +160,7 @@ def clone(video, name, caption_style="HORMOZI", folder=None, ffmpeg=None, run=su
 def main(argv=None):
     import argparse
     p = argparse.ArgumentParser(description="Copy the rhythm and look of a reference reel into a saved template.")
-    p.add_argument("reference", help="a video file on this PC")
+    p.add_argument("reference", help="a link (YouTube and others) or a video file on this PC")
     p.add_argument("name", help="name of the new template (letters, digits, - or _)")
     p.add_argument("--caption_style", default="HORMOZI")
     a = p.parse_args(argv)

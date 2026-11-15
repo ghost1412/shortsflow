@@ -87,3 +87,25 @@ def test_web_box_saves_a_template_and_explains(tmp_path, monkeypatch):
     assert "Upload a reel" in msg
     msg, _ = webui.copy_reel_style(None, str(tmp_path / "gone.mp4"), "x", "HORMOZI")
     assert msg.startswith("Not saved")
+
+
+def test_a_link_is_downloaded_first_and_failures_are_plain(tmp_path, monkeypatch):
+    ref = tmp_path / "reference.mp4"
+    ref.write_bytes(b"x")
+    seen = {}
+
+    def fake_download(url, folder, filename="x.mp4"):
+        seen["url"] = url
+        return str(ref)
+    assert sc.fetch_reference("https://example.com/v", download=fake_download) == str(ref)
+    assert seen["url"] == "https://example.com/v"
+
+    def broken(url, folder, filename="x.mp4"):
+        raise RuntimeError("Video unavailable")
+    with pytest.raises(ValueError, match="could not be downloaded"):
+        sc.fetch_reference("https://example.com/v", download=broken)
+
+    monkeypatch.setattr(sc, "fetch_reference", lambda u: str(ref))
+    monkeypatch.setattr(sc, "analyse", lambda *a, **k: _m(shot=2.0))
+    path, lines = sc.clone("https://youtu.be/abc", "from-link", folder=str(tmp_path / "t"))
+    assert path.endswith("from-link.json") and lines[0].startswith("Pace: fast")

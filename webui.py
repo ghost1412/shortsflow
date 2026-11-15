@@ -1067,7 +1067,7 @@ def copy_reel_style(upload, path, name, caption_style):
     """Measure a reference reel and save its style as a template. Returns (message, update for the Auto-edit list)."""
     source = upload or (path or "").strip().strip('"')
     if not source:
-        return "Upload a reel or give the path of one first.", gr.update()
+        return "Upload a reel or give a link or a path first.", gr.update()
     try:
         refuse_pc_path(source, upload)
     except gr.Error as e:
@@ -1237,12 +1237,12 @@ def build_ui():
                                 q_tpl_save = gr.Button("Save as a template", variant="secondary")
                                 q_tpl_msg = gr.Markdown("")
                             with gr.Accordion("Copy the style of a reel", open=False):
-                                gr.Markdown("Give a reel whose editing you like. It is measured on this PC (nothing is sent anywhere, the reel is only read): how fast the "
+                                gr.Markdown("Give a reel whose editing you like (a file, or a link: the video is downloaded to this PC first). It is measured on this PC (nothing is sent anywhere, the reel is only read): how fast the "
                                             "shots change, the colour and the loudness. Pauses, zooms and cutaway pictures are then set to suit that pace, and the result "
                                             "is saved as a template in the Auto-edit list. It is a close match in rhythm and look, **not a copy**: captions, graphics, "
                                             "music and the reel's footage are not reused.")
                                 q_ref_file = gr.File(label="Reference reel (upload)", file_types=["video"], type="filepath")
-                                q_ref_path = gr.Textbox(label="Or the path of a video on this PC", max_lines=1)
+                                q_ref_path = gr.Textbox(label="Or a link (YouTube, Instagram, TikTok, any public video link) or the path of a video on this PC", max_lines=1)
                                 q_ref_name = gr.Textbox(label="Template name", placeholder="like-that-reel", max_lines=1)
                                 q_ref_btn = gr.Button("Copy this style", variant="secondary")
                                 q_ref_msg = gr.Markdown("")
