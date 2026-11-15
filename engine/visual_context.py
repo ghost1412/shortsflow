@@ -17,6 +17,7 @@ import json
 import os
 import re
 import subprocess
+from engine import proc as _proc
 import urllib.request
 
 PREFERRED = ("gemma3", "qwen2.5vl", "qwen2-vl", "qwen3-vl", "llama3.2-vision", "llava", "minicpm-v", "moondream")
@@ -61,7 +62,7 @@ def grab_frames(video, start, end, n=FRAMES_PER_CLIP, ffmpeg=None):
     out, span = [], max(0.5, float(end) - float(start))
     for k in range(n):
         t = float(start) + span * (0.1 + 0.8 * (k + 0.5) / n)
-        r = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-ss", f"{t:.2f}", "-i", video, "-frames:v", "1",
+        r = _proc.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-ss", f"{t:.2f}", "-i", video, "-frames:v", "1",
                             "-vf", f"scale={FRAME_WIDTH}:-2", "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "4", "-"],
                            capture_output=True)
         if r.returncode == 0 and len(r.stdout) > 500:

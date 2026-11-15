@@ -18,6 +18,7 @@ import random
 import re
 import shutil
 import subprocess
+from engine import proc as _proc
 
 CACHE_DIR = os.path.join("assets", "broll")
 LOCAL_DIR = os.path.join("assets", "backgrounds", "local")
@@ -197,7 +198,7 @@ def _ffmpeg():
 
 def _probe(path, ffmpeg):
     """(width, height, duration) from ffmpeg's banner (no ffprobe needed)."""
-    err = subprocess.run([ffmpeg, "-i", path], capture_output=True, text=True).stderr
+    err = _proc.run([ffmpeg, "-i", path], capture_output=True, text=True).stderr
     size = re.search(r"Video:.*?,\s*(\d{2,5})x(\d{2,5})", err)
     dur = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", err)
     if not size or not dur:
@@ -232,7 +233,7 @@ def render_cutaways(video, items, region, ffmpeg=None):
     ffmpeg = ffmpeg or _ffmpeg()
     tmp = os.path.join(os.path.dirname(os.path.abspath(video)), f".broll_{os.getpid()}_{os.path.basename(video)}")
     try:
-        res = subprocess.run(build_overlay_command(ffmpeg, video, items, region, tmp), capture_output=True, text=True)
+        res = _proc.run(build_overlay_command(ffmpeg, video, items, region, tmp), capture_output=True, text=True)
         if res.returncode != 0 or not os.path.isfile(tmp) or os.path.getsize(tmp) < 1000:
             print(f"[Warning] B-roll overlay failed: {res.stderr[-300:].strip()}")
             return False

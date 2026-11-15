@@ -13,6 +13,7 @@ runs on the CPU so it never competes with a game for the GPU). Everything runs o
 """
 import os
 import subprocess
+from engine import proc as _proc
 
 BRIDGE_S = 0.5
 FPS = 30
@@ -314,7 +315,7 @@ def read_frames(ffmpeg, path, start, seconds, size, fps=FPS):
     """Raw RGB frames [start, start + seconds) of `path` scaled to `size` (w, h): a list of HxWx3 uint8 arrays."""
     import numpy as np
     w, h = size
-    r = subprocess.run([ffmpeg, "-loglevel", "error", "-ss", f"{max(0.0, start):.3f}", "-t", f"{seconds:.3f}", "-i", path, "-vf", f"fps={fps},scale={w}:{h}",
+    r = _proc.run([ffmpeg, "-loglevel", "error", "-ss", f"{max(0.0, start):.3f}", "-t", f"{seconds:.3f}", "-i", path, "-vf", f"fps={fps},scale={w}:{h}",
                         "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True)
     frame = w * h * 3
     n = len(r.stdout) // frame
@@ -323,7 +324,7 @@ def read_frames(ffmpeg, path, start, seconds, size, fps=FPS):
 
 def _duration(ffmpeg, path):
     import re
-    err = subprocess.run([ffmpeg, "-i", path], capture_output=True, text=True).stderr
+    err = _proc.run([ffmpeg, "-i", path], capture_output=True, text=True).stderr
     m = re.search(r"Duration: (\d+):(\d+):([\d.]+)", err)
     return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) if m else 0.0
 
@@ -360,7 +361,7 @@ def make_bridge(ffmpeg, a_path, b_path, out, size, enc, seconds=BRIDGE_S, fps=FP
                "-ss", f"{max(0.0, da - seconds - lead):.3f}", "-t", f"{seconds + lead:.3f}", "-i", a_path, "-t", f"{seconds:.3f}", "-i", b_path,
                "-filter_complex", f"[1:a][2:a]acrossfade=d={n / fps - 0.02:.3f}:c1=tri:c2=tri,aresample=44100[a]",
                "-map", "0:v", "-map", "[a]", *enc, "-shortest", out]
-        r = subprocess.run(cmd, input=b"".join(f.tobytes() for f in frames), capture_output=True)
+        r = _proc.run(cmd, input=b"".join(f.tobytes() for f in frames), capture_output=True)
         return r.returncode == 0 and os.path.isfile(out) and os.path.getsize(out) > 1000
     except Exception:
         return False
@@ -372,7 +373,7 @@ def trim(ffmpeg, path, out, cut_head, cut_tail, enc):
     keep = d - cut_head - cut_tail
     if keep < 0.4:
         return False
-    r = subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-i", path, "-ss", f"{cut_head:.3f}", "-t", f"{keep:.3f}", *enc, out], capture_output=True, text=True)
+    r = _proc.run([ffmpeg, "-y", "-loglevel", "error", "-i", path, "-ss", f"{cut_head:.3f}", "-t", f"{keep:.3f}", *enc, out], capture_output=True, text=True)
     return r.returncode == 0 and os.path.isfile(out) and os.path.getsize(out) > 1000
 
 

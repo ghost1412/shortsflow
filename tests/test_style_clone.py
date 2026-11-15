@@ -1,4 +1,5 @@
 import argparse
+import os
 import json
 import subprocess
 
@@ -341,3 +342,17 @@ def test_render_handler_repeats_the_status_for_the_panel(monkeypatch):
     monkeypatch.setattr(webui, "render_recap_plan", lambda session, *v: iter([("Working...", "log", None, None), ("Done", "log", "v.mp4", None)]))
     out = list(webui.render_recap_plan_handler("s")(1, 2))
     assert out == [("Working...", "log", None, None, "Working..."), ("Done", "log", "v.mp4", None, "Done")]
+
+
+def test_reviewed_shots_match_files_whatever_the_slash_style(tmp_path):
+    import json
+    from engine import trip_recap as tr
+    folder = tmp_path / "day1"
+    folder.mkdir()
+    video = str(folder / "a.mp4")
+    days = [{"infos": [(video, 30.0, 1920, 1080)], "moments": []}]
+    other_style = video.replace(os.sep, "/").replace("/a.mp4", chr(92) + "a.mp4")            # mixed slashes, like the saved plan
+    chosen = tmp_path / "c.json"
+    chosen.write_text(json.dumps({"days": [[{"file": other_style, "start": 1, "end": 4}]]}), encoding="utf-8")
+    tr.apply_chosen_moments(days, str(chosen))
+    assert days[0]["moments"][0]["file"] == video

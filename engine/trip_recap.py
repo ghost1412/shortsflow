@@ -17,6 +17,7 @@ import json
 import os
 import re
 import subprocess
+from engine import proc as _proc
 import sys
 import time
 
@@ -630,7 +631,7 @@ def fix_rotation(items, ffmpeg=None, check=None, grab=None, known=None, local=No
     return len({k for k, d in known.items() if d})
 
 
-def loudness_per_second(video, ffmpeg=None, run=subprocess.run):
+def loudness_per_second(video, ffmpeg=None, run=_proc.run):
     """[rms level in dB for each second] from the video's sound, [] when it has none."""
     if ffmpeg is None:
         import imageio_ffmpeg
@@ -907,7 +908,7 @@ GRADE_COOL = "eq=contrast=1.1:saturation=1.18:gamma=0.97,colorbalance=rs=-0.03:b
 ASPECTS = {"9:16": (1080, 1920), "16:9": (1920, 1080), "2.35:1": (1920, 816)}
 
 
-def frame_look(ffmpeg, src, t, run=subprocess.run):
+def frame_look(ffmpeg, src, t, run=_proc.run):
     """Reads one frame of the shot a title will sit on: where it is calmest, how bright it is there, and its accent colour.
     Returns {"zone", "dark", "accent"}; any failure gives the neutral default (centre, light text, gold)."""
     default = {"zone": "center", "dark": True, "accent": (232, 200, 140)}
@@ -982,7 +983,7 @@ def cut_sound_events(parts, kind, overlap=0.0):
     return events
 
 
-def pick_grade(ffmpeg, files, run=subprocess.run, sample=6):
+def pick_grade(ffmpeg, files, run=_proc.run, sample=6):
     """Warm footage (sand, rock, sunset: red above blue) gets the warm grade, cool footage (water, ice, forest) the cool one."""
     try:
         import tempfile
@@ -1362,7 +1363,7 @@ def caption_png(path, text, y_frac=0.74, size=78, lower=False):
 
 def video_info(path, ffprobe="ffprobe"):
     """(seconds, width, height) as the video is SHOWN: phones store a vertical clip as 1920x1080 with a 90/270 degree rotation flag."""
-    r = subprocess.run([ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries",
+    r = _proc.run([ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries",
                         "stream=width,height:stream_tags=rotate:stream_side_data=rotation:format=duration",
                         "-of", "json", path], capture_output=True, text=True)
     data = json.loads(r.stdout or "{}")
@@ -1383,7 +1384,7 @@ def video_info(path, ffprobe="ffprobe"):
 
 
 def has_audio(path, ffprobe="ffprobe"):
-    r = subprocess.run([ffprobe, "-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", path],
+    r = _proc.run([ffprobe, "-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", path],
                        capture_output=True, text=True)
     return bool(r.stdout.strip())
 
@@ -1399,7 +1400,7 @@ def _enc():
 def render_card(ffmpeg, png, out, seconds=CARD_SECONDS):
     cmd = [ffmpeg, "-y", "-loglevel", "error", "-loop", "1", "-t", f"{seconds}", "-i", png, "-f", "lavfi", "-t", f"{seconds}",
            "-i", "anullsrc=r=44100:cl=stereo", "-vf", "fade=t=in:st=0:d=0.3,fade=t=out:st=%.2f:d=0.3" % (seconds - 0.3), *_enc(), "-shortest", out]
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    r = _proc.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError("Could not make a title card: " + (r.stderr or "")[-300:])
 
@@ -1479,7 +1480,7 @@ def render_clip(ffmpeg, src, start, seconds, out, caption_file=None, layout="aut
     else:
         cmd += ["-map", f"{n + 1}:a"]
     cmd += [*_enc(), "-t", f"{seconds:.2f}", out]
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    r = _proc.run(cmd, capture_output=True, text=True)
     if r.returncode != 0 or not os.path.isfile(out):
         raise RuntimeError("Could not cut a clip: " + (r.stderr or "")[-400:])
 
@@ -1519,9 +1520,9 @@ def concat(ffmpeg, parts, out, session_dir, music=None, music_gain=0.25, music_s
         cmd = [ffmpeg, "-y", "-loglevel", "error"]
         for p in parts:
             cmd += ["-noautorotate", "-i", p]        # some shots carry a stale rotate tag on an upright picture; a plain join ignores it, so does this
-        r = subprocess.run(cmd + ["-filter_complex", graph, "-map", vlabel, "-map", alabel, *_enc(), joined], capture_output=True, text=True)
+        r = _proc.run(cmd + ["-filter_complex", graph, "-map", vlabel, "-map", alabel, *_enc(), joined], capture_output=True, text=True)
     else:
-        r = subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", joined],
+        r = _proc.run([ffmpeg, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", joined],
                            capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError("Could not join the recap: " + (r.stderr or "")[-300:])
@@ -1532,7 +1533,7 @@ def concat(ffmpeg, parts, out, session_dir, music=None, music_gain=0.25, music_s
             graph = f"[1:a]volume={music_gain},{fades}[a]"
         else:
             graph = f"[1:a]volume={music_gain},{fades}[m];[0:a][m]amix=inputs=2:duration=first:normalize=0[a]"
-        r = subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-i", joined, "-stream_loop", "-1", "-ss", f"{max(0.0, music_start):.3f}", "-i", music,
+        r = _proc.run([ffmpeg, "-y", "-loglevel", "error", "-i", joined, "-stream_loop", "-1", "-ss", f"{max(0.0, music_start):.3f}", "-i", music,
                             "-filter_complex", graph,
                             "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-shortest", out],
                            capture_output=True, text=True)
@@ -1605,10 +1606,10 @@ def apply_chosen_moments(days, chosen_path):
     if not isinstance(rows, list) or len(rows) != len(days):
         raise ValueError("The reviewed shots do not match the days of this recap (start the review again).")
     for di, (d, row) in enumerate(zip(days, rows), 1):
-        known = {i[0]: i for i in d["infos"]}
+        known = {os.path.normcase(os.path.abspath(i[0])): i for i in d["infos"]}      # forward and back slashes, drive-letter case: the same file
         moments = []
         for s in row:
-            info = known.get(s.get("file"))
+            info = known.get(os.path.normcase(os.path.abspath(str(s.get("file") or ""))))
             if not info:
                 raise ValueError(f"Day {di}: a chosen shot is not from that day's videos.")
             start, end = float(s["start"]), float(s["end"])
@@ -1945,6 +1946,9 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     days = []
     for di, infos in enumerate(all_infos, 1):
         n_clips = counts[di - 1]
+        if extras.get("moments_file"):          # the shots were reviewed: no picking (it is slow and uses the vision model); all the day's videos stay available
+            days.append({"files": [i[0] for i in infos], "moments": [], "spares": [], "infos": infos})
+            continue
         sampled = sample_videos(infos, n_clips, factor)
         if len(sampled) < len(infos):
             print(f"[Log] {K['unit']} {di}: {len(infos)} videos for {n_clips} shot(s): looking at {len(sampled)} of them, spread over the whole part.")
@@ -1972,6 +1976,9 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     if not days:
         raise ValueError("None of the videos could be read.")
 
+    if extras.get("moments_file"):
+        apply_chosen_moments(days, extras["moments_file"])
+        print(f"[Log] Using the {sum(len(d['moments']) for d in days)} shot(s) you reviewed (nothing is picked again).")
     from engine.visual_context import grab_frames as _grab_frames
     grab_one = grab or (lambda f, s_, e_: _grab_frames(f, s_, e_, n=1, ffmpeg=ffmpeg))
     frame_cache = {}
@@ -2003,7 +2010,8 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         for m in d["moments"]:
             describe_one(m)
         before = list(d["moments"])
-        d["moments"] = drop_repeats(d["moments"], d["spares"], describe_one, before=previous, alike=alike)
+        if not extras.get("moments_file"):       # reviewed shots are never swapped for others
+            d["moments"] = drop_repeats(d["moments"], d["spares"], describe_one, before=previous, alike=alike)
         previous = d["moments"][-2:]
         swapped = sum(1 for a, b in zip(before, d["moments"]) if a is not b)
         if swapped or len(d["moments"]) < len(before):
@@ -2011,9 +2019,6 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     for d in days:
         d["alts"] = list(d.get("spares") or [])
         d.pop("spares", None)
-    if extras.get("moments_file"):                    # the shots the owner reviewed replace the picked ones
-        apply_chosen_moments(days, extras["moments_file"])
-        print(f"[Log] Using the {sum(len(d['moments']) for d in days)} shot(s) you reviewed.")
 
     # where each day went: places from the videos' GPS, named from the map and the pictures
     all_places = []

@@ -15,6 +15,7 @@ import math
 import os
 import re
 import subprocess
+from engine import proc as _proc
 
 import numpy as np
 
@@ -22,7 +23,7 @@ STRENGTHS = {"subtle": 0.5, "medium": 1.0}
 TARGET_MEDIAN = 0.42          # the middle grey of a well exposed clip (0..1)
 
 
-def sample_frames(video, ffmpeg=None, n=5, width=160, duration=None, run=subprocess.run, start=0.0):
+def sample_frames(video, ffmpeg=None, n=5, width=160, duration=None, run=_proc.run, start=0.0):
     """[float RGB arrays (h, w, 3) in 0..1] of n frames spread over [start, start + duration] of the video (first and last 10% of that
     stretch skipped; the whole video when no duration is given); [] on failure."""
     if ffmpeg is None:
@@ -153,7 +154,7 @@ def render(src, out, strength="medium", ffmpeg=None):
     if vf:
         cmd += ["-vf", vf]
     cmd += ["-c:v", "libx264", "-crf", "17", "-preset", "fast", "-pix_fmt", "yuv420p", "-c:a", "copy", out]
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    r = _proc.run(cmd, capture_output=True, text=True)
     if r.returncode != 0 or not os.path.isfile(out):
         raise RuntimeError("Could not enhance the video: " + (r.stderr or "")[-300:])
     return p

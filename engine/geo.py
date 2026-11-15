@@ -10,6 +10,7 @@ import math
 import os
 import re
 import subprocess
+from engine import proc as _proc
 import time
 import urllib.parse
 import urllib.request
@@ -30,7 +31,7 @@ def parse_iso6709(text):
     return lat, lon
 
 
-def video_location(path, ffprobe="ffprobe", run=subprocess.run):
+def video_location(path, ffprobe="ffprobe", run=_proc.run):
     """(lat, lon) stored in the video file, None when it has none."""
     try:
         r = run([ffprobe, "-v", "error", "-show_entries", "format_tags=location,location-eng", "-of", "json", path],
