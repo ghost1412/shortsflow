@@ -161,7 +161,10 @@ STRUCTURE_PROMPT = (
     "These are {n} frames from one short reel, in time order. For EACH frame describe the text drawn on it (not a street or shop sign in the scene). "
     "Reply with JSON only, an array with exactly {n} entries: "
     '[{{"id": 1, "text": ["line 1", "line 2"], "position": "top|upper|middle|lower|bottom|none", '
-    '"role": "headline|label|cta|caption|none", "font": "script|sans|serif|bold|none", "fills_frame": true}}, ...]. '
+    '"role": "headline|label|cta|caption|none", "font": "script|sans|serif|bold|none", "fills_frame": true, '
+    '"color": "#RRGGBB", "size": "small|medium|large|huge", "weight": "thin|regular|bold", "glow": false}}, ...]. '
+    "color is the main colour of the label text as a hex code, size how big the label text is compared with the frame, "
+    "glow true when the text has a soft glow or halo. "
     "fills_frame is true when the picture fills the whole frame, false when it sits in a smaller strip with black or blurred bars. "
     "headline = a big title for the whole reel, label = a short tag for this shot (a day number, a place name), "
     "cta = a call to action or promotion (comment, follow, win, link), caption = spoken words. Use an empty text list and role none when a frame has no added text.")
@@ -218,16 +221,81 @@ def ask_frames_json(frames, prompt, timeout=120):
         return []
 
 
-def read_structure(video, duration, ask=None, grab=None, frames=10):
+def measure_text_colour(jpegs, top=0.12, bottom=0.40):
+    """The colour of the label text as "#rrggbb", measured from the pixels of the upper part of the frames (bright, warm-tinted pixels:
+    cream or yellow script over sky or footage), or None when the text is plain white or cannot be found. The reader's own colour guess
+    is often just "white"; the pixels are what the eye sees."""
+    import io
+    import numpy as np
+    from PIL import Image
+    found = []
+    for jpg in jpegs or []:
+        try:
+            im = np.asarray(Image.open(io.BytesIO(jpg)).convert("RGB")).astype(np.float32) / 255.0
+        except Exception:
+            continue
+        h = im.shape[0]
+        band = im[int(h * top):int(h * bottom)].reshape(-1, 3)
+        mx, mn = band.max(1), band.min(1)
+        sat = (mx - mn) / np.maximum(mx, 1e-6)
+        luma = band @ np.array([0.2126, 0.7152, 0.0722], np.float32)
+        pick = (luma > 0.75) & (sat > 0.18) & (band[:, 0] >= band[:, 2])
+        if pick.sum() > 0.0015 * len(band):
+            found.append(np.median(band[pick], axis=0))
+    if len(found) < max(2, len(jpegs or []) // 2):
+        return None
+    r, g, b = (np.median(np.array(found), axis=0) * 255).astype(int)
+    return "#%02x%02x%02x" % (r, g, b)
+
+
+def merge_entries(a, b):
+    """One list from two readings of the same frames: for each frame, text and role come from the reading that found text, and a
+    style trait (font, size, weight, glow, fills_frame) is kept when either reading found it (script, bold, glow, true win over the plain ones)."""
+    if not a or not b or len(a) != len(b):
+        return a or b
+    out = []
+    for x, y in zip(a, b):
+        e = dict(x if (x.get("text") or not y.get("text")) else y)
+        for key in ("font", "weight", "size"):
+            vals = [str(v.get(key, "none")).lower() for v in (x, y)]
+            pref = {"font": ("script", "serif", "bold", "sans"), "weight": ("bold", "regular", "thin"), "size": ("huge", "large", "medium", "small")}[key]
+            e[key] = next((p for p in pref if p in vals), vals[0])
+        e["glow"] = bool(x.get("glow")) or bool(y.get("glow"))
+        e["fills_frame"] = bool(x.get("fills_frame")) and bool(y.get("fills_frame"))
+        if y.get("color") and (not e.get("color") or str(e.get("color")).lower() == "#ffffff"):
+            e["color"] = y["color"]
+        out.append(e)
+    return out
+
+
+def read_structure(video, duration, ask=None, grab=None, frames=10, keep=None):
     """What text the reference shows and where: a list of per-frame entries (see STRUCTURE_PROMPT), [] when no picture reader is available.
     `ask(frames, prompt)` and `grab(video, start, end, n)` can be given for tests. With Gemini the frames leave this PC."""
     from engine import visual_context as vc
     grab = grab or vc.grab_frames
     pics = grab(video, 0.0, float(duration or MAX_ANALYSED), frames)
+    if keep is not None:
+        keep.extend(pics)
     if not pics:
         return []
-    entries = (ask or ask_frames_json)(pics, STRUCTURE_PROMPT.format(n=len(pics)))
-    return entries
+    prompt = STRUCTURE_PROMPT.format(n=len(pics))
+    reader = ask or ask_frames_json
+    first = reader(pics, prompt)
+    if ask is not None or not first:
+        return first
+    second = reader(pics, prompt)          # the reader's answers vary a little between calls: ask twice and keep what agrees
+    return merge_entries(first, second)
+
+
+def _text_look(entries):
+    """The most common text colour, size and weight, and whether the text glows, among the entries."""
+    colours = [str(e.get("color", "")).lower() for e in entries if re.fullmatch(r"#[0-9a-f]{6}", str(e.get("color", "")).lower())]
+    sizes = [str(e.get("size", "")).lower() for e in entries if str(e.get("size", "")).lower() in ("small", "medium", "large", "huge")]
+    weights = [str(e.get("weight", "")).lower() for e in entries]
+    return {"text_color": max(set(colours), key=colours.count) if colours else None,
+            "text_size": max(set(sizes), key=sizes.count) if sizes else None,
+            "text_bold": weights.count("bold") > len(weights) / 2 if weights else False,
+            "text_glow": sum(1 for e in entries if e.get("glow") is True) > len(entries) / 2 if entries else False}
 
 
 def summarise_structure(entries):
@@ -247,7 +315,8 @@ def summarise_structure(entries):
             "font": max(set(fonts), key=fonts.count) if fonts else None,
             "headline": bool(lines(first)) and str(first.get("role", "")).lower() in ("headline", "label"),
             "closing_cta": bool(lines(last)) and str(last.get("role", "")).lower() == "cta",
-            "full_bleed": sum(1 for e in entries if e.get("fills_frame") is True) > len(entries) / 2}
+            "full_bleed": sum(1 for e in entries if e.get("fills_frame") is True) > len(entries) / 2,
+            **_text_look(labels or texted)}
 
 
 def to_recap_recipe(m, structure, days=5, max_seconds=60):
@@ -272,11 +341,24 @@ def to_recap_recipe(m, structure, days=5, max_seconds=60):
         if structure.get("label_position") in ("top", "upper"):
             recipe["recap_safe_text"] = True
             lines.append("Position: the text sits in the upper part of the frame.")
+        if not structure.get("font"):
+            lines.append("Font: the reader could not tell the lettering, so the normal font is kept.")
         if structure.get("font") == "script":
             recipe["recap_font"] = "handwritten"
             lines.append("Font: a script face (the bundled handwritten one is the closest).")
-        recipe["recap_end"] = "result" if structure.get("closing_cta") else "card"
-        lines.append("Ending: " + ("finishes on the last shot with a short line (the reference's own promotion text is not copied)." if structure.get("closing_cta")
+        look = []
+        if structure.get("text_color") and structure["text_color"] != "#ffffff":
+            look.append("color=" + structure["text_color"])
+        scale = {"small": 0.85, "medium": 1.1, "large": 1.4, "huge": 1.7}.get(structure.get("text_size"))
+        if scale and scale != 1.0:
+            look.append(f"size={scale}")
+        look += [w for w, on in (("bold", structure.get("text_bold")), ("glow", structure.get("text_glow"))) if on]
+        if look:
+            recipe["recap_text_style"] = ",".join(look)
+            lines.append("Text look: " + ", ".join(look) + " (the exact font cannot be copied; the closest bundled one is used).")
+        end_on_shot = structure.get("closing_cta") or structure.get("full_bleed")
+        recipe["recap_end"] = "result" if end_on_shot else "card"
+        lines.append("Ending: " + ("finishes on a full-picture shot with a short line (the reference's own promotion text is not copied)." if end_on_shot
                                     else "a closing card."))
     if structure and structure.get("full_bleed") and recipe.get("recap_aspect") == "9:16":
         recipe["layout"] = "crop"
@@ -301,8 +383,13 @@ def recipe_for(reference, days=5, max_seconds=60, ffmpeg=None, run=subprocess.ru
     m = analyse(video, ffmpeg, run, frames=[])
     if not m["duration"]:
         raise ValueError("The reference video could not be read.")
-    entries = read_structure(video, m["duration"], ask=ask, grab=grab)
+    pics = []
+    entries = read_structure(video, m["duration"], ask=ask, grab=grab, keep=pics)
     structure = summarise_structure(entries) if entries else None
+    if structure and structure.get("labels_over_footage"):
+        measured = measure_text_colour(pics)
+        if measured:
+            structure["text_color"] = measured
     return to_recap_recipe(m, structure, days, max_seconds)
 
 

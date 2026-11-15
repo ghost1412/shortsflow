@@ -1005,7 +1005,27 @@ def pick_grade(ffmpeg, files, run=subprocess.run, sample=6):
         return CINEMATIC_GRADE
 
 
-def cinematic_layers(path_base, title, line="", small="", look=None, index=0, quick=False, safe=False, scrim=False):
+def parse_text_style(text):
+    """{"color": (r, g, b) or None, "scale": float, "bold": bool, "glow": bool} from "color=#f5d547,size=1.3,bold,glow" (--recap_text_style).
+    Anything it cannot read is ignored."""
+    out = {"color": None, "scale": 1.0, "bold": False, "glow": False}
+    if isinstance(text, dict):
+        return {**out, **text}
+    for part in str(text or "").split(","):
+        part = part.strip().lower()
+        if part.startswith("color=#") and re.fullmatch(r"[0-9a-f]{6}", part[7:]):
+            out["color"] = tuple(int(part[7 + i:9 + i], 16) for i in (0, 2, 4))
+        elif part.startswith("size="):
+            try:
+                out["scale"] = max(0.6, min(2.0, float(part[5:])))
+            except ValueError:
+                pass
+        elif part in ("bold", "glow"):
+            out[part] = True
+    return out
+
+
+def cinematic_layers(path_base, title, line="", small="", look=None, index=0, quick=False, safe=False, scrim=False, style=None):
     """Title over the footage as separate transparent layers that fade in one after another: [(png, start second), ...].
     The look comes from the shot: text goes where the picture is calmest, light or dark text by brightness, accent colour from the shot,
     and the layout rotates (centred / left-aligned / stacked words) so the cards are not all the same."""
@@ -1013,9 +1033,13 @@ def cinematic_layers(path_base, title, line="", small="", look=None, index=0, qu
     look = look or {"zone": "center", "dark": True, "accent": (232, 200, 140)}
     u = min(W, H) / 1080.0
     zone = "upper" if safe else look["zone"]        # safe: the stack sits in the upper-middle band, clear of the app's top bar and bottom buttons
+    ts = parse_text_style(style)
     ink = (255, 255, 255, 255) if look["dark"] else (22, 18, 14, 255)
     shadow = (0, 0, 0, 90) if look["dark"] else (255, 255, 255, 70)
     accent = tuple(look["accent"]) + (255,)
+    if ts["color"]:
+        ink = tuple(ts["color"]) + (255,)           # the reference's own text colour (--recap_text_style)
+    stroke = (3, ink) if ts["bold"] else (2, shadow)     # bold: the outline in the text's own colour thickens the letters
     left = zone in ("left", "lower")
     words = str(title).split()
     stacked = left and index % 2 == 1 and len(words) > 1 and all(len(w) >= 3 for w in words) and not quick     # quick (fast pace): no giant stacked words
@@ -1028,13 +1052,17 @@ def cinematic_layers(path_base, title, line="", small="", look=None, index=0, qu
         if name == "Anton-Regular.ttf":
             name = "NotoSansCyrillic.ttf"       # the animated title has always used this face for non-handwritten text
         try:
-            return ImageFont.truetype(os.path.join(FONT_DIR, name), max(12, int(size * u * factor)))
+            return ImageFont.truetype(os.path.join(FONT_DIR, name), max(12, int(size * u * factor * ts["scale"])))
         except OSError:
             return ImageFont.load_default()
 
     def layer(draw_fn, name):
         img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         draw_fn(ImageDraw.Draw(img))
+        if ts["glow"]:
+            from PIL import ImageFilter
+            glow = img.filter(ImageFilter.GaussianBlur(max(4, int(10 * u))))
+            img = Image.alpha_composite(glow, img)         # a soft halo of the same colour behind the letters
         out = f"{path_base}_{name}.png"
         img.save(out)
         return out
@@ -1063,13 +1091,13 @@ def cinematic_layers(path_base, title, line="", small="", look=None, index=0, qu
             size -= 6
         t_lines, t_font, t_lh = [w.upper() for w in words], font(size), int(size * 1.05 * u)
     else:
-        t_lines, t_font, t_lh = fit(title, 86, 52, max_lines=3)
+        t_lines, t_font, t_lh = fit(title, 86, 40 if scrim else 52, max_lines=3)       # an itinerary label keeps a long place name on one line
     block = t_lh * len(t_lines)
 
     def title_fn(d):
         y = cy - block // 2 + t_lh // 2
         for ln in t_lines:
-            d.text((cx, y), ln, font=t_font, fill=ink, anchor=anchor, stroke_width=2, stroke_fill=shadow)
+            d.text((cx, y), ln, font=t_font, fill=ink, anchor=anchor, stroke_width=stroke[0], stroke_fill=stroke[1])
             y += t_lh
 
     below = cy + block // 2 + int(30 * u)
@@ -1082,7 +1110,7 @@ def cinematic_layers(path_base, title, line="", small="", look=None, index=0, qu
         band = np.zeros((H, W, 4), np.uint8)
         band[..., 3] = alpha[:, None].astype(np.uint8)
         scrim_png = f"{path_base}_scrim.png"
-        Image.fromarray(band, "RGBA").save(scrim_png)
+        Image.fromarray(band).save(scrim_png)
         layers.append((scrim_png, 0.0))
     if small:
         s_lines, s_font, s_lh = fit(small, int(34 * (1.35 if quick else 1.0)), 24)       # quick (fast pace): bigger, it has less time on screen
@@ -1892,7 +1920,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
             itin = bool(extras.get("itinerary")) and len(days) > 1
             lay = cinematic_layers(os.path.join(parts_dir, "trip_title"), it["title"], "" if itin else (" · ".join(stops) if stops else (" · ".join(trip_places[:4]) or K["tagline"])),
                                    f"{len(days)} {unit.upper()}S IN" if itin else "",
-                                   look=frame_look(ffmpeg, m0["file"], m0["start"] + 1.0), index=0, quick=fast, safe=bool(extras.get("safe")), scrim=itin)
+                                   look=frame_look(ffmpeg, m0["file"], m0["start"] + 1.0), index=0, quick=fast, safe=bool(extras.get("safe")), scrim=itin, style=extras.get("text_style"))
             render_clip(ffmpeg, m0["file"], m0["start"], title_s, out, None, layout, m0["size"], audio=has_audio(m0["file"]) and not mute_orig, grade=grade, fade_s=fade_s, layers=lay, layer_fade=((0.2, 0.25) if fast else (0.7, 0.4)), rotate=m0.get("rotate", 0), fix=fix_for(m0["file"]), **zoom_kw(), **trans_kw(m0["file"], m0["start"], title_s, m0["size"]))
             note_shot(out, m0["size"], [png for png, _ts in lay or []])
             parts.append(out)
@@ -1945,7 +1973,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
                 itinerary = bool(extras.get("itinerary")) and len(days) > 1      # --recap_itinerary: "DAY 2" above the place name, nothing repeated below
                 lay = cinematic_layers(os.path.join(parts_dir, f"title_{di}"), row["title"], own or ("" if itinerary else (f"{unit} {di}" if len(days) > 1 else "")),
                                        small=(f"{unit.upper()} {di}" if itinerary else f"{unit.upper()} {di} / {len(days)}" if extras.get("counter") and len(days) > 1 else ""),
-                                       look=frame_look(ffmpeg, m["file"], m["start"] + 1.0), index=di, quick=fast, safe=bool(extras.get("safe")), scrim=itinerary)
+                                       look=frame_look(ffmpeg, m["file"], m["start"] + 1.0), index=di, quick=fast, safe=bool(extras.get("safe")), scrim=itinerary, style=extras.get("text_style"))
                 secs = max(secs, first_min)
             spd = timelapse_factor(extras.get("speed"), secs, (file_seconds(m["file"]) or 0.0) - m["start"]) if extras.get("speed") else 1.0        # --recap_speed: a longer stretch, played faster
             render_clip(ffmpeg, m["file"], m["start"], secs, out, cap_png, layout, m["size"], audio=has_audio(m["file"]) and not mute_orig and spd <= 1.2, speed=spd, grade=grade, fade_s=fade_s, layers=lay, layer_fade=((0.2, 0.25) if fast else (0.7, 0.4)), rotate=m.get("rotate", 0), fix=fix_for(m["file"]), **zoom_kw(), **trans_kw(m["file"], m["start"], secs, m["size"]))
@@ -2125,7 +2153,7 @@ def run(args, target_bitrate=None, target_preset=None):
                       total_seconds=getattr(args, "recap_length", 60) or 60, music=getattr(args, "music", None),
                       visual=bool(getattr(args, "visual_context", False)), hook=getattr(args, "recap_hook", "") or "",
                       stops=getattr(args, "trip_stops", None), lines=getattr(args, "recap_lines", "") or "", open_with_result=bool(getattr(args, "recap_open_result", False)),
-                      extras={"speed": float(getattr(args, "recap_speed", 1.0) or 1.0), "end": getattr(args, "recap_end", "card") or "card", "end_text": getattr(args, "recap_end_text", "") or "", "counter": bool(getattr(args, "recap_counter", False)), "itinerary": bool(getattr(args, "recap_itinerary", False)), "pace": getattr(args, "recap_pace", "normal") or "normal", "opening": getattr(args, "recap_opening", "normal") or "normal", "ingredients_title": getattr(args, "recap_ingredients_title", "") or "", "safe": bool(getattr(args, "recap_safe_text", False)), "ingredients": getattr(args, "recap_ingredients", "") or "", "ingredients_at": getattr(args, "recap_ingredients_at", "end") or "end"}, geocode=not getattr(args, "recap_no_geocode", False), enhance=getattr(args, "enhance", "off") or "off",
+                      extras={"speed": float(getattr(args, "recap_speed", 1.0) or 1.0), "end": getattr(args, "recap_end", "card") or "card", "end_text": getattr(args, "recap_end_text", "") or "", "counter": bool(getattr(args, "recap_counter", False)), "itinerary": bool(getattr(args, "recap_itinerary", False)), "text_style": getattr(args, "recap_text_style", "") or "", "pace": getattr(args, "recap_pace", "normal") or "normal", "opening": getattr(args, "recap_opening", "normal") or "normal", "ingredients_title": getattr(args, "recap_ingredients_title", "") or "", "safe": bool(getattr(args, "recap_safe_text", False)), "ingredients": getattr(args, "recap_ingredients", "") or "", "ingredients_at": getattr(args, "recap_ingredients_at", "end") or "end"}, geocode=not getattr(args, "recap_no_geocode", False), enhance=getattr(args, "enhance", "off") or "off",
                       enhance_strength=getattr(args, "enhance_strength", "medium") or "medium",
                       manual_rotate=getattr(args, "recap_rotate", "") or "", place_names=getattr(args, "place_names", "") or "", avoid=getattr(args, "recap_avoid", "") or "", kind=getattr(args, "recap_kind", "trip") or "trip", keep_sound=bool(getattr(args, "recap_keep_sound", False)),
                       grade_name=_explicit_filter(args), edit=getattr(args, "auto_edit", "") if getattr(args, "auto_edit", "none") != "none" else "",

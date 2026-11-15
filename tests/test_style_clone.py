@@ -183,3 +183,53 @@ def test_label_gets_a_dark_band_behind_it(tmp_path):
     mid = img.getpixel((img.width // 2, int(img.height * 0.30)))[3]
     assert mid > 60 and img.getpixel((10, img.height - 5))[3] == 0          # dark behind the text, clear far away from it
     assert not any(png.endswith("_scrim.png") for png, _ in tr.cinematic_layers(str(tmp_path / "u"), "Charyn Canyon", small="DAY 2")[:1])
+
+
+def _jpeg(colour_text=None, size=(200, 360)):
+    import io
+    from PIL import Image
+    img = Image.new("RGB", size, (30, 120, 200))                 # blue sky
+    if colour_text:
+        for y in range(int(size[1] * 0.2), int(size[1] * 0.26)):
+            for x in range(40, 160):
+                img.putpixel((x, y), colour_text)
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=95)
+    return buf.getvalue()
+
+
+def test_text_colour_is_measured_from_the_pixels():
+    cream = sc.measure_text_colour([_jpeg((250, 240, 160)) for _ in range(6)])
+    assert cream and cream.startswith("#f") and cream[3:5] > "d0"
+    assert sc.measure_text_colour([_jpeg(None) for _ in range(6)]) is None             # blue sky alone is not text
+    assert sc.measure_text_colour([]) is None
+
+
+def test_text_look_reaches_the_recipe():
+    entries = [dict(e, color="#ffffff", size="large", weight="bold", glow=True, fills_frame=True) for e in ENTRIES[:3]] + [ENTRIES[3]]
+    s = sc.summarise_structure(entries)
+    s["text_color"] = "#f8f0a4"
+    recipe, lines = sc.to_recap_recipe(_m(shot=2.1), s, days=4)
+    assert recipe["recap_text_style"] == "color=#f8f0a4,size=1.4,bold,glow"
+    assert recipe["recap_end"] == "result"
+    from engine import trip_recap as tr
+    ts = tr.parse_text_style(recipe["recap_text_style"])
+    assert ts == {"color": (248, 240, 164), "scale": 1.4, "bold": True, "glow": True}
+    assert tr.parse_text_style("nonsense,size=x")["scale"] == 1.0
+
+
+def test_styled_label_draws_in_the_chosen_colour(tmp_path):
+    from PIL import Image
+    from engine import trip_recap as tr
+    png = tr.cinematic_layers(str(tmp_path / "t"), "Place", small="DAY 2", safe=True, style="color=#f8f0a4,bold")[-1][0]
+    px = [p for p in Image.open(png).getdata() if p[3] > 250]
+    assert px and any(abs(p[0] - 248) < 8 and abs(p[2] - 164) < 8 for p in px)
+
+
+def test_two_readings_are_merged_so_one_bad_answer_cannot_drop_the_font():
+    a = [{"id": 1, "text": ["DAY 1", "Place"], "role": "label", "font": "sans", "weight": "regular", "glow": False, "fills_frame": True, "size": "medium"}] * 2
+    b = [{"id": 1, "text": ["DAY 1", "Place"], "role": "label", "font": "script", "weight": "bold", "glow": True, "fills_frame": True, "size": "large"}] * 2
+    m = sc.merge_entries(a, b)
+    assert m[0]["font"] == "script" and m[0]["weight"] == "bold" and m[0]["glow"] and m[0]["size"] == "large"
+    assert sc.merge_entries([], b) == b and sc.merge_entries(a, b[:1]) == a
+    assert sc.summarise_structure(m + m)["font"] == "script"
