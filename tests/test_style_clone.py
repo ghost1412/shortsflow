@@ -333,3 +333,11 @@ def test_recap_review_ignores_files_that_look_like_sessions(tmp_path):
     sessions.mkdir()
     (sessions / "trip_20261115_000001.log").write_text("log", encoding="utf-8")
     assert webui.latest_recap_plan(str(tmp_path)) is None
+
+
+def test_render_handler_repeats_the_status_for_the_panel(monkeypatch):
+    pytest.importorskip("gradio")
+    import webui
+    monkeypatch.setattr(webui, "render_recap_plan", lambda session, *v: iter([("Working...", "log", None, None), ("Done", "log", "v.mp4", None)]))
+    out = list(webui.render_recap_plan_handler("s")(1, 2))
+    assert out == [("Working...", "log", None, None, "Working..."), ("Done", "log", "v.mp4", None, "Done")]

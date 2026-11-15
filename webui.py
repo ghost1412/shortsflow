@@ -441,7 +441,8 @@ def render_recap_plan(session, *values):
 def render_recap_plan_handler(session):
     """A generator function, like render_plan_handler (Gradio streams progress only from a real generator function)."""
     def run(*values):
-        yield from render_recap_plan(session, *values)
+        for status, log, video, md in render_recap_plan(session, *values):
+            yield status, log, video, md, status            # the status is also shown next to the Render button (the page header is far above)
     return run
 
 
@@ -1837,8 +1838,9 @@ def build_ui():
                             t1s.append(t1)
                     dismiss = gr.Button("Discard this plan", size="sm")
                     dismiss.click(dismiss_recap_plan_handler(plan["session"]), None, t_plan)
+                    local = gr.Markdown("")
                     go = gr.Button("Render these shots", variant="primary")
-                    go.click(render_recap_plan_handler(plan["session"]), [*keeps, *choices, *t0s, *t1s], [t_status, t_log, t_video, t_md]).then(lambda: None, None, t_plan)
+                    go.click(render_recap_plan_handler(plan["session"]), [*keeps, *choices, *t0s, *t1s], [t_status, t_log, t_video, t_md, local]).then(lambda: None, None, t_plan)
 
                 t_run = t_btn.click(trip_recap, [t_files, t_name, t_stops, t_note, t_hook, t_length, t_style, t_music, t_reuse, t_drive, t_look, t_both, t_places, t_enhance, t_kind, t_keep, t_grade, t_edit, t_edit_strength, t_clean, t_sample, t_trans, t_look_fx, t_look_color, t_subject_max, t_lines, t_open_result, t_llm, t_steps, t_font, *t_look_ctl, t_paths, t_like, t_review],
                                     [t_status, t_log, t_video, t_md])
