@@ -1930,8 +1930,9 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
             out = os.path.join(parts_dir, f"clip_{di}_{mi}.mp4")
             lay, secs = None, m["end"] - m["start"]
             if cine and mi == 1:
-                lay = cinematic_layers(os.path.join(parts_dir, f"title_{di}"), row["title"], own or (f"{unit} {di}" if len(days) > 1 else ""),
-                                       small=(f"{unit.upper()} {di} / {len(days)}" if extras.get("counter") and len(days) > 1 else ""),
+                itinerary = bool(extras.get("itinerary")) and len(days) > 1      # --recap_itinerary: "DAY 2" above the place name, nothing repeated below
+                lay = cinematic_layers(os.path.join(parts_dir, f"title_{di}"), row["title"], own or ("" if itinerary else (f"{unit} {di}" if len(days) > 1 else "")),
+                                       small=(f"{unit.upper()} {di}" if itinerary else f"{unit.upper()} {di} / {len(days)}" if extras.get("counter") and len(days) > 1 else ""),
                                        look=frame_look(ffmpeg, m["file"], m["start"] + 1.0), index=di, quick=fast, safe=bool(extras.get("safe")))
                 secs = max(secs, first_min)
             spd = timelapse_factor(extras.get("speed"), secs, (file_seconds(m["file"]) or 0.0) - m["start"]) if extras.get("speed") else 1.0        # --recap_speed: a longer stretch, played faster
@@ -2112,7 +2113,7 @@ def run(args, target_bitrate=None, target_preset=None):
                       total_seconds=getattr(args, "recap_length", 60) or 60, music=getattr(args, "music", None),
                       visual=bool(getattr(args, "visual_context", False)), hook=getattr(args, "recap_hook", "") or "",
                       stops=getattr(args, "trip_stops", None), lines=getattr(args, "recap_lines", "") or "", open_with_result=bool(getattr(args, "recap_open_result", False)),
-                      extras={"speed": float(getattr(args, "recap_speed", 1.0) or 1.0), "end": getattr(args, "recap_end", "card") or "card", "end_text": getattr(args, "recap_end_text", "") or "", "counter": bool(getattr(args, "recap_counter", False)), "pace": getattr(args, "recap_pace", "normal") or "normal", "opening": getattr(args, "recap_opening", "normal") or "normal", "ingredients_title": getattr(args, "recap_ingredients_title", "") or "", "safe": bool(getattr(args, "recap_safe_text", False)), "ingredients": getattr(args, "recap_ingredients", "") or "", "ingredients_at": getattr(args, "recap_ingredients_at", "end") or "end"}, geocode=not getattr(args, "recap_no_geocode", False), enhance=getattr(args, "enhance", "off") or "off",
+                      extras={"speed": float(getattr(args, "recap_speed", 1.0) or 1.0), "end": getattr(args, "recap_end", "card") or "card", "end_text": getattr(args, "recap_end_text", "") or "", "counter": bool(getattr(args, "recap_counter", False)), "itinerary": bool(getattr(args, "recap_itinerary", False)), "pace": getattr(args, "recap_pace", "normal") or "normal", "opening": getattr(args, "recap_opening", "normal") or "normal", "ingredients_title": getattr(args, "recap_ingredients_title", "") or "", "safe": bool(getattr(args, "recap_safe_text", False)), "ingredients": getattr(args, "recap_ingredients", "") or "", "ingredients_at": getattr(args, "recap_ingredients_at", "end") or "end"}, geocode=not getattr(args, "recap_no_geocode", False), enhance=getattr(args, "enhance", "off") or "off",
                       enhance_strength=getattr(args, "enhance_strength", "medium") or "medium",
                       manual_rotate=getattr(args, "recap_rotate", "") or "", place_names=getattr(args, "place_names", "") or "", avoid=getattr(args, "recap_avoid", "") or "", kind=getattr(args, "recap_kind", "trip") or "trip", keep_sound=bool(getattr(args, "recap_keep_sound", False)),
                       grade_name=_explicit_filter(args), edit=getattr(args, "auto_edit", "") if getattr(args, "auto_edit", "none") != "none" else "",

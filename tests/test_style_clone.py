@@ -109,3 +109,55 @@ def test_a_link_is_downloaded_first_and_failures_are_plain(tmp_path, monkeypatch
     monkeypatch.setattr(sc, "analyse", lambda *a, **k: _m(shot=2.0))
     path, lines = sc.clone("https://youtu.be/abc", "from-link", folder=str(tmp_path / "t"))
     assert path.endswith("from-link.json") and lines[0].startswith("Pace: fast")
+
+
+ENTRIES = [
+    {"id": 1, "text": ["DAY 1", "Shillong"], "position": "upper", "role": "label", "font": "script"},
+    {"id": 2, "text": ["DAY 2", "Falls"], "position": "upper", "role": "label", "font": "script"},
+    {"id": 3, "text": ["DAY 3", "Valley"], "position": "upper", "role": "label", "font": "script"},
+    {"id": 4, "text": ["Win a free trip", "Comment now"], "position": "middle", "role": "cta", "font": "bold"},
+]
+
+
+def test_structure_is_read_from_the_frames():
+    s = sc.summarise_structure(ENTRIES)
+    assert s["labels_over_footage"] and s["day_labels"] and s["label_position"] == "upper" and s["font"] == "script" and s["closing_cta"]
+    assert sc.summarise_structure([{"id": 1, "text": [], "position": "none", "role": "none", "font": "none"}])["labels_over_footage"] is False
+    assert sc.summarise_structure([])["day_labels"] is False
+
+
+def test_recipe_for_an_itinerary_reel():
+    recipe, lines = sc.to_recap_recipe(_m(shot=2.1), sc.summarise_structure(ENTRIES), days=5)
+    assert recipe["recap_style"] == "cinematic" and recipe["recap_itinerary"] and recipe["recap_safe_text"]
+    assert recipe["recap_font"] == "handwritten" and recipe["recap_end"] == "result" and recipe["recap_pace"] == "fast"
+    assert recipe["recap_aspect"] == "9:16" and recipe["video_filter"] == "none"
+    assert recipe["recap_length"] == round(2.8 * 7)                   # one readable shot per day plus opening and ending
+    assert any("not copied" in line for line in lines)
+
+
+def test_recipe_length_never_passes_the_limit_and_works_without_a_reader():
+    recipe, lines = sc.to_recap_recipe(_m(shot=9.0), None, days=12, max_seconds=60)
+    assert recipe["recap_length"] == 60 and "recap_style" not in recipe
+    assert any("not read" in line for line in lines)
+
+
+def test_recipe_does_not_override_what_the_user_typed():
+    args = argparse.Namespace(recap_length=45, recap_style="auto", recap_font="default")
+    done = sc.apply_recipe(args, {"recap_length": 20, "recap_style": "cinematic", "recap_font": "handwritten"}, ["--recap_length", "45"])
+    assert args.recap_length == 45 and args.recap_style == "cinematic" and args.recap_font == "handwritten"
+    assert "recap_length" not in done
+
+
+def test_recipe_for_uses_the_reader_and_the_frames(tmp_path):
+    ref = tmp_path / "ref.mp4"
+    ref.write_bytes(b"x")
+    import engine.style_clone as mod
+    orig = mod.analyse
+    mod.analyse = lambda *a, **k: _m(shot=2.0)
+    try:
+        recipe, _ = sc.recipe_for(str(ref), days=4, ask=lambda frames, prompt: ENTRIES, grab=lambda v, a, b, n: [b"jpg"] * n)
+    finally:
+        mod.analyse = orig
+    assert recipe["recap_itinerary"] and recipe["recap_style"] == "cinematic"
+    with pytest.raises(ValueError):
+        sc.recipe_for(str(tmp_path / "none.mp4"))

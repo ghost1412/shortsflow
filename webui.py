@@ -293,7 +293,7 @@ def dub_video(upload, url, target_lang, spoken="auto", burn_captions=False, tts_
 def trip_recap(files, name, stops, note, hook, length, style, music, reuse="", drive="", look=False, both=False, name_places=True, enhance=False, kind="trip", keep_sound=False,
                grade="default", edit="none", edit_strength="medium", clean_sound=False, sample="auto", transitions="auto", subject_look="auto", subject_color="auto", subject_max=2, lines="", open_result=False, llm_provider="auto", steps="", font="default",
                visual_template="none", intro_animation="none", outro_animation="none",
-               tpl_speaker="", tpl_role="", tpl_show="", tpl_handle="", tpl_headline="", tpl_cta="", paths=""):
+               tpl_speaker="", tpl_role="", tpl_show="", tpl_handle="", tpl_headline="", tpl_cta="", paths="", like=""):
     """Recap tab (trip, wedding, event, family): several videos in filming order -> one recap with a hook, title cards and an itinerary."""
     import time
     from shortsflow import reuse as _reuse
@@ -317,6 +317,10 @@ def trip_recap(files, name, stops, note, hook, length, style, music, reuse="", d
     cmd = [*_pipeline_cmd(), *web_args.trip_args(files, session, name, stops, note, hook, length, style, music, look=look, both=both, name_places=name_places, enhance=enhance, kind=kind, keep_sound=keep_sound,
                                                             grade=grade, edit=edit, edit_strength=edit_strength, clean_sound=clean_sound, sample=sample, transitions=transitions, subject_look=subject_look, subject_color=subject_color, subject_max=subject_max, lines=lines, open_result=open_result, llm_provider=llm_provider, steps_file=steps_file, font=font),
            *web_args.template_args(visual_template, intro_animation, outro_animation, tpl_speaker, tpl_role, web_args.recap_template_show(tpl_show, name), tpl_handle, tpl_headline, tpl_cta)]
+    if (like or "").strip():
+        if web_args.remote_access() and not web_args.is_web_link(like):
+            raise gr.Error(PC_PATH_MESSAGE)
+        cmd += ["--recap_like", like.strip().strip('"')]      # pace, shape, text layout, font and length read from the reference
     if reuse:
         copied = _reuse.seed_session(os.path.dirname(reuse), session, kind="trip")
         if copied:
@@ -1629,6 +1633,9 @@ def build_ui():
                                 gr.Markdown("Give a reel whose editing you like (a file, or a link: it is downloaded to this PC first). Its pace and colour are measured here "
                                             "and saved as an Auto-edit style, chosen above for you. A close match in rhythm and look, **not a copy**: captions, music and footage are not reused. "
                                             "Note: a clearly cold or dark reel gives a cold or dark colour look, so set the Colour filter below to None if you want your footage's own colours.")
+                                t_like = gr.Textbox(label="Make the whole recap like this reel (a link or a path on this PC)", max_lines=1,
+                                                    info="Reads the reel's pace, shape, text layout (day labels over the shots, headline, ending), font and length and sets them for this recap, up to 1 minute. "
+                                                         "To read the text it needs a picture reader: with a Gemini key the reel's frames are sent to Google, or run Ollama with a vision model locally. Your own colours are kept.")
                                 t_ref_file = gr.File(label="Reference reel (upload)", file_types=["video"], type="filepath")
                                 t_ref_path = gr.Textbox(label="Or a link (YouTube, Instagram, TikTok, any public video link) or the path of a video on this PC", max_lines=1)
                                 t_ref_name = gr.Textbox(label="Style name", placeholder="like-that-reel", max_lines=1)
@@ -1671,7 +1678,7 @@ def build_ui():
                         t_md = gr.File(label="Itinerary (.md) and all versions", file_count="multiple", interactive=False, height=110)
                 with gr.Accordion("Technical details", open=False):
                     t_log = gr.Textbox(label="Full log", lines=14, max_lines=14, autoscroll=True)
-                t_run = t_btn.click(trip_recap, [t_files, t_name, t_stops, t_note, t_hook, t_length, t_style, t_music, t_reuse, t_drive, t_look, t_both, t_places, t_enhance, t_kind, t_keep, t_grade, t_edit, t_edit_strength, t_clean, t_sample, t_trans, t_look_fx, t_look_color, t_subject_max, t_lines, t_open_result, t_llm, t_steps, t_font, *t_look_ctl, t_paths],
+                t_run = t_btn.click(trip_recap, [t_files, t_name, t_stops, t_note, t_hook, t_length, t_style, t_music, t_reuse, t_drive, t_look, t_both, t_places, t_enhance, t_kind, t_keep, t_grade, t_edit, t_edit_strength, t_clean, t_sample, t_trans, t_look_fx, t_look_color, t_subject_max, t_lines, t_open_result, t_llm, t_steps, t_font, *t_look_ctl, t_paths, t_like],
                                     [t_status, t_log, t_video, t_md])
                 t_kind.change(recap_kind_changed, t_kind, [t_name, t_stops, t_note, t_places, t_keep])
                 t_stop.click(stop_jobs, None, t_status, cancels=[t_run])

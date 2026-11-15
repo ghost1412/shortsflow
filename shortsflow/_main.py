@@ -88,6 +88,8 @@ def parse_args():
     parser.add_argument("--recap_speed", type=float, default=1.0, metavar="N", help="--mode TRIP: time-lapse the step shots: play N times as much footage in the same time (1 = normal, 2-3 suits kneading, frying and stirring). The clips' own sound is dropped on sped-up shots (use --music).")
     parser.add_argument("--recap_end", choices=["card", "result", "none"], default=None, help="--mode TRIP: how the recap ends: card (default: a closing card with the title and parts), result (finish on the result shot with a short line, see --recap_end_text; with --recap_open_result it is the same shot the recap opened with) or none (end on the last shot).")
     parser.add_argument("--recap_end_text", default="", help="--mode TRIP with --recap_end result: the line over the final shot, e.g. \"Ready to serve!\" (default: the recap title).")
+    parser.add_argument("--recap_itinerary", action="store_true", help="--mode TRIP, cinematic style: an itinerary reel: a small \"DAY 2\" above the place name on each day's first shot (no total, nothing repeated below). Made by --recap_like.")
+    parser.add_argument("--recap_like", metavar="REFERENCE", help="--mode TRIP: make the recap like a reference reel (a link such as YouTube, or a video file): its pace, shape, text layout (day labels, headline, ending), font and length are read and set for you, for every option you did not give yourself. Needs a picture reader (Gemini key, frames go to Google, or local Ollama) to read the text; without one only pace and shape are copied. Your footage's own colours are kept.")
     parser.add_argument("--recap_counter", action="store_true", help="--mode TRIP, cinematic style: a small \"PART 3 / 7\" label above each part's title.")
     parser.add_argument("--recap_open_result", action="store_true", help="--mode TRIP: open with the result first: the opening shots come from the LAST part (the finished dish, the summit, the first dance) before the rest of the story.")
     parser.add_argument("--trip_stops", default="", help="--mode TRIP: name the stops in order, e.g. \"Pinemere Lake, Larkwater Lake, Stonegate Canyon\". The videos (in filming order) are split between them and each stop gets a title card; use this for a one-day tour instead of Day 1, Day 2.")
@@ -222,6 +224,20 @@ def parse_args():
     parser.add_argument("--enhance_audio", action="store_true", help="Apply studio audio mastering (highpass, noise gate, compressor, EBU R128 loudnorm).")
 
     args = parser.parse_args()
+    if getattr(args, "recap_like", None):
+        if str(getattr(args, "mode", "") or "").upper() != "TRIP":
+            parser.error("--recap_like is for --mode TRIP (a recap of your trip videos).")
+        from engine import style_clone
+        day_count = sum(1 for p in (args.trip_videos or []) if os.path.isdir(p)) or 5
+        try:
+            recipe, why = style_clone.recipe_for(args.recap_like, days=day_count, max_seconds=args.recap_length if "--recap_length" in sys.argv else 60)
+        except ValueError as e:
+            parser.error(str(e))
+        done = style_clone.apply_recipe(args, recipe, sys.argv[1:])
+        print("[Log] Recap like the reference:")
+        for line in why:
+            print(f"[Log]   - {line}")
+        print(f"[Log] Set for you: {', '.join(done) or 'nothing (you gave every option yourself)'}.")
     if getattr(args, "clone_style", None):
         from engine import style_clone
         if not args.save_as:

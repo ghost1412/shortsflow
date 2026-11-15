@@ -157,6 +157,161 @@ def clone(video, name, caption_style="HORMOZI", folder=None, ffmpeg=None, run=su
     return path, lines
 
 
+STRUCTURE_PROMPT = (
+    "These are {n} frames from one short reel, in time order. For EACH frame describe the text drawn on it (not a street or shop sign in the scene). "
+    "Reply with JSON only, an array with exactly {n} entries: "
+    '[{{"id": 1, "text": ["line 1", "line 2"], "position": "top|upper|middle|lower|bottom|none", '
+    '"role": "headline|label|cta|caption|none", "font": "script|sans|serif|bold|none"}}, ...]. '
+    "headline = a big title for the whole reel, label = a short tag for this shot (a day number, a place name), "
+    "cta = a call to action or promotion (comment, follow, win, link), caption = spoken words. Use an empty text list and role none when a frame has no added text.")
+DAY_WORD = re.compile(r"^\s*(day|part|stop|chapter|step)\s*\d+", re.IGNORECASE)
+
+
+def _parse_json_array(text):
+    import json
+    text = str(text or "").strip()
+    start, end = text.find("["), text.rfind("]")
+    if start < 0 or end <= start:
+        return []
+    try:
+        data = json.loads(text[start:end + 1])
+    except ValueError:
+        return []
+    return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
+
+
+def ask_frames_json(frames, prompt, timeout=120):
+    """The model's JSON answer about these JPEG frames: Gemini when a key is set (the frames are sent to Google), else a local Ollama vision
+    model; [] when neither is available or the answer cannot be read."""
+    import base64
+    import json
+    import urllib.request
+    from engine import visual_context as vc
+    key = vc.gemini_key() if (os.getenv("SHORTSFLOW_VISION") or "auto").strip().lower() in ("auto", "gemini") else None
+    if key:
+        parts = [{"text": prompt}] + [{"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(f).decode()}} for f in frames]
+        body = json.dumps({"contents": [{"parts": parts}], "generationConfig": {"temperature": 0, "maxOutputTokens": 2500}}).encode()
+        for name in vc.GEMINI_MODELS:
+            req = urllib.request.Request(f"https://generativelanguage.googleapis.com/v1beta/models/{name}:generateContent", body,
+                                         {"Content-Type": "application/json", "x-goog-api-key": key})
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    data = json.load(r)
+                found = _parse_json_array("".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"]))
+                if found:
+                    return found
+            except Exception as e:
+                print(f"[Warning] Style clone: {name} did not answer ({str(e)[:80]}).")
+        return []
+    model = vc.pick_vision_model()
+    if not model:
+        return []
+    body = json.dumps({"model": model, "stream": False, "options": {"temperature": 0},
+                       "messages": [{"role": "user", "content": prompt, "images": [base64.b64encode(f).decode() for f in frames]}]}).encode()
+    req = urllib.request.Request(f"{vc.ollama_base()}/api/chat", body, {"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            return _parse_json_array(json.load(r)["message"]["content"])
+    except Exception as e:
+        print(f"[Warning] Style clone: the local vision model did not answer ({str(e)[:80]}).")
+        return []
+
+
+def read_structure(video, duration, ask=None, grab=None, frames=10):
+    """What text the reference shows and where: a list of per-frame entries (see STRUCTURE_PROMPT), [] when no picture reader is available.
+    `ask(frames, prompt)` and `grab(video, start, end, n)` can be given for tests. With Gemini the frames leave this PC."""
+    from engine import visual_context as vc
+    grab = grab or vc.grab_frames
+    pics = grab(video, 0.0, float(duration or MAX_ANALYSED), frames)
+    if not pics:
+        return []
+    entries = (ask or ask_frames_json)(pics, STRUCTURE_PROMPT.format(n=len(pics)))
+    return entries
+
+
+def summarise_structure(entries):
+    """The layout facts in the entries: {"labels_over_footage", "day_labels", "label_position", "font", "headline", "closing_cta"}."""
+    def lines(e):
+        t = e.get("text") or []
+        return [str(x).strip() for x in (t if isinstance(t, list) else [t]) if str(x).strip()]
+    texted = [e for e in entries if lines(e) and str(e.get("role", "none")).lower() != "none"]
+    labels = [e for e in texted if str(e.get("role")).lower() == "label"]
+    day_labels = sum(1 for e in labels if any(DAY_WORD.match(x) for x in lines(e))) >= 2
+    pos = [str(e.get("position", "none")).lower() for e in labels if str(e.get("position", "none")).lower() != "none"]
+    fonts = [str(e.get("font", "none")).lower() for e in texted if str(e.get("font", "none")).lower() != "none"]
+    first = entries[0] if entries else {}
+    last = entries[-1] if entries else {}
+    return {"labels_over_footage": bool(labels), "day_labels": day_labels,
+            "label_position": max(set(pos), key=pos.count) if pos else None,
+            "font": max(set(fonts), key=fonts.count) if fonts else None,
+            "headline": bool(lines(first)) and str(first.get("role", "")).lower() in ("headline", "label"),
+            "closing_cta": bool(lines(last)) and str(last.get("role", "")).lower() == "cta"}
+
+
+def to_recap_recipe(m, structure, days=5, max_seconds=60):
+    """(recipe, lines): the recap options that make a recap like the reference. recipe maps option names (without --) to values.
+    Without a read structure only the pace, shape and length are set. The reference's colour look is not forced on other footage."""
+    shot = m["shot_seconds"]
+    recipe = {"recap_pace": "fast" if shot < 3.0 else "normal", "video_filter": "none"}
+    lines = [f"Pace: {pace_label(shot)}, about {shot:.1f} s per shot."]
+    if m.get("width") and m.get("height"):
+        recipe["recap_aspect"] = "9:16" if m["height"] > m["width"] else "16:9"
+        lines.append("Shape: " + ("vertical 9:16" if m["height"] > m["width"] else "wide 16:9") + ".")
+    days = max(1, int(days))
+    seconds = round(max(shot, 2.8) * (days + 2))   # one shot for each day, plus the opening and the ending (a label needs about 2.8 s to be read)
+    recipe["recap_length"] = int(max(15, min(max_seconds, seconds)))
+    lines.append(f"Length: about {recipe['recap_length']} s for {days} day(s), one shot each, like the reference's rhythm (never more than {max_seconds} s).")
+    if structure and structure.get("labels_over_footage"):
+        recipe["recap_style"] = "cinematic"
+        lines.append("Text: labels sit over the shots (not on separate cards), so the recap uses text over the footage.")
+        if structure.get("day_labels"):
+            recipe["recap_itinerary"] = True
+            lines.append("Labels: a small \"DAY N\" above the place name on each day's first shot.")
+        if structure.get("label_position") in ("top", "upper"):
+            recipe["recap_safe_text"] = True
+            lines.append("Position: the text sits in the upper part of the frame.")
+        if structure.get("font") == "script":
+            recipe["recap_font"] = "handwritten"
+            lines.append("Font: a script face (the bundled handwritten one is the closest).")
+        recipe["recap_end"] = "result" if structure.get("closing_cta") else "card"
+        lines.append("Ending: " + ("finishes on the last shot with a short line (the reference's own promotion text is not copied)." if structure.get("closing_cta")
+                                    else "a closing card."))
+    elif structure is not None:
+        lines.append("Text: no text over the shots was found, so the normal recap look is kept.")
+    else:
+        lines.append("Text: not read (no picture reader is available: set GEMINI_API_KEY, or run Ollama with a vision model), so only pace, shape and length are copied.")
+    lines.append("Your footage's own colours are kept, and the reference's music and graphics are not copied.")
+    return recipe, lines
+
+
+def recipe_for(reference, days=5, max_seconds=60, ffmpeg=None, run=subprocess.run, ask=None, grab=None):
+    """Analyse a reference (file or link) and return (recipe, lines) for a recap. Raises ValueError like `clone`."""
+    video = str(reference or "").strip().strip('"')
+    if video.lower().startswith(("http://", "https://", "www.")):
+        video = fetch_reference(video)
+    if not video or not os.path.isfile(video):
+        raise ValueError("The reference video was not found. Give a link or the path of a video file on this PC.")
+    m = analyse(video, ffmpeg, run, frames=[])
+    if not m["duration"]:
+        raise ValueError("The reference video could not be read.")
+    entries = read_structure(video, m["duration"], ask=ask, grab=grab)
+    structure = summarise_structure(entries) if entries else None
+    return to_recap_recipe(m, structure, days, max_seconds)
+
+
+def apply_recipe(args, recipe, argv=None):
+    """Set the recipe's options on `args` unless the user gave that option on the command line. Returns the names that were set."""
+    argv = list(argv or [])
+    set_names = []
+    for name, value in recipe.items():
+        flag = "--" + name
+        if any(a == flag or a.startswith(flag + "=") for a in argv):
+            continue
+        setattr(args, name, value)
+        set_names.append(name)
+    return set_names
+
+
 def main(argv=None):
     import argparse
     p = argparse.ArgumentParser(description="Copy the rhythm and look of a reference reel into a saved template.")
