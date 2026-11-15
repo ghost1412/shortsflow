@@ -282,8 +282,9 @@ def test_recap_plan_is_written_and_reviewed_shots_replace_the_picks(tmp_path):
     infos = [("a.mp4", 60.0, 1920, 1080), ("b.mp4", 40.0, 1080, 1920)]
     days = [{"infos": infos, "moments": [{"file": "a.mp4", "start": 5.0, "end": 8.0, "size": (1920, 1080), "place": "Lake"}],
              "alts": [{"file": "b.mp4", "start": 10.0, "end": 13.0, "size": (1080, 1920)}] * 5, "places": [{"name": "Lake"}]}]
-    path = tr.write_recap_plan(str(tmp_path), "Trip", days)
+    path = tr.write_recap_plan(str(tmp_path), "Trip", days, layout="crop")
     plan = tr.read_recap_plan(str(tmp_path))
+    assert plan["layout"] == "crop"
     assert path.endswith("recap_plan.json") and plan["days"][0]["place"] == "Lake"
     assert plan["days"][0]["moments"][0]["file"] == "a.mp4" and len(plan["days"][0]["alternatives"]) == 3
     chosen = tmp_path / "chosen.json"
@@ -323,3 +324,12 @@ def test_web_review_of_recap_shots_builds_the_chosen_file_and_the_command(tmp_pa
     assert chosen["days"][0] == [{"file": "b.mp4", "start": 20.0, "end": 23.0}] and chosen["days"][1] == [{"file": "c.mp4", "start": 2.0, "end": 3.5}]
     with pytest.raises(Exception):                                   # no shot left for day 2
         list(webui.render_recap_plan(str(session), True, False, "current", "current", 5.0, 2.0, 8.0, 3.5))
+
+
+def test_recap_review_ignores_files_that_look_like_sessions(tmp_path):
+    pytest.importorskip("gradio")
+    import webui
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    (sessions / "trip_20261115_000001.log").write_text("log", encoding="utf-8")
+    assert webui.latest_recap_plan(str(tmp_path)) is None

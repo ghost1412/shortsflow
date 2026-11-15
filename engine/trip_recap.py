@@ -1570,7 +1570,7 @@ def _shot_row(m):
     return {"file": m["file"], "start": round(float(m["start"]), 2), "end": round(float(m["end"]), 2), "w": int(w), "h": int(h)}
 
 
-def write_recap_plan(session_dir, trip_name, days, limit_alternatives=3):
+def write_recap_plan(session_dir, trip_name, days, limit_alternatives=3, layout="auto"):
     """recap_plan.json: for every day the picked shots (with the place) and a few alternatives, for the review step. Returns the path."""
     import json
     rows = []
@@ -1581,7 +1581,7 @@ def write_recap_plan(session_dir, trip_name, days, limit_alternatives=3):
                      "alternatives": [_shot_row(m) for m in (d.get("alts") or [])[:limit_alternatives]]})
     path = os.path.join(session_dir, RECAP_PLAN_FILE)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({"title": trip_name, "days": rows}, f, ensure_ascii=False, indent=1)
+        json.dump({"title": trip_name, "layout": layout, "days": rows}, f, ensure_ascii=False, indent=1)
     return path
 
 
@@ -2045,7 +2045,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         print(f"[Log] Manual rotation applied: {manual_rotate}.")
 
     if extras.get("plan_only"):                       # --recap_plan_only: write what was picked, for review, and stop before any rendering
-        plan_path = write_recap_plan(session_dir, trip_name, days)
+        plan_path = write_recap_plan(session_dir, trip_name, days, layout=layout)
         raise PlanWritten(plan_path)
     # the trip title is shown over a shot of its own: the same shot must not open Day 1 again right after it
     title_m = days[0]["moments"].pop(0) if cine and len(days[0]["moments"]) > 1 else None

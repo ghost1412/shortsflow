@@ -361,7 +361,7 @@ def latest_recap_plan(root):
     import time
     from engine.plan import make_preview
     from engine.trip_recap import read_recap_plan
-    for d in sorted(glob.glob(os.path.join(root, "sessions", "trip_*")), reverse=True)[:1]:
+    for d in sorted((p for p in glob.glob(os.path.join(root, "sessions", "trip_*")) if os.path.isdir(p)), reverse=True)[:1]:
         plan = read_recap_plan(d)
         path = os.path.join(d, "recap_plan.json")
         if not plan or time.time() - os.path.getmtime(path) > 24 * 3600 or os.path.isfile(os.path.join(d, "recap.mp4")) \
@@ -369,7 +369,8 @@ def latest_recap_plan(root):
             return None
         cmd = [str(x) for x in ((_read_command(d) or {}).get("cmd") or [])]
         aspect = cmd[cmd.index("--recap_aspect") + 1] if "--recap_aspect" in cmd and cmd.index("--recap_aspect") + 1 < len(cmd) else "9:16"
-        framing = "crop" if "--layout" in cmd and cmd[cmd.index("--layout") + 1:cmd.index("--layout") + 2] == ["crop"] else "fit"
+        layout = plan.get("layout") or (cmd[cmd.index("--layout") + 1] if "--layout" in cmd and cmd.index("--layout") + 1 < len(cmd) else "auto")
+        framing = "crop" if layout == "crop" else "fit"          # what the render will do (a reference may have switched it to crop)
 
         def preview(shot, tag):
             out = os.path.join(d, "previews", f"{tag}_{int(shot['start'])}_{int(shot['end'])}_{framing}.mp4")
