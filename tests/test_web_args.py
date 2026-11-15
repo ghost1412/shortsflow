@@ -306,6 +306,7 @@ def test_saved_template_keeps_its_text_boxes(tmp_path):
 
 
 def test_join_reel_checkbox_reaches_the_command(monkeypatch, tmp_path):
+    pytest.importorskip("gradio")
     import webui
     seen = {}
     monkeypatch.setattr(webui, "ROOT", str(tmp_path))
