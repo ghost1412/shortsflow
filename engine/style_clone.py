@@ -161,8 +161,9 @@ STRUCTURE_PROMPT = (
     "These are {n} frames from one short reel, in time order. For EACH frame describe the text drawn on it (not a street or shop sign in the scene). "
     "Reply with JSON only, an array with exactly {n} entries: "
     '[{{"id": 1, "text": ["line 1", "line 2"], "position": "top|upper|middle|lower|bottom|none", '
-    '"role": "headline|label|cta|caption|none", "font": "script|sans|serif|bold|none", "fills_frame": true, '
+    '"role": "headline|label|cta|caption|none", "font": "script|display_serif|serif|condensed|sans|none", "fills_frame": true, '
     '"color": "#RRGGBB", "size": "small|medium|large|huge", "weight": "thin|regular|bold", "glow": false}}, ...]. '
+    "font: script = joined handwritten or cursive letters like a pen; display_serif = heavy decorative serif letters with thick strokes, like a magazine or poster title (even if slightly curly); serif = ordinary book letters; condensed = tall narrow bold capitals; sans = plain modern letters. "
     "color is the main colour of the label text as a hex code, size how big the label text is compared with the frame, "
     "glow true when the text has a soft glow or halo. "
     "fills_frame is true when the picture fills the whole frame, false when it sits in a smaller strip with black or blurred bars. "
@@ -258,7 +259,7 @@ def merge_entries(a, b):
         e = dict(x if (x.get("text") or not y.get("text")) else y)
         for key in ("font", "weight", "size"):
             vals = [str(v.get(key, "none")).lower() for v in (x, y)]
-            pref = {"font": ("script", "serif", "bold", "sans"), "weight": ("bold", "regular", "thin"), "size": ("huge", "large", "medium", "small")}[key]
+            pref = {"font": ("display_serif", "script", "serif", "condensed", "bold", "sans"), "weight": ("bold", "regular", "thin"), "size": ("huge", "large", "medium", "small")}[key]
             e[key] = next((p for p in pref if p in vals), vals[0])
         e["glow"] = bool(x.get("glow")) or bool(y.get("glow"))
         e["fills_frame"] = bool(x.get("fills_frame")) and bool(y.get("fills_frame"))
@@ -346,6 +347,9 @@ def to_recap_recipe(m, structure, days=5, max_seconds=60):
         if structure.get("font") == "script":
             recipe["recap_font"] = "handwritten"
             lines.append("Font: a script face (the bundled handwritten one is the closest).")
+        elif structure.get("font") in ("display_serif", "serif"):
+            recipe["recap_font"] = "display"
+            lines.append("Font: heavy display serif letters (the bundled Abril Fatface is the closest; the exact font cannot be copied).")
         look = []
         if structure.get("text_color") and structure["text_color"] != "#ffffff":
             look.append("color=" + structure["text_color"])

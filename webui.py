@@ -1616,7 +1616,7 @@ def build_ui():
                             t_steps = gr.Textbox(label="Steps for a step-by-step video (optional)", lines=8,
                                                  placeholder="Title: Build a bird house\nHook: Done in one afternoon\nNeeds: 4 pine boards | 30 screws | wood glue\nEnd: Ready to hang!\n\n1. Cut the boards | Cut four 20 cm sides\n2. Drill the hole | 3 cm hole, 12 cm up\n3. Assemble | Glue, then 6 screws per side",
                                                  info="Fill this in for a how-to video (a recipe, DIY, workout, tutorial): it opens on the finished result and goes through the steps, each with a title and a caption. One numbered step per line as \"1. Title | caption\". Optional lines: Title, Hook, Needs (or Ingredients, Materials, Tools), End. Your videos are split into the steps in the order you filmed them, so add them in order.")
-                            t_font = gr.Dropdown([("Bold poster letters (default)", "default"), ("Handwritten", "handwritten")], value="default",
+                            t_font = gr.Dropdown([("Bold poster letters (default)", "default"), ("Handwritten", "handwritten"), ("Heavy display serif", "display")], value="default",
                                                  label="Text style of the titles and labels",
                                                  info="Handwritten uses a script face for the title cards and place names. Languages it has no letters for keep the normal font.")
                             from shortsflow.ui.blocks import TRIP_TEXT_LABELS

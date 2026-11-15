@@ -140,7 +140,7 @@ def test_handwritten_recap_reaches_the_command_and_the_cli():
     args = web_args.trip_args(["a.mp4"], "s", font="handwritten")
     assert args[args.index("--recap_font") + 1] == "handwritten"
     src = open(os.path.join(os.path.dirname(__file__), "..", "shortsflow", "_main.py"), encoding="utf-8").read()
-    assert '"--recap_font", choices=["default", "handwritten"]' in src
+    assert '"--recap_font", choices=["default", "handwritten", "display"]' in src
 
 
 def test_template_pieces_go_on_every_finished_recap():

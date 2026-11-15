@@ -325,8 +325,8 @@ def trip_args(videos, session_dir, name="", stops="", note="", hook="", length=6
         args += ["--recap_kind", kind]
     if keep_sound:
         args += ["--recap_keep_sound"]
-    if font == "handwritten":
-        args += ["--recap_font", "handwritten"]
+    if font in ("handwritten", "display"):
+        args += ["--recap_font", font]
     args += grade_args(grade) + edit_args(edit, edit_strength)
     if clean_sound:
         args += ["--clean_audio"]

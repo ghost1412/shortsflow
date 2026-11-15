@@ -844,13 +844,15 @@ _NOT_CAVEAT = re.compile(r"[֐-ࣿऀ-෿　-鿿가-힯]")    # Hebrew, Arabic, 
 
 def set_text_font(name):
     """Choose the font of the recap's title cards and labels: "default" or "handwritten"."""
-    TEXT_FONT["name"] = name if name in ("default", "handwritten") else "default"
+    TEXT_FONT["name"] = name if name in ("default", "handwritten", "display") else "default"
 
 
 def _text_font_file(text=""):
     """(file name, size factor) of the font for `text` under the current text style."""
     if TEXT_FONT["name"] == "handwritten" and not _NOT_CAVEAT.search(text or ""):
         return "Caveat.ttf", 1.3             # a script face looks small next to a poster face at the same point size
+    if TEXT_FONT["name"] == "display" and not _NOT_CAVEAT.search(text or ""):
+        return "AbrilFatface-Regular.ttf", 0.9       # a heavy display serif (poster-like place names)
     return ("NotoSansCyrillic.ttf" if re.search(r"[Ѐ-ӿ]", text or "") else "Anton-Regular.ttf"), 1.0
 
 
@@ -1005,6 +1007,57 @@ def pick_grade(ffmpeg, files, run=subprocess.run, sample=6):
         return CINEMATIC_GRADE
 
 
+def scrim_png(path, centre, half, strength=150):
+    """A transparent full-frame PNG with a soft dark band around row `centre` (fading out over `half` rows)."""
+    import numpy as np
+    from PIL import Image
+    rows = np.arange(H, dtype=np.float32)
+    alpha = np.clip(1.0 - np.abs(rows - centre) / half, 0.0, 1.0) ** 1.4 * strength
+    band = np.zeros((H, W, 4), np.uint8)
+    band[..., 3] = alpha[:, None].astype(np.uint8)
+    Image.fromarray(band).save(path)
+    return path
+
+
+def headline_layers(path_base, small, big, accent, accent_colour=(248, 254, 165)):
+    """The opening of an itinerary reel as one transparent layer: a small bold line, the name in huge condensed capitals with a faint
+    outline echo under it, and a script line in the accent colour. Returns [(scrim png, 0), (headline png, 0.1)]."""
+    from PIL import Image, ImageDraw, ImageFont
+    u = min(W, H) / 1080.0
+    top = int(H * 0.17)
+
+    def face(name, size):
+        try:
+            return ImageFont.truetype(os.path.join(FONT_DIR, name), max(12, int(size * u)))
+        except OSError:
+            return ImageFont.load_default()
+
+    meter = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    big = str(big).upper()
+    size = 230
+    while size > 70 and meter.textlength(big, font=face("Anton-Regular.ttf", size)) > W * 0.84:
+        size -= 10
+    f_small, f_big = face("Anton-Regular.ttf", 74), face("Anton-Regular.ttf", size)
+    accent_name, accent_factor = ("Caveat.ttf", 1.0) if not _NOT_CAVEAT.search(str(accent)) else ("Anton-Regular.ttf", 0.7)
+    f_acc = face(accent_name, 140 * accent_factor)
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    white, shadow = (255, 255, 255, 255), (0, 0, 0, 120)
+    y_small, y_big = top, top + int(70 * u)
+    big_h = int(size * u * 0.95)
+    if small:
+        d.text((W // 2 + 2, y_small + 3), str(small).upper(), font=f_small, fill=shadow, anchor="mt")
+        d.text((W // 2, y_small), str(small).upper(), font=f_small, fill=white, anchor="mt")
+    d.text((W // 2 + 3, y_big + 4), big, font=f_big, fill=shadow, anchor="mt")
+    d.text((W // 2, y_big), big, font=f_big, fill=white, anchor="mt")
+    d.text((W // 2, y_big + int(big_h * 0.86)), big, font=f_big, fill=(0, 0, 0, 0), anchor="mt", stroke_width=2, stroke_fill=(255, 255, 255, 120))   # the echo
+    if accent:
+        d.text((W // 2, y_big + int(big_h * 1.0)), str(accent), font=f_acc, fill=tuple(accent_colour) + (255,), anchor="mt", stroke_width=1, stroke_fill=shadow)
+    out = f"{path_base}_headline.png"
+    img.save(out)
+    return [(scrim_png(f"{path_base}_scrim.png", y_big + big_h * 0.6, int(H * 0.30)), 0.0), (out, 0.1)]
+
+
 def parse_text_style(text):
     """{"color": (r, g, b) or None, "scale": float, "bold": bool, "glow": bool} from "color=#f5d547,size=1.3,bold,glow" (--recap_text_style).
     Anything it cannot read is ignored."""
@@ -1044,7 +1097,7 @@ def cinematic_layers(path_base, title, line="", small="", look=None, index=0, qu
     words = str(title).split()
     stacked = left and index % 2 == 1 and len(words) > 1 and all(len(w) >= 3 for w in words) and not quick     # quick (fast pace): no giant stacked words
     cx = int(W * 0.08) if left else W // 2
-    cy = {"center": H // 2, "left": H // 2, "lower": int(H * 0.78), "upper": int(H * (0.30 if safe else 0.22))}[zone]
+    cy = {"center": H // 2, "left": H // 2, "lower": int(H * 0.78), "upper": int(H * (0.215 if scrim else 0.30 if safe else 0.22))}[zone]
     anchor = "lm" if left else "mm"
 
     def font(size):
@@ -1074,9 +1127,10 @@ def cinematic_layers(path_base, title, line="", small="", look=None, index=0, qu
         """(lines, font, line height): wide-spaced on one line if it fits, else plain capitals wrapped and shrunk until every line fits."""
         for sz in range(size, min_size - 1, -4):
             f = font(sz)
-            if meter.textlength(spaced(text), font=f) <= max_w:
-                return [spaced(text)], f, int(sz * 1.15 * u)
-        plain = str(text).upper()
+            one = str(text) if scrim else spaced(text)           # an itinerary label is plain letters in their own case
+            if meter.textlength(one, font=f) <= max_w:
+                return [one], f, int(sz * 1.15 * u)
+        plain = str(text) if scrim else str(text).upper()
         for sz in range(size, 23, -4):
             f = font(sz)
             lines = _wrap(meter, plain, f, max_w)
@@ -1097,22 +1151,26 @@ def cinematic_layers(path_base, title, line="", small="", look=None, index=0, qu
     def title_fn(d):
         y = cy - block // 2 + t_lh // 2
         for ln in t_lines:
-            d.text((cx, y), ln, font=t_font, fill=ink, anchor=anchor, stroke_width=stroke[0], stroke_fill=stroke[1])
+            if scrim:
+                d.text((cx + 3, y + 4), ln, font=t_font, fill=(0, 0, 0, 150), anchor=anchor)       # a soft drop shadow, no outline
+                d.text((cx, y), ln, font=t_font, fill=ink, anchor=anchor)
+            else:
+                d.text((cx, y), ln, font=t_font, fill=ink, anchor=anchor, stroke_width=stroke[0], stroke_fill=stroke[1])
             y += t_lh
 
     below = cy + block // 2 + int(30 * u)
     layers = []
     if scrim:          # a soft dark band behind the text, so a label stays readable over bright sky or snow
-        import numpy as np
-        rows = np.arange(H, dtype=np.float32)
-        centre, half = cy, max(int(H * 0.16), block // 2 + int(130 * u))
-        alpha = np.clip(1.0 - np.abs(rows - centre) / half, 0.0, 1.0) ** 1.4 * 150
-        band = np.zeros((H, W, 4), np.uint8)
-        band[..., 3] = alpha[:, None].astype(np.uint8)
-        scrim_png = f"{path_base}_scrim.png"
-        Image.fromarray(band).save(scrim_png)
-        layers.append((scrim_png, 0.0))
-    if small:
+        layers.append((scrim_png(f"{path_base}_scrim.png", cy, max(int(H * 0.16), block // 2 + int(130 * u)), 110), 0.0))
+    if small and scrim:            # itinerary: a plain white "DAY 2" above the place name
+        day_font = font(56)
+
+        def day_label(d):
+            y = cy - block // 2 - int(30 * u)
+            d.text((cx + 2, y + 3), str(small).upper(), font=day_font, fill=(0, 0, 0, 150), anchor=anchor)
+            d.text((cx, y), str(small).upper(), font=day_font, fill=(255, 255, 255, 255), anchor=anchor)
+        layers.append((layer(day_label, "a"), 0.05 if quick else 0.3))
+    elif small:
         s_lines, s_font, s_lh = fit(small, int(34 * (1.35 if quick else 1.0)), 24)       # quick (fast pace): bigger, it has less time on screen
 
         def credit(d):
@@ -1918,9 +1976,12 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
             m0 = title_m or days[0]["moments"][0]
             out = os.path.join(parts_dir, "trip_title.mp4")
             itin = bool(extras.get("itinerary")) and len(days) > 1
-            lay = cinematic_layers(os.path.join(parts_dir, "trip_title"), it["title"], "" if itin else (" · ".join(stops) if stops else (" · ".join(trip_places[:4]) or K["tagline"])),
-                                   f"{len(days)} {unit.upper()}S IN" if itin else "",
-                                   look=frame_look(ffmpeg, m0["file"], m0["start"] + 1.0), index=0, quick=fast, safe=bool(extras.get("safe")), scrim=itin, style=extras.get("text_style"))
+            if itin:
+                accent = tuple(parse_text_style(extras.get("text_style"))["color"] or (248, 254, 165))
+                lay = headline_layers(os.path.join(parts_dir, "trip_title"), f"{len(days)}-{unit}", it["title"], "Trip Plan" if K is KINDS["trip"] else "", accent)
+            else:
+                lay = cinematic_layers(os.path.join(parts_dir, "trip_title"), it["title"], " · ".join(stops) if stops else (" · ".join(trip_places[:4]) or K["tagline"]),
+                                       "", look=frame_look(ffmpeg, m0["file"], m0["start"] + 1.0), index=0, quick=fast, safe=bool(extras.get("safe")), style=extras.get("text_style"))
             render_clip(ffmpeg, m0["file"], m0["start"], title_s, out, None, layout, m0["size"], audio=has_audio(m0["file"]) and not mute_orig, grade=grade, fade_s=fade_s, layers=lay, layer_fade=((0.2, 0.25) if fast else (0.7, 0.4)), rotate=m0.get("rotate", 0), fix=fix_for(m0["file"]), **zoom_kw(), **trans_kw(m0["file"], m0["start"], title_s, m0["size"]))
             note_shot(out, m0["size"], [png for png, _ts in lay or []])
             parts.append(out)

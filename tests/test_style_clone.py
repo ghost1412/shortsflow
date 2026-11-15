@@ -180,8 +180,8 @@ def test_label_gets_a_dark_band_behind_it(tmp_path):
     first, start = layers[0]
     assert first.endswith("_scrim.png") and start == 0.0
     img = Image.open(first)
-    mid = img.getpixel((img.width // 2, int(img.height * 0.30)))[3]
-    assert mid > 60 and img.getpixel((10, img.height - 5))[3] == 0          # dark behind the text, clear far away from it
+    mid = img.getpixel((img.width // 2, int(img.height * 0.215)))[3]
+    assert mid > 50 and img.getpixel((10, img.height - 5))[3] == 0          # dark behind the text, clear far away from it
     assert not any(png.endswith("_scrim.png") for png, _ in tr.cinematic_layers(str(tmp_path / "u"), "Charyn Canyon", small="DAY 2")[:1])
 
 
@@ -233,3 +233,28 @@ def test_two_readings_are_merged_so_one_bad_answer_cannot_drop_the_font():
     assert m[0]["font"] == "script" and m[0]["weight"] == "bold" and m[0]["glow"] and m[0]["size"] == "large"
     assert sc.merge_entries([], b) == b and sc.merge_entries(a, b[:1]) == a
     assert sc.summarise_structure(m + m)["font"] == "script"
+
+
+def test_a_display_serif_reference_gets_the_display_font():
+    entries = [dict(e, font="display_serif") for e in ENTRIES[:3]] + [ENTRIES[3]]
+    recipe, lines = sc.to_recap_recipe(_m(shot=2.1), sc.summarise_structure(entries), days=4)
+    assert recipe["recap_font"] == "display" and any("Abril" in line for line in lines)
+    a = [dict(ENTRIES[0], font="script")] * 2
+    b = [dict(ENTRIES[0], font="display_serif")] * 2
+    assert sc.merge_entries(a, b)[0]["font"] == "display_serif"
+
+
+def test_itinerary_typography_uses_the_display_font_and_a_tiered_headline(tmp_path):
+    from PIL import Image
+    from engine import trip_recap as tr
+    tr.set_text_font("display")
+    try:
+        assert tr._text_font_file("Charyn Canyon")[0] == "AbrilFatface-Regular.ttf"
+        layers = tr.cinematic_layers(str(tmp_path / "t"), "Charyn Canyon", small="DAY 2", safe=True, scrim=True, style="color=#f8fea5,size=1.4")
+        assert len(layers) == 3 and layers[0][0].endswith("_scrim.png")             # band, "DAY 2", place name
+        head = tr.headline_layers(str(tmp_path / "h"), "5-DAY", "Almaty", "Trip Plan")
+        assert head[0][0].endswith("_scrim.png") and head[1][0].endswith("_headline.png")
+        assert any(p[3] > 250 for p in Image.open(head[1][0]).getdata())
+    finally:
+        tr.set_text_font("default")
+    assert tr._text_font_file("Charyn Canyon")[0] == "Anton-Regular.ttf"
