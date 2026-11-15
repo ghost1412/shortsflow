@@ -344,15 +344,18 @@ def test_render_handler_repeats_the_status_for_the_panel(monkeypatch):
     assert out == [("Working...", "log", None, None, "Working..."), ("Done", "log", "v.mp4", None, "Done")]
 
 
-def test_reviewed_shots_match_files_whatever_the_slash_style(tmp_path):
+def test_reviewed_shots_match_the_same_file_written_another_way(tmp_path):
     import json
     from engine import trip_recap as tr
     folder = tmp_path / "day1"
     folder.mkdir()
     video = str(folder / "a.mp4")
-    days = [{"infos": [(video, 30.0, 1920, 1080)], "moments": []}]
-    other_style = video.replace(os.sep, "/").replace("/a.mp4", chr(92) + "a.mp4")            # mixed slashes, like the saved plan
-    chosen = tmp_path / "c.json"
-    chosen.write_text(json.dumps({"days": [[{"file": other_style, "start": 1, "end": 4}]]}), encoding="utf-8")
-    tr.apply_chosen_moments(days, str(chosen))
-    assert days[0]["moments"][0]["file"] == video
+    variants = [os.path.join(str(folder), ".", "a.mp4")]                                    # the same file with a "./" segment, on every system
+    if os.name == "nt":                                                                     # Windows: forward and back slashes, drive-letter case
+        variants += [video.replace(os.sep, "/"), video.replace(os.sep, "/").replace("/a.mp4", chr(92) + "a.mp4"), video.upper()]
+    for other in variants:
+        days = [{"infos": [(video, 30.0, 1920, 1080)], "moments": []}]
+        chosen = tmp_path / "c.json"
+        chosen.write_text(json.dumps({"days": [[{"file": other, "start": 1, "end": 4}]]}), encoding="utf-8")
+        tr.apply_chosen_moments(days, str(chosen))
+        assert days[0]["moments"][0]["file"] == video
