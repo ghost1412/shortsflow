@@ -61,6 +61,7 @@ def test_unfinished_runs_lists_only_runs_without_results(tmp_path):
 
 
 def test_continue_reuses_the_same_folder_with_the_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(webui, "ROOT", str(tmp_path))
     video = tmp_path / "src.mp4"
     video.write_bytes(b"x")
     d = _session(tmp_path, "web_20261104_204742", ["py", "main.py", "--source_video", str(video), "--extract_mode", "shorts",
@@ -73,7 +74,8 @@ def test_continue_reuses_the_same_folder_with_the_cache(tmp_path, monkeypatch):
     assert seen["results"] == str(d / "results.json") and seen["long_form"] is False and seen["find"] == "pricing"
 
 
-def test_continue_explains_a_missing_video_and_an_empty_choice(tmp_path):
+def test_continue_explains_a_missing_video_and_an_empty_choice(tmp_path, monkeypatch):
+    monkeypatch.setattr(webui, "ROOT", str(tmp_path))
     d = _session(tmp_path, "web_20261104_204742", ["py", "main.py", "--source_video", str(tmp_path / "gone.mp4")])
     with pytest.raises(gr.Error, match="no longer where it was"):
         list(webui.continue_run(str(d / "command.json")))

@@ -24,5 +24,15 @@ def test_gemini_timeout_moves_to_next_model_without_retrying(monkeypatch):
     except Exception:
         pass
     gemini = [c for c in calls if "generativelanguage" in c[0]]
-    assert len(gemini) == 4            # one try per model, not 4 x 4
+    assert len(gemini) == 2            # one try per model, and the rest of the chain is skipped after two timeouts in a row
     assert all(t == 5 for _, t in gemini)
+
+
+def test_continue_run_only_accepts_a_sessions_command_file(tmp_path):
+    import pytest
+    gr = pytest.importorskip("gradio")
+    import webui
+    outside = tmp_path / "command.json"
+    outside.write_text('{"cmd": ["python", "x"]}', encoding="utf-8")
+    with pytest.raises(gr.Error):
+        next(webui.continue_run(str(outside)))

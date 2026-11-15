@@ -349,7 +349,11 @@ def get_llm_response(
         # Deduplicate preserving order
         gemini_models = list(dict.fromkeys(gemini_models))
 
+        timeouts_in_a_row = 0
         for g_model in gemini_models:
+            if timeouts_in_a_row >= 2:
+                print("[Warning] Gemini did not answer twice in a row; skipping the other Gemini models (the network or the service is down).")
+                break
             max_attempts = 4
             for attempt in range(max_attempts):
                 try:
@@ -395,6 +399,7 @@ def get_llm_response(
                     # A model that did not answer in time will not answer on a retry: go to the next model (4 tries x 4 models x the
                     # timeout used to hold a run for tens of minutes).
                     print(f"[Warning] Gemini API ({g_model}) did not answer within {timeout}s; trying the next model.")
+                    timeouts_in_a_row += 1
                     break
                 except Exception as e:
                     err_msg = str(e)

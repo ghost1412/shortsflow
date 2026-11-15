@@ -829,6 +829,9 @@ def continue_run(choice):
     every segment that was already cut are reused instead of being redone."""
     if not choice:
         raise gr.Error("Pick an unfinished run first.")
+    sessions_root = os.path.realpath(os.path.join(ROOT, "sessions"))
+    if os.path.basename(str(choice)) != "command.json" or os.path.commonpath([sessions_root, os.path.realpath(str(choice))]) != sessions_root:
+        raise gr.Error("Pick an unfinished run from the list.")     # only a run's own saved settings inside sessions/ may be continued
     try:
         with open(choice, "r", encoding="utf-8") as f:
             cmd = list(json.load(f)["cmd"])
