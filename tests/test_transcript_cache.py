@@ -94,3 +94,21 @@ def test_second_session_reuses_the_transcript_without_running_the_speech_model(t
     assert json.load(open(second, encoding="utf-8"))["segments"][0]["text"] == "hi there"
     analysis.transcribe_video(video, str(tmp_path / "session3"), language="es")
     assert calls["n"] == 2                                              # another language is another transcript
+
+
+def test_prune_keeps_the_newest_files_and_only_touches_its_own(tmp_path, monkeypatch):
+    import os
+    from engine import transcript_cache as tc
+    monkeypatch.setenv("SHORTSFLOW_CACHE_DIR", str(tmp_path))
+    folder = tc.cache_dir()
+    os.makedirs(folder)
+    names = [("%040d" % i) + ".json" for i in range(5)]
+    for i, n in enumerate(names):
+        p = os.path.join(folder, n)
+        open(p, "w").write("{}")
+        os.utime(p, (1000 + i, 1000 + i))
+    other = os.path.join(folder, "notes.json")
+    open(other, "w").write("{}")
+    tc.prune(keep=2)
+    left = sorted(os.listdir(folder))
+    assert left == sorted([names[3], names[4], "notes.json"])

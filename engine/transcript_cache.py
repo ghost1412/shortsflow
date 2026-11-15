@@ -11,6 +11,7 @@ import os
 import shutil
 
 _CHUNK = 1024 * 1024
+KEEP = 200            # transcripts kept; the oldest cache files beyond this are removed, so the folder cannot grow for ever
 
 
 def enabled():
@@ -75,6 +76,23 @@ def store(key, session_transcript_path):
         tmp = os.path.join(cache_dir(), f"{key}.json.tmp")
         shutil.copyfile(session_transcript_path, tmp)
         os.replace(tmp, os.path.join(cache_dir(), f"{key}.json"))
+        prune()
         return True
     except (OSError, ValueError):
         return False
+
+
+def prune(keep=None):
+    """Remove the oldest transcript files (only this cache's own <key>.json files) beyond `keep`. Never raises."""
+    keep = KEEP if keep is None else keep
+    try:
+        folder = cache_dir()
+        files = [os.path.join(folder, n) for n in os.listdir(folder) if n.endswith(".json") and len(n) == 45]
+        files.sort(key=os.path.getmtime, reverse=True)
+        for old in files[keep:]:
+            try:
+                os.remove(old)
+            except OSError:
+                pass
+    except OSError:
+        pass
