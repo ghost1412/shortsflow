@@ -1005,7 +1005,7 @@ def pick_grade(ffmpeg, files, run=subprocess.run, sample=6):
         return CINEMATIC_GRADE
 
 
-def cinematic_layers(path_base, title, line="", small="", look=None, index=0, quick=False, safe=False):
+def cinematic_layers(path_base, title, line="", small="", look=None, index=0, quick=False, safe=False, scrim=False):
     """Title over the footage as separate transparent layers that fade in one after another: [(png, start second), ...].
     The look comes from the shot: text goes where the picture is calmest, light or dark text by brightness, accent colour from the shot,
     and the layout rotates (centred / left-aligned / stacked words) so the cards are not all the same."""
@@ -1074,6 +1074,16 @@ def cinematic_layers(path_base, title, line="", small="", look=None, index=0, qu
 
     below = cy + block // 2 + int(30 * u)
     layers = []
+    if scrim:          # a soft dark band behind the text, so a label stays readable over bright sky or snow
+        import numpy as np
+        rows = np.arange(H, dtype=np.float32)
+        centre, half = cy, max(int(H * 0.16), block // 2 + int(130 * u))
+        alpha = np.clip(1.0 - np.abs(rows - centre) / half, 0.0, 1.0) ** 1.4 * 150
+        band = np.zeros((H, W, 4), np.uint8)
+        band[..., 3] = alpha[:, None].astype(np.uint8)
+        scrim_png = f"{path_base}_scrim.png"
+        Image.fromarray(band, "RGBA").save(scrim_png)
+        layers.append((scrim_png, 0.0))
     if small:
         s_lines, s_font, s_lh = fit(small, int(34 * (1.35 if quick else 1.0)), 24)       # quick (fast pace): bigger, it has less time on screen
 
@@ -1595,8 +1605,8 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     hype = style != "plain"
     grade, fade_s = (CINEMATIC_GRADE, 0.5) if cine else ("", 0.2)
     dissolving = (transitions or "").strip().lower() == "dissolve"      # an explicit choice only; "auto" never dissolves
-    if dissolving:
-        fade_s = 0.05                    # no dip to black on every shot: the shots melt into each other when they are joined
+    if dissolving or extras.get("itinerary"):
+        fade_s = 0.05                    # no dip to black on every shot: straight cuts (an itinerary reel) or shots that melt into each other
     fast = str(extras.get("pace") or "").lower() == "fast"       # --recap_pace fast: a shorter opening and ending, and shorter parts
     n_glimpses, glimpse_base, title_base, first_base, closing_s = (2, 1.6, 2.4, 3.2, 2.4) if fast else (GLIMPSES, GLIMPSE_SECONDS, 3.4, 3.2, 3.2)
     result_opening = str(extras.get("opening") or "").lower() == "result"        # --recap_opening result: only the finished dish, then straight into the steps
@@ -1879,8 +1889,10 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         elif cine:
             m0 = title_m or days[0]["moments"][0]
             out = os.path.join(parts_dir, "trip_title.mp4")
-            lay = cinematic_layers(os.path.join(parts_dir, "trip_title"), it["title"], " · ".join(stops) if stops else (" · ".join(trip_places[:4]) or K["tagline"]), "",
-                                   look=frame_look(ffmpeg, m0["file"], m0["start"] + 1.0), index=0, quick=fast, safe=bool(extras.get("safe")))
+            itin = bool(extras.get("itinerary")) and len(days) > 1
+            lay = cinematic_layers(os.path.join(parts_dir, "trip_title"), it["title"], "" if itin else (" · ".join(stops) if stops else (" · ".join(trip_places[:4]) or K["tagline"])),
+                                   f"{len(days)} {unit.upper()}S IN" if itin else "",
+                                   look=frame_look(ffmpeg, m0["file"], m0["start"] + 1.0), index=0, quick=fast, safe=bool(extras.get("safe")), scrim=itin)
             render_clip(ffmpeg, m0["file"], m0["start"], title_s, out, None, layout, m0["size"], audio=has_audio(m0["file"]) and not mute_orig, grade=grade, fade_s=fade_s, layers=lay, layer_fade=((0.2, 0.25) if fast else (0.7, 0.4)), rotate=m0.get("rotate", 0), fix=fix_for(m0["file"]), **zoom_kw(), **trans_kw(m0["file"], m0["start"], title_s, m0["size"]))
             note_shot(out, m0["size"], [png for png, _ts in lay or []])
             parts.append(out)
@@ -1933,7 +1945,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
                 itinerary = bool(extras.get("itinerary")) and len(days) > 1      # --recap_itinerary: "DAY 2" above the place name, nothing repeated below
                 lay = cinematic_layers(os.path.join(parts_dir, f"title_{di}"), row["title"], own or ("" if itinerary else (f"{unit} {di}" if len(days) > 1 else "")),
                                        small=(f"{unit.upper()} {di}" if itinerary else f"{unit.upper()} {di} / {len(days)}" if extras.get("counter") and len(days) > 1 else ""),
-                                       look=frame_look(ffmpeg, m["file"], m["start"] + 1.0), index=di, quick=fast, safe=bool(extras.get("safe")))
+                                       look=frame_look(ffmpeg, m["file"], m["start"] + 1.0), index=di, quick=fast, safe=bool(extras.get("safe")), scrim=itinerary)
                 secs = max(secs, first_min)
             spd = timelapse_factor(extras.get("speed"), secs, (file_seconds(m["file"]) or 0.0) - m["start"]) if extras.get("speed") else 1.0        # --recap_speed: a longer stretch, played faster
             render_clip(ffmpeg, m["file"], m["start"], secs, out, cap_png, layout, m["size"], audio=has_audio(m["file"]) and not mute_orig and spd <= 1.2, speed=spd, grade=grade, fade_s=fade_s, layers=lay, layer_fade=((0.2, 0.25) if fast else (0.7, 0.4)), rotate=m.get("rotate", 0), fix=fix_for(m["file"]), **zoom_kw(), **trans_kw(m["file"], m["start"], secs, m["size"]))

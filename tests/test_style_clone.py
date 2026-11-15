@@ -161,3 +161,25 @@ def test_recipe_for_uses_the_reader_and_the_frames(tmp_path):
     assert recipe["recap_itinerary"] and recipe["recap_style"] == "cinematic"
     with pytest.raises(ValueError):
         sc.recipe_for(str(tmp_path / "none.mp4"))
+
+
+def test_full_bleed_reference_gives_a_crop_layout():
+    entries = [dict(e, fills_frame=True) for e in ENTRIES]
+    s = sc.summarise_structure(entries)
+    assert s["full_bleed"]
+    recipe, lines = sc.to_recap_recipe(_m(shot=2.1), s, days=4)
+    assert recipe["layout"] == "crop" and any("fills the whole frame" in line for line in lines)
+    recipe, _ = sc.to_recap_recipe(_m(shot=2.1), sc.summarise_structure(ENTRIES), days=4)
+    assert "layout" not in recipe
+
+
+def test_label_gets_a_dark_band_behind_it(tmp_path):
+    from PIL import Image
+    from engine import trip_recap as tr
+    layers = tr.cinematic_layers(str(tmp_path / "t"), "Charyn Canyon", small="DAY 2", safe=True, scrim=True)
+    first, start = layers[0]
+    assert first.endswith("_scrim.png") and start == 0.0
+    img = Image.open(first)
+    mid = img.getpixel((img.width // 2, int(img.height * 0.30)))[3]
+    assert mid > 60 and img.getpixel((10, img.height - 5))[3] == 0          # dark behind the text, clear far away from it
+    assert not any(png.endswith("_scrim.png") for png, _ in tr.cinematic_layers(str(tmp_path / "u"), "Charyn Canyon", small="DAY 2")[:1])

@@ -161,7 +161,8 @@ STRUCTURE_PROMPT = (
     "These are {n} frames from one short reel, in time order. For EACH frame describe the text drawn on it (not a street or shop sign in the scene). "
     "Reply with JSON only, an array with exactly {n} entries: "
     '[{{"id": 1, "text": ["line 1", "line 2"], "position": "top|upper|middle|lower|bottom|none", '
-    '"role": "headline|label|cta|caption|none", "font": "script|sans|serif|bold|none"}}, ...]. '
+    '"role": "headline|label|cta|caption|none", "font": "script|sans|serif|bold|none", "fills_frame": true}}, ...]. '
+    "fills_frame is true when the picture fills the whole frame, false when it sits in a smaller strip with black or blurred bars. "
     "headline = a big title for the whole reel, label = a short tag for this shot (a day number, a place name), "
     "cta = a call to action or promotion (comment, follow, win, link), caption = spoken words. Use an empty text list and role none when a frame has no added text.")
 DAY_WORD = re.compile(r"^\s*(day|part|stop|chapter|step)\s*\d+", re.IGNORECASE)
@@ -245,7 +246,8 @@ def summarise_structure(entries):
             "label_position": max(set(pos), key=pos.count) if pos else None,
             "font": max(set(fonts), key=fonts.count) if fonts else None,
             "headline": bool(lines(first)) and str(first.get("role", "")).lower() in ("headline", "label"),
-            "closing_cta": bool(lines(last)) and str(last.get("role", "")).lower() == "cta"}
+            "closing_cta": bool(lines(last)) and str(last.get("role", "")).lower() == "cta",
+            "full_bleed": sum(1 for e in entries if e.get("fills_frame") is True) > len(entries) / 2}
 
 
 def to_recap_recipe(m, structure, days=5, max_seconds=60):
@@ -276,6 +278,11 @@ def to_recap_recipe(m, structure, days=5, max_seconds=60):
         recipe["recap_end"] = "result" if structure.get("closing_cta") else "card"
         lines.append("Ending: " + ("finishes on the last shot with a short line (the reference's own promotion text is not copied)." if structure.get("closing_cta")
                                     else "a closing card."))
+    if structure and structure.get("full_bleed") and recipe.get("recap_aspect") == "9:16":
+        recipe["layout"] = "crop"
+        lines.append("Picture: fills the whole frame (no blurred bars); landscape clips are cropped to fill it.")
+    if structure and structure.get("labels_over_footage"):
+        pass
     elif structure is not None:
         lines.append("Text: no text over the shots was found, so the normal recap look is kept.")
     else:
