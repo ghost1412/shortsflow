@@ -286,3 +286,31 @@ def test_web_forms_pass_every_option_to_their_functions():
             assert required <= len(fn.inputs) <= len(params), (f.__name__, len(fn.inputs), len(params))
             seen.add(f.__name__)
     assert seen == {"quick_clip", "clip_video"}
+
+
+def test_saved_template_keeps_its_text_boxes(tmp_path):
+    import argparse
+    import json
+    from engine import auto_edit
+    ok, msg = web_args.save_look_template("my-show", visual="story-progress", folder=str(tmp_path),
+                                          text={"show": "Night Talks", "handle": "@nighttalks", "role": ""})
+    assert ok, msg
+    saved = json.loads((tmp_path / "my-show.json").read_text(encoding="utf-8"))
+    assert saved["template_text"] == {"show": "Night Talks", "handle": "@nighttalks"}
+    args = argparse.Namespace(visual_template=None, template_text=["handle=@mine"], caption_style="HORMOZI", use_remotion=False,
+                              tighten_mode="cut", layout="single", video_filter="none")
+    auto_edit.apply_preset(args, "my-show", argv=["--template_text", "handle=@mine"])
+    assert args.visual_template == "story-progress"
+    assert "show=Night Talks" in args.template_text and "handle=@mine" in args.template_text
+    assert "handle=@nighttalks" not in args.template_text          # what the user typed wins
+
+
+def test_join_reel_checkbox_reaches_the_command(monkeypatch, tmp_path):
+    import webui
+    seen = {}
+    monkeypatch.setattr(webui, "ROOT", str(tmp_path))
+    monkeypatch.setattr(webui, "_stream_clip", lambda cmd, *a, **k: seen.update(cmd=cmd) or iter(()))
+    list(webui.quick_clip("https://example.com/v.mp4", None, 3, True, join_reel=True))
+    assert "--join_reel" in seen["cmd"]
+    list(webui.quick_clip("https://example.com/v.mp4", None, 3, True))
+    assert "--join_reel" not in seen["cmd"]

@@ -90,14 +90,14 @@ def edit_style_choices():
 
 
 def save_look_template(name, edit_style="none", caption_style=None, clean_audio=False, hook_overlay=False, caption_emoji=False, broll=False,
-                       auto_zoom=False, cold_open=False, stat_pops=False, grade="default", visual="none", intro="none", outro="none", folder=None):
+                       auto_zoom=False, cold_open=False, stat_pops=False, grade="default", visual="none", intro="none", outro="none", folder=None, text=None):
     """Save the browser app's current look as a template. Returns (ok, message); the message says where it went or what to fix."""
     try:
         flags = {"clean_audio": clean_audio, "hook_overlay": hook_overlay, "caption_emoji": caption_emoji, "broll": broll, "auto_zoom": auto_zoom,
                  "cold_open": cold_open, "stat_pops": stat_pops, "tighten": True}
         tpl = _auto_edit.template_from_settings(edit_style, caption_style, flags, grade if grade not in ("default", "auto") else None,
                                                 None if visual in (None, "none") else visual, None if intro in (None, "none") else intro,
-                                                None if outro in (None, "none") else outro)
+                                                None if outro in (None, "none") else outro, text=text if visual not in (None, "none") else None)
         path = _auto_edit.save_user_template(name, tpl, folder)
     except ValueError as e:
         return False, f"Not saved: {e}"

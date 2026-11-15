@@ -513,7 +513,7 @@ def quick_clip(url, upload, clip_count, captions, caption_style="HORMOZI", use_b
                auto_edit="none", edit_strength="medium", stat_pops=False, length=30, moments="", about="", visual=False, reuse="", reuse_all="all", drive="", enhance=False, grade="default",
                game=False, game_mix="0.5", caption_position="default", caption_size="default", game_framing="auto", llm_provider="auto",
                visual_template="none", intro_animation="none", outro_animation="none",
-               tpl_speaker="", tpl_role="", tpl_show="", tpl_handle="", tpl_headline="", tpl_cta="", shape="9:16", plan_first=False, between="", picture="auto"):
+               tpl_speaker="", tpl_role="", tpl_show="", tpl_handle="", tpl_headline="", tpl_cta="", shape="9:16", plan_first=False, between="", picture="auto", join_reel=False):
     """The beginner flow: a video in, shorts out, with plain-language progress instead of a raw log.
     Yields (status, log, cards): `cards` feeds the review screen."""
     import time
@@ -567,6 +567,8 @@ def quick_clip(url, upload, clip_count, captions, caption_style="HORMOZI", use_b
             cmd += ["--visual_context"]
         if enhance:
             cmd += ["--enhance", "auto"]
+        if join_reel:
+            cmd += ["--join_reel"]                  # one extra video; the shorts stay as they are
         if (moments or "").strip():
             from engine.moments import parse_moments
             try:
@@ -1178,6 +1180,7 @@ def build_ui():
                                                              info="Size of the animated captions.")
                             with gr.Accordion("Extras (optional)", open=False):
                                 q_clean = gr.Checkbox(label="Clean up the sound", info="Removes background noise and evens out the volume.")
+                                q_join = gr.Checkbox(label="Also join the shorts into one video", info="Besides the separate shorts, one video with all of them in order, with smooth transitions. Saved as reel_joined.mp4 in this run's folder (sessions/). Only for several shorts, not for a highlights video.")
                                 q_enhance = gr.Checkbox(label="Auto-enhance the picture", info="Like an editor: each short is measured and a dark clip is lifted, a colour cast reduced, a dull one given a little colour, plus light sharpening. Only what is off is corrected. On your PC; it cannot add detail that is not there.")
                                 q_hook = gr.Checkbox(label="Big title at the start", info="Shows the short's hook as a title for the first 3 seconds. Needs animated captions.")
                                 q_emoji = gr.Checkbox(label="Emoji next to key words in the captions", info="Needs animated captions.")
@@ -1402,17 +1405,18 @@ def build_ui():
                 demo.load(brand_fields, None, brand_form)
                 from shortsflow import sample as _sample
                 q_sample.click(_sample.use_sample, None, [q_url, q_upload, q_sample_note])
-                def _save_template(name, edit, style, clean, hook, emoji, broll, zoom, cold, stats, grade, tpl, intro, outro):
-                    ok, msg = web_args.save_look_template(name, edit, style, clean, hook, emoji, broll, zoom, cold, stats, grade, tpl, intro, outro)
+                def _save_template(name, edit, style, clean, hook, emoji, broll, zoom, cold, stats, grade, tpl, intro, outro, *texts):
+                    ok, msg = web_args.save_look_template(name, edit, style, clean, hook, emoji, broll, zoom, cold, stats, grade, tpl, intro, outro,
+                                                          text=dict(zip(web_args.TEMPLATE_TEXT_SLOTS, texts)))
                     if not ok:
                         return msg, gr.update()
                     new = (name or "").strip().lower().replace(" ", "-")
                     return msg, gr.update(choices=web_args.edit_style_choices(), value=new if new else edit)
                 q_tpl_save.click(_save_template, [q_tpl_name, q_edit, q_style, q_clean, q_hook, q_emoji, q_broll, q_zoom, q_cold, q_stats, q_grade,
-                                                  q_look[0], q_look[1], q_look[2]], [q_tpl_msg, q_edit])
+                                                  *q_look[:9]], [q_tpl_msg, q_edit])
                 q_run = q_btn.click(quick_clip, [q_url, q_upload, q_count, q_captions, q_style, q_brand_on, q_logo, q_handle, q_endcard, q_color, q_pos, q_mode, q_minutes, q_find, q_cut, q_spoken, q_caption_lang,
                              q_clean, q_hook, q_emoji, q_filler, q_filler_file, q_broll, q_zoom, q_cold, q_edit, q_edit_strength, q_stats, q_length, q_moments, q_about, q_visual, q_reuse, q_reuse_all, q_drive, q_enhance, q_grade,
-                             q_game, q_game_mix, q_cap_pos, q_cap_size, q_game_frame, q_llm, *q_look, q_plan_first, q_between, q_picture],
+                             q_game, q_game_mix, q_cap_pos, q_cap_size, q_game_frame, q_llm, *q_look, q_plan_first, q_between, q_picture, q_join],
                             [q_status, q_log, q_cards]).then(load_plan, None, q_plan).then(projects_update, None, [q_projects, q_proj_paths, q_proj_title]).then(
                     lambda: gr.update(visible=False), None, q_stop)
                 q_btn.click(lambda: gr.update(visible=True), None, q_stop)

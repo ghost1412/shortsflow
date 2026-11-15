@@ -140,7 +140,7 @@ def _check_template(raw, base):
     """The template `raw` (parsed JSON) on top of `base` (a preset dict), or raises ValueError saying what is wrong."""
     if not isinstance(raw, dict):
         raise ValueError("the file must hold one JSON object")
-    known = set(NEUTRAL) | {"layout", "based_on", "visual", "intro_animation", "outro_animation"}
+    known = set(NEUTRAL) | {"layout", "based_on", "visual", "intro_animation", "outro_animation", "template_text"}
     extra = sorted(set(raw) - known)
     if extra:
         raise ValueError(f"unknown setting(s): {', '.join(extra)}")
@@ -163,6 +163,10 @@ def _check_template(raw, base):
         elif key in ("intro_animation", "outro_animation"):
             if value is not None and value not in ANIMATION_NAMES:
                 raise ValueError(f"{key} must be null or one of: {', '.join(ANIMATION_NAMES)}")
+        elif key == "template_text":
+            from engine.visual_template import TEXT_KEYS
+            if not isinstance(value, dict) or set(value) - set(TEXT_KEYS) or any(not isinstance(v, str) for v in value.values()):
+                raise ValueError(f"template_text must be an object with keys from {', '.join(TEXT_KEYS)} and text values")
         elif key == "layout":
             if value not in LAYOUTS:
                 raise ValueError(f"layout must be one of: {', '.join(LAYOUTS)}")
@@ -337,6 +341,12 @@ def apply_preset(args, preset, strength="medium", argv=None):
     if p.get("visual") and not _given(argv, "--visual_template") and not getattr(args, "visual_template", None):
         args.visual_template = p["visual"]
         flags["visual_template"] = p["visual"]
+    if p.get("template_text") and getattr(args, "visual_template", None):
+        have = {str(t).split("=", 1)[0] for t in (getattr(args, "template_text", None) or [])}
+        extra = [f"{k}={v}" for k, v in p["template_text"].items() if k not in have]     # only the slots the user did not type
+        if extra:
+            args.template_text = list(getattr(args, "template_text", None) or []) + extra
+            flags["template_text"] = dict(p["template_text"])
     for key in ("intro_animation", "outro_animation"):
         if p.get(key) and not _given(argv, "--" + key) and not getattr(args, key, None):
             setattr(args, key, p[key])
@@ -466,7 +476,7 @@ NAME_RE = re.compile(r"[a-z0-9][a-z0-9_-]{0,30}")
 
 
 def template_from_settings(auto_edit_style="none", caption_style=None, flags=None, video_filter=None, visual=None, intro=None, outro=None,
-                           label="", about=""):
+                           label="", about="", text=None):
     """A complete template made from what is set in the browser app: the chosen Auto-edit style is the starting point (or a neutral one),
     the ticked extras are turned on, the caption style, colour grade, visual template and covers are taken as chosen."""
     base = json.loads(json.dumps(PRESETS.get(auto_edit_style) or NEUTRAL))
@@ -484,6 +494,9 @@ def template_from_settings(auto_edit_style="none", caption_style=None, flags=Non
     base["outro_animation"] = outro if outro in ANIMATION_NAMES else base.get("outro_animation")
     base["label"] = (label or "").strip()
     base["about"] = (about or "").strip()
+    kept = {k: " ".join(str(v).split()) for k, v in (text or {}).items() if v and " ".join(str(v).split())}
+    if kept:
+        base["template_text"] = kept          # the text boxes of the look (speaker, show, handle ...) are part of the saved template
     return {k: v for k, v in base.items() if v is not None or k == "video_filter"}
 
 
