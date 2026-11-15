@@ -165,3 +165,14 @@ def test_the_recap_form_passes_the_template_to_the_command():
     a = web_args.template_args("story-progress", "iris", "fade", show="Almaty")
     assert a[a.index("--visual_template") + 1] == "story-progress" and "show=Almaty" in a
     assert a[a.index("--intro_animation") + 1] == "iris"
+
+
+def test_reviewed_plan_keeps_title_score_and_warning(tmp_path):
+    from engine.plan import apply_carry, save_carry
+    save_carry(str(tmp_path), [{"start": 10.0, "end": 40.0, "title": "Boss", "score": 77, "reason": "Looks like filmed footage. Big fight"}])
+    kept = {"start": 10.0, "end": 40.0, "viral_score": 90, "final_score": 90, "reason": "Chosen by you", "user_moment": True}
+    moved = {"start": 12.0, "end": 40.0, "viral_score": 90, "final_score": 90, "reason": "Chosen by you", "user_moment": True}
+    a, b = apply_carry([kept, moved], str(tmp_path))
+    assert (a["title"], a["final_score"], a["reason"]) == ("Boss", 77, "Looks like filmed footage. Big fight")
+    assert b["reason"] == "Chosen by you" and "title" not in b
+    assert apply_carry([{"start": 10.0, "end": 40.0, "reason": "Chosen by you"}], str(tmp_path / "none"))[0]["reason"] == "Chosen by you"

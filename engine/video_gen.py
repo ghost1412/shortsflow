@@ -2715,6 +2715,7 @@ def finish_segment_processes(procs):
     for item in procs:
         proc, part, final = item[:3]
         cmd = item[3] if len(item) > 3 else None
+        key = item[4] if len(item) > 4 else None
         proc.wait()
         try:
             ok = proc.returncode == 0 and os.path.exists(part) and os.path.getsize(part) > 1000
@@ -2736,6 +2737,8 @@ def finish_segment_processes(procs):
                     print(f"[Error] Segment {name}: FFmpeg stopped with code {proc.returncode}; the clip is skipped.")
             if ok:
                 replace_file(part, final)
+                if key:
+                    write_segment_key(final, key)    # right away: a run stopped after this piece still reuses it
         except OSError as e:
             print(f"[Warning] Could not finish segment {os.path.basename(final)}: {e}")
 
@@ -2762,6 +2765,36 @@ def segment_key(source_path, hi, **settings):
         ident = [str(source_path), 0]
     parts = [ident, round(float(hi["start"]), 2), round(float(hi["end"]), 2), sorted((k, str(v)) for k, v in settings.items())]
     return hashlib.sha1(repr(parts).encode("utf-8")).hexdigest()
+
+
+def _filler_ident(path):
+    """The filler video as part of a cache key: its path and size (a bool would not notice another filler)."""
+    if not path:
+        return None
+    try:
+        return [os.path.abspath(path), os.path.getsize(path)]
+    except OSError:
+        return [str(path), 0]
+
+
+def _points_ident(points):
+    """A short fingerprint of the smart-crop interest points (they change the crop of every piece)."""
+    import hashlib
+    return hashlib.sha1(repr(points).encode("utf-8")).hexdigest()[:12] if points else None
+
+
+def _template_ident():
+    try:
+        from engine.visual_template import props_from_env
+        return props_from_env()
+    except Exception:
+        return None
+
+
+def final_clip_key(seg_key, **settings):
+    """What a finished clip (video_clip_N.mp4) was made from: its piece's key plus the caption, template and tighten settings."""
+    import hashlib
+    return hashlib.sha1(repr([seg_key, sorted((k, str(v)) for k, v in settings.items())]).encode("utf-8")).hexdigest()
 
 
 def segment_is_cached(path, key):
@@ -2833,10 +2866,17 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
     fit_clips = set()           # clips the auto layout cut as "whole picture over a blurred copy" (no face on screen)
 
     seg_keys = {}
+    clip_keys = {}
     for i, hi in enumerate(highlights):
         target = os.path.join(output_dir, "temp_segments", f"seg_{i}.mp4")
         seg_keys[i] = segment_key(source_path, hi, mode=mode, layout=layout, aspect=aspect_ratio, orientation=orientation,
-                                  letterbox=letterbox_crop, filler=bool(filler_path), enhance=enhance, enhance_strength=enhance_strength)
+                                  letterbox=letterbox_crop, filler=_filler_ident(filler_path), enhance=enhance, enhance_strength=enhance_strength,
+                                  grade=video_filter, hq=use_hq, superres=use_superres, crop_points=_points_ident(interest_points),
+                                  editing=editing_style)
+        clip_keys[i] = final_clip_key(seg_keys[i], caption_style=caption_style, y=subtitle_y_pos, remotion=use_remotion,
+                                      tighten=tighten_mode if silence_intervals else None, fillers=remove_fillers, aspect=aspect_ratio,
+                                      template=_template_ident(), hook=os.getenv("SHORTSFLOW_HOOK_OVERLAY"), zoom=os.getenv("SHORTSFLOW_AUTO_ZOOM"),
+                                      challenge=is_challenge, context=user_context, codec=codec)
         if use_cache and segment_is_cached(target, seg_keys[i]):
             if mode == "shorts" and layout == "single" and not filler_path:
                 single_crop_clips.add(i)
@@ -2984,7 +3024,7 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
         
         # 🟢 FIXED: Added stdin=DEVNULL to prevent hangs on interactive prompts (e.g. overwriting)
         p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
-        processes.append((p, cmd[-1], target, cmd))
+        processes.append((p, cmd[-1], target, cmd, seg_keys[i]))
         
         if len(processes) >= local_pool_size:
             finish_segment_processes(processes)
@@ -3106,7 +3146,7 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
             if not os.path.exists(task_path) or os.path.getsize(task_path) < 1000: return
             
             out = os.path.join(output_dir, f"video_clip_{i+1}.mp4")
-            if use_cache and os.path.exists(out) and os.path.getsize(out) > 1000 and os.path.getmtime(out) >= os.path.getmtime(task_path):
+            if use_cache and os.path.exists(out) and os.path.getsize(out) > 1000 and os.path.getmtime(out) >= os.path.getmtime(task_path)                     and segment_is_cached(out, clip_keys[i]):
                 print(f"[Log] Final clip {i+1} already exists at {out}. Skipping rendering.")
                 extracted_files.append(out)
                 return
@@ -3340,6 +3380,12 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
         with ThreadPoolExecutor(max_workers=render_workers) as executor:
 
             list(executor.map(render_short_item, enumerate(highlights)))
+
+        # Remember what every finished clip was made from (see final_clip_key)
+        for i in range(len(highlights)):
+            clip_out = os.path.join(output_dir, f"video_clip_{i+1}.mp4")
+            if clip_out in extracted_files and os.path.exists(clip_out):
+                write_segment_key(clip_out, clip_keys[i])
             
         if mashup:
             out = os.path.join(output_dir, "mashup_reel.mp4")

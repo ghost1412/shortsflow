@@ -48,3 +48,36 @@ def test_seeding_a_new_run_carries_the_key_files(tmp_path):
     new.mkdir()
     reuse.seed_session(str(tmp_path / "old"), str(new), keep_moments=True)
     assert (new / "temp_segments" / "seg_0.mp4.key").read_text() == "k1"
+
+
+def test_final_clip_key_follows_caption_and_template_settings():
+    from engine import video_gen as vg
+    base = vg.final_clip_key("abc", caption_style="HORMOZI", y=1150)
+    assert base == vg.final_clip_key("abc", caption_style="HORMOZI", y=1150)
+    assert base != vg.final_clip_key("abc", caption_style="GLOW_BOX", y=1150)
+    assert base != vg.final_clip_key("other", caption_style="HORMOZI", y=1150)
+
+
+def test_filler_and_points_idents_notice_changes(tmp_path):
+    from engine import video_gen as vg
+    a, b = tmp_path / "a.mp4", tmp_path / "b.mp4"
+    a.write_bytes(b"x" * 10)
+    b.write_bytes(b"y" * 20)
+    assert vg._filler_ident(None) is None
+    assert vg._filler_ident(str(a)) != vg._filler_ident(str(b))
+    assert vg._points_ident(None) is None
+    assert vg._points_ident([(1, 2)]) != vg._points_ident([(1, 3)])
+
+
+def test_finish_segment_processes_writes_key_at_once(tmp_path):
+    from engine import video_gen as vg
+
+    class Done:
+        returncode = 0
+        def wait(self):
+            pass
+
+    part, final = tmp_path / "seg_0.part.mp4", tmp_path / "seg_0.mp4"
+    part.write_bytes(b"x" * 2000)
+    vg.finish_segment_processes([(Done(), str(part), str(final), None, "k1")])
+    assert vg.segment_is_cached(str(final), "k1")

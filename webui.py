@@ -764,7 +764,8 @@ def render_plan(session, *values):
         i = cmd.index("--moments")
         del cmd[i:i + 2]
     cmd += ["--moments", text]
-    from engine.plan import automatic_game_framing
+    from engine.plan import automatic_game_framing, save_carry
+    save_carry(session, plan["moments"])
     decided = automatic_game_framing(cmd, plan.get("source_video"), plan["moments"], session)
     if decided:
         cmd += ["--game_framing", decided[0]]     # the framing the previews showed, so the render matches them

@@ -31,6 +31,43 @@ def read_plan(session_dir):
         return None
 
 
+CARRY_FILE = "plan_carry.json"
+
+
+def save_carry(session_dir, moments):
+    """Remember the reviewed plan's moments (title, score, reason) next to the session, so the render keeps them for every moment left as planned."""
+    try:
+        with open(os.path.join(session_dir, CARRY_FILE), "w", encoding="utf-8") as f:
+            json.dump(moments, f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
+def apply_carry(highlights, session_dir, tolerance=0.05):
+    """Give the moments that still match a planned moment (same start and end) its title, score and reason back.
+    A moment the owner moved or added keeps "Chosen by you". The times stay exactly as given (user_moment)."""
+    try:
+        with open(os.path.join(session_dir, CARRY_FILE), encoding="utf-8") as f:
+            planned = json.load(f)
+    except (OSError, ValueError):
+        return highlights
+    for h in highlights:
+        for m in planned if isinstance(planned, list) else []:
+            try:
+                same = abs(float(m["start"]) - h["start"]) <= tolerance and abs(float(m["end"]) - h["end"]) <= tolerance
+            except (KeyError, TypeError, ValueError):
+                continue
+            if same:
+                if m.get("title"):
+                    h["title"] = m["title"]
+                if isinstance(m.get("score"), (int, float)):
+                    h["viral_score"] = h["final_score"] = m["score"]
+                if m.get("reason"):
+                    h["reason"] = m["reason"]
+                break
+    return highlights
+
+
 def moments_text(moments):
     """`--moments` text for the kept moments, in time order: '420.0-465.5, 600.0-640.0'."""
     return ", ".join(f"{float(m['start']):.2f}-{float(m['end']):.2f}" for m in sorted(moments, key=lambda m: float(m["start"])))

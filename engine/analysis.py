@@ -1707,6 +1707,8 @@ def process_source_video(video_path, output_dir, mode="shorts", clip_count=5, ta
         # the user chose the moments (a cutscene, a boss entrance ...): no AI selection, no sentence snapping
         from engine.moments import parse_moments
         highlights = parse_moments(moments, default_length=target_duration or 30, video_seconds=probe_duration(video_path))
+        from engine.plan import apply_carry
+        highlights = apply_carry(highlights, output_dir)     # a reviewed plan keeps its titles, scores and warnings
         print(f"[Log] Using the {len(highlights)} moment(s) you chose: " +
               ", ".join(f"{h['start']:.0f}-{h['end']:.0f}s" for h in highlights))
     elif game and mode == "shorts":
