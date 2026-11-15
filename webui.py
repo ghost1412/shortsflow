@@ -1063,6 +1063,26 @@ PC_PATH_MESSAGE = ("A file path (or Browse) only works when you open the app on 
                    "From another device, add the files with the upload box, or paste a web link.")
 
 
+def copy_reel_style(upload, path, name, caption_style):
+    """Measure a reference reel and save its style as a template. Returns (message, update for the Auto-edit list)."""
+    source = upload or (path or "").strip().strip('"')
+    if not source:
+        return "Upload a reel or give the path of one first.", gr.update()
+    try:
+        refuse_pc_path(source, upload)
+    except gr.Error as e:
+        return str(e), gr.update()
+    from engine import style_clone
+    try:
+        saved, lines = style_clone.clone(source, name, caption_style or "HORMOZI")
+    except ValueError as e:
+        return f"Not saved: {e}", gr.update()
+    shown = os.path.splitext(os.path.basename(saved))[0]
+    text = chr(10).join("- " + line for line in lines)
+    return (f"Saved as **{shown}**. It is in the Auto-edit style list now (and `--auto_edit {shown}` on the command line).{chr(10)*2}{text}",
+            gr.update(choices=web_args.edit_style_choices(), value=shown))
+
+
 def refuse_pc_path(source, upload):
     """Another device cannot use this PC's files in place: say so plainly (the upload box and web links still work)."""
     if web_args.remote_access() and source and not upload and not web_args.is_web_link(source):
@@ -1216,6 +1236,16 @@ def build_ui():
                                 q_tpl_name = gr.Textbox(label="Template name", placeholder="my-channel", max_lines=1)
                                 q_tpl_save = gr.Button("Save as a template", variant="secondary")
                                 q_tpl_msg = gr.Markdown("")
+                            with gr.Accordion("Copy the style of a reel", open=False):
+                                gr.Markdown("Give a reel whose editing you like. It is measured on this PC (nothing is sent anywhere, the reel is only read): how fast the "
+                                            "shots change, the colour and the loudness. Pauses, zooms and cutaway pictures are then set to suit that pace, and the result "
+                                            "is saved as a template in the Auto-edit list. It is a close match in rhythm and look, **not a copy**: captions, graphics, "
+                                            "music and the reel's footage are not reused.")
+                                q_ref_file = gr.File(label="Reference reel (upload)", file_types=["video"], type="filepath")
+                                q_ref_path = gr.Textbox(label="Or the path of a video on this PC", max_lines=1)
+                                q_ref_name = gr.Textbox(label="Template name", placeholder="like-that-reel", max_lines=1)
+                                q_ref_btn = gr.Button("Copy this style", variant="secondary")
+                                q_ref_msg = gr.Markdown("")
                         q_plan_first = gr.Checkbox(label="Let me review the moments first", value=False,
                                                    info="Finds the moments, then stops: you see each one on a timeline, adjust start and end or drop it, and only then it is rendered. Short clips only.")
                         q_btn = gr.Button("✨ Make my shorts", variant="primary")
@@ -1418,6 +1448,7 @@ def build_ui():
                         return msg, gr.update()
                     new = (name or "").strip().lower().replace(" ", "-")
                     return msg, gr.update(choices=web_args.edit_style_choices(), value=new if new else edit)
+                q_ref_btn.click(copy_reel_style, [q_ref_file, q_ref_path, q_ref_name, q_style], [q_ref_msg, q_edit])
                 q_tpl_save.click(_save_template, [q_tpl_name, q_edit, q_style, q_clean, q_hook, q_emoji, q_broll, q_zoom, q_cold, q_stats, q_grade,
                                                   *q_look[:9]], [q_tpl_msg, q_edit])
                 q_run = q_btn.click(quick_clip, [q_url, q_upload, q_count, q_captions, q_style, q_brand_on, q_logo, q_handle, q_endcard, q_color, q_pos, q_mode, q_minutes, q_find, q_cut, q_spoken, q_caption_lang,

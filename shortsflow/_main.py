@@ -166,6 +166,8 @@ def parse_args():
     parser.add_argument("--show_banner", action="store_true", help="Overlay visual rounded header banner ('VIRAL MOMENT') on top of commentary intro clips.")
     
     # 🟢 Gap Closure Flags
+    parser.add_argument("--clone_style", metavar="REFERENCE", help="Copy the rhythm and look of a reference reel (a video file on this PC) into a saved template and stop: --clone_style ref.mp4 --save_as my-style. Measured: shot length, colour, loudness; the cutting, zooms and b-roll are inferred from the pace. Captions, graphics and music are not copied. Use the result with --auto_edit my-style.")
+    parser.add_argument("--save_as", metavar="NAME", help="With --clone_style: the name of the new template.")
     parser.add_argument("--join_reel", action="store_true", help="Also join the finished shorts of this run into one video (reel_<name>.mp4 in the session folder) with crossfades, or the look chosen with --transitions. The shorts themselves stay as they are.")
     parser.add_argument("--srt", action="store_true", help="Export SRT subtitle file alongside each video.")
     parser.add_argument("--use_chapters", action="store_true", help="Boost scores for segments overlapping YouTube chapters.")
@@ -220,6 +222,11 @@ def parse_args():
     parser.add_argument("--enhance_audio", action="store_true", help="Apply studio audio mastering (highpass, noise gate, compressor, EBU R128 loudnorm).")
 
     args = parser.parse_args()
+    if getattr(args, "clone_style", None):
+        from engine import style_clone
+        if not args.save_as:
+            parser.error("--clone_style needs --save_as NAME (the name of the new template).")
+        sys.exit(style_clone.main([args.clone_style, args.save_as, "--caption_style", args.caption_style or "HORMOZI"]))
     for problem in _auto_edit.TEMPLATE_PROBLEMS:
         print(f"[Warning] Template skipped: {problem}")
     # Older option names that the engine never read are now aliases of the features that do the same job
