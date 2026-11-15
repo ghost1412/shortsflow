@@ -776,8 +776,30 @@ def generate_mixed_facts(category="science", topic_tries=3):
     raise last_err
 
 
+def _recent_facts_line(count=40):
+    """Prompt line listing the hooks and facts of earlier videos so the new one does not repeat them (history lives in the user's cache folder)."""
+    try:
+        from engine import puzzle_variety as pv
+        seen = pv.recent("facts_seen", count)
+    except Exception:
+        return ""
+    return ("8. These were already used in earlier videos; do NOT repeat or rephrase any of them: " + " | ".join(seen) + "\n") if seen else ""
+
+
+def _remember_facts(data):
+    """Remember the hook and the facts of a finished script (see _recent_facts_line)."""
+    try:
+        from engine import puzzle_variety as pv
+        pv.record("facts_seen", str(data.get("hook", ""))[:120])
+        for f in data.get("facts", []):
+            pv.record("facts_seen", str(f.get("fact", ""))[:120])
+    except Exception:
+        pass
+
+
 def _mixed_facts_for(selected_sub):
     print(f"[Log] FACTS: Selected sub-topic: {selected_sub}")
+    avoid_line = _recent_facts_line()
 
     prompt = f"""Write a "spot the lie" YouTube Short about {selected_sub}: 2 true facts and 1 lie.
 
@@ -789,7 +811,7 @@ RULES:
 5. "lie_explanation" is one short sentence giving the real fact behind the lie (used in the video description).
 6. "loop_lead" is a short line that makes viewers rewatch, e.g. asking which number felt too real.
 7. "visual" for each fact is a 2-4 word stock-footage search term showing its subject (e.g. "roman soldiers marching"). Concrete, filmable nouns only.
-
+{avoid_line}
 Return JSON ONLY:
 {{
   "hook": "...",
@@ -817,6 +839,7 @@ Return JSON ONLY:
     data = with_best_of_n(llm_call, lambda d: validate_mixed_facts(d) and fact_check.facts_ok(d, ask), n=4)
     # LLMs almost always put the lie last; shuffle so the answer position is unpredictable.
     random.shuffle(data["facts"])
+    _remember_facts(data)
     return data
 
 def generate_story(category="general", hero=None, hero_name=None, companion=None, quest=None, setting=None):

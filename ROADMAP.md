@@ -70,8 +70,8 @@ Workstreams A–F touch mostly separate files and can run at the same time.
 ### A. Channel reliability & quality (owner of `daily_generate.yml`, FACTS path in `script_gen.py`)
 | | Task | Owner | Notes |
 |---|---|---|---|
-| [ ] | A1. Topic memory: keep `data/facts_history.json` (committed by the workflow or cached) and pass the last ~50 hooks/facts into the FACTS prompt to avoid repeats | | Reused-content risk on YouTube |
-| [ ] | A2. Second-pass fact check: ask a second model call to verify both `truth: true` facts; regenerate if either fails | | Credibility of a facts channel |
+| [x] | A1. Topic memory: the last 40 hooks/facts (`facts_seen` in `~/.cache/shortsflow/puzzle_history.json`, kept between daily runs by the workflow cache) go into the FACTS prompt as "do not repeat" | Claude | Reused-content risk on YouTube |
+| [x] | A2. Second-pass fact check (`engine/fact_check.py`): a second call judges every claim; a script it disputes is written again, a disputed sub-topic is dropped | Claude | Credibility of a facts channel |
 | [ ] | A3. Pin the answer as the first comment after upload (YouTube `commentThreads.insert`) instead of only in the description | | `engine/social_gen.py` uploader |
 | [ ] | A4. Analytics loop: pull views/retention per video weekly, weight categories/hook styles that perform | | `youtube_analytics.json` is stale (March) |
 | [ ] | A5. Use the thumbnail badge generator for FACTS uploads | | |

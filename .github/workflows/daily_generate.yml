@@ -97,6 +97,7 @@ jobs:
       with:
         path: |
           ~/.cache/pip
+          ~/.cache/shortsflow
           assets/
         key: ${{ runner.os }}-shorts-${{ hashFiles('**/requirements.txt') }}-${{ github.run_id }}
         restore-keys: |

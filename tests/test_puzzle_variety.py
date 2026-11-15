@@ -141,3 +141,13 @@ class ExplainerScene(Scene):
     assert got["code"].startswith("from manim import *") and "class ExplainerScene" in got["code"]
     old = parse_manim_answer('{"title": "T", "code": "from manim import *", "voiceover_text": "v"}')
     assert old["title"] == "T" and old["code"].startswith("from manim")
+
+
+def test_facts_prompt_lists_earlier_facts_and_remembers_new_ones(tmp_path, monkeypatch):
+    from engine import puzzle_variety as pv, script_gen
+    path = str(tmp_path / "h.json")
+    monkeypatch.setattr(pv, "_path", lambda: path)
+    assert script_gen._recent_facts_line() == ""
+    script_gen._remember_facts({"hook": "Which one is the lie?", "facts": [{"fact": "Octopuses have three hearts."}]})
+    line = script_gen._recent_facts_line()
+    assert "Octopuses have three hearts." in line and "Which one is the lie?" in line and "do NOT repeat" in line
