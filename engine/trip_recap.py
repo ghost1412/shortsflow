@@ -2152,7 +2152,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         if avoid and len(cands) < n_clips + 2:
             cands += reused[:n_clips + 2 - len(cands)]                       # not enough new moments: a repeat beats a missing shot
         cands.sort(key=lambda m: (infos_order(infos, m["file"]), m["start"]))
-        if extras.get("itinerary") and cands:          # an itinerary reel shows each day's most scenic shot, not an evenly spread one
+        if (extras.get("itinerary") or extras.get("held_title")) and cands:          # an itinerary or held-headline reel shows each day's most scenic shot, not an evenly spread one
             from engine.visual_context import grab_frames as _gf
             moments, spares = pick_scenic(cands, n_clips, grab or (lambda f, s_, e_: _gf(f, s_, e_, n=2, ffmpeg=ffmpeg)),
                                           rate=__import__("engine.visual_context", fromlist=["rate_scenery"]).rate_scenery if visual else None)
