@@ -140,8 +140,55 @@ SCENIC_PROMPT = ("These are {n} frames from different video clips of a trip, num
                  'Reply with JSON only: [{{"id": 1, "score": 7, "overlay": false}}, ...] with exactly {n} entries.')
 
 
+SCENERY_KEEP = 20000        # ratings kept; the oldest are dropped beyond this
+
+
+def _scenery_cache_path():
+    base = os.environ.get("SHORTSFLOW_CACHE_DIR") or os.path.join(os.path.expanduser("~"), ".shortsflow", "cache")
+    return os.path.join(base, "scenery_ratings.json")
+
+
+def _scenery_cache_on():
+    return (os.environ.get("SHORTSFLOW_TRANSCRIPT_CACHE", "on") or "on").strip().lower() not in ("off", "0", "no", "false")
+
+
 def rate_scenery(frames, key=None, timeout=120):
-    """[{score, overlay}] for each JPEG frame, rated by Gemini in ONE request, or None when it cannot be done (no key, bad reply)."""
+    """[{score, overlay}] for each JPEG frame, rated by Gemini, or None when it cannot be done (no key, bad reply).
+    Ratings are remembered by the picture itself (a hash of the frame, in ~/.shortsflow/cache), so the same footage is never rated twice,
+    whatever the session folder; only frames not seen before are sent."""
+    if not frames or not _scenery_cache_on():
+        return _rate_scenery_online(frames, key, timeout)
+    import hashlib
+    path = _scenery_cache_path()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cache = json.load(f)
+        if not isinstance(cache, dict):
+            cache = {}
+    except (OSError, ValueError):
+        cache = {}
+    keys = [hashlib.sha1(f).hexdigest() for f in frames]
+    missing = [i for i, k in enumerate(keys) if k not in cache]
+    if missing:
+        got = _rate_scenery_online([frames[i] for i in missing], key, timeout)
+        if got is None or len(got) != len(missing):
+            return None
+        for i, row in zip(missing, got):
+            cache[keys[i]] = row
+        try:
+            while len(cache) > SCENERY_KEEP:
+                cache.pop(next(iter(cache)))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(cache, f)
+            os.replace(tmp, path)
+        except OSError:
+            pass
+    return [dict(cache[k]) for k in keys]
+
+
+def _rate_scenery_online(frames, key=None, timeout=120):
     key = key or gemini_key()
     if not frames or not key or (os.getenv("SHORTSFLOW_VISION") or "").lower() == "ollama":
         return None

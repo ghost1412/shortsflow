@@ -1074,7 +1074,7 @@ def headline_layers(path_base, small, big, accent, accent_colour=(248, 254, 165)
 def parse_text_style(text):
     """{"color": (r, g, b) or None, "scale": float, "bold": bool, "glow": bool} from "color=#f5d547,size=1.3,bold,glow" (--recap_text_style).
     Anything it cannot read is ignored."""
-    out = {"color": None, "scale": 1.0, "bold": False, "glow": False}
+    out = {"color": None, "scale": 1.0, "bold": False, "glow": False, "subtitle": False}
     if isinstance(text, dict):
         return {**out, **text}
     for part in str(text or "").split(","):
@@ -1086,9 +1086,37 @@ def parse_text_style(text):
                 out["scale"] = max(0.6, min(2.0, float(part[5:])))
             except ValueError:
                 pass
-        elif part in ("bold", "glow"):
+        elif part in ("bold", "glow", "subtitle"):
             out[part] = True
     return out
+
+
+def subtitle_layers(path_base, title, ts, quick=False):
+    """A small line near the bottom, like a film subtitle (a reference whose text is small lines at the bottom): [(png, start second)]."""
+    from PIL import Image, ImageDraw, ImageFont
+    u = min(W, H) / 1080.0
+    ink = tuple(ts["color"]) + (255,) if ts["color"] else (245, 215, 80, 255)
+    name, factor = "NotoSansCyrillic.ttf", 1.0         # a plain sans face, like film subtitles (the label font is for titles)
+    size = max(24, int(64 * u * max(1.0, ts["scale"])))
+    try:
+        font = ImageFont.truetype(os.path.join(FONT_DIR, name), size)
+    except OSError:
+        font = ImageFont.load_default()
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    text = str(title)
+    while size > 18 and d.textlength(text, font=font) > W * 0.8:
+        size -= 2
+        try:
+            font = ImageFont.truetype(os.path.join(FONT_DIR, name), size)
+        except OSError:
+            break
+    x, y = W // 2, int(H * 0.9)
+    d.text((x + 2, y + 3), text, font=font, fill=(0, 0, 0, 170), anchor="mm", stroke_width=max(2, int(3 * u)), stroke_fill=(0, 0, 0, 200))
+    d.text((x, y), text, font=font, fill=ink, anchor="mm")
+    out = f"{path_base}_sub.png"
+    img.save(out)
+    return [(out, 0.05 if quick else 0.4)]
 
 
 def cinematic_layers(path_base, title, line="", small="", look=None, index=0, quick=False, safe=False, scrim=False, style=None):
@@ -1100,6 +1128,8 @@ def cinematic_layers(path_base, title, line="", small="", look=None, index=0, qu
     u = min(W, H) / 1080.0
     zone = "upper" if safe else look["zone"]        # safe: the stack sits in the upper-middle band, clear of the app's top bar and bottom buttons
     ts = parse_text_style(style)
+    if ts["subtitle"]:
+        return subtitle_layers(path_base, title, ts, quick)
     ink = (255, 255, 255, 255) if look["dark"] else (22, 18, 14, 255)
     shadow = (0, 0, 0, 90) if look["dark"] else (255, 255, 255, 70)
     accent = tuple(look["accent"]) + (255,)
@@ -1243,8 +1273,7 @@ def filter_orientation(all_infos, mode, minimum=3):
     if mode not in ("landscape", "portrait"):
         return all_infos, ""
     keep = (lambda w, h: w >= h) if mode == "landscape" else (lambda w, h: h > w)
-    kept = [[i for i in infos if keep(i[2], i[3])] for infos in all_infos]
-    kept = [k for k in kept if k]
+    kept = [[i for i in infos if keep(i[2], i[3])] or infos for infos in all_infos]       # a day with none of that shape keeps its own videos (never dropped)
     n = sum(len(k) for k in kept)
     if n < minimum:
         return all_infos, f"only {n} {mode} video(s), so all videos are used"
@@ -1802,7 +1831,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     hype = style != "plain"
     grade, fade_s = (CINEMATIC_GRADE, 0.5) if cine else ("", 0.2)
     dissolving = (transitions or "").strip().lower() == "dissolve"      # an explicit choice only; "auto" never dissolves
-    if dissolving or extras.get("itinerary"):
+    if dissolving or extras.get("itinerary") or str(extras.get("pace") or "").lower() == "fast":
         fade_s = 0.05                    # no dip to black on every shot: straight cuts (an itinerary reel) or shots that melt into each other
     fast = str(extras.get("pace") or "").lower() == "fast"       # --recap_pace fast: a shorter opening and ending, and shorter parts
     n_glimpses, glimpse_base, title_base, first_base, closing_s = (2, 1.6, 2.4, 3.2, 2.4) if fast else (GLIMPSES, GLIMPSE_SECONDS, 3.4, 3.2, 3.2)
@@ -2103,7 +2132,9 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         if result_opening:
             pass                                         # no title shot: the recipe starts right after the result
         elif cine:
-            m0 = title_m or days[0]["moments"][0]
+            first_day = days[0]["moments"][0]
+            other = next((g for g in (glimpses or []) if (g["file"], g["start"]) != (first_day["file"], first_day["start"])), None)
+            m0 = title_m or ((other if other and not extras.get("itinerary") else None) or first_day)       # never the shot Day 1 starts with, when another is at hand
             out = os.path.join(parts_dir, "trip_title.mp4")
             itin = bool(extras.get("itinerary")) and len(days) > 1
             if itin:
@@ -2282,7 +2313,7 @@ def infos_order(infos, f):
 def _explicit_filter(args):
     """The colour filter only when it was typed on the command line (--video_filter has a default of 'none' that must not switch off the
     automatic look); an Auto-edit style may have filled it in, and that look is applied by the style itself."""
-    given = any(a == "--video_filter" or a.startswith("--video_filter=") for a in sys.argv[1:])
+    given = any(a == "--video_filter" or a.startswith("--video_filter=") for a in sys.argv[1:]) or "video_filter" in (getattr(args, "recipe_set", None) or ())
     return (getattr(args, "video_filter", "default") or "default") if given else "default"
 
 

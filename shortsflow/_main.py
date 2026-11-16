@@ -237,6 +237,7 @@ def parse_args():
         except ValueError as e:
             parser.error(str(e))
         done = style_clone.apply_recipe(args, recipe, sys.argv[1:])
+        args.recipe_set = list(done)
         print("[Log] Recap like the reference:")
         for line in why:
             print(f"[Log]   - {line}")

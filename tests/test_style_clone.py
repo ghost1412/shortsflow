@@ -131,9 +131,29 @@ def test_recipe_for_an_itinerary_reel():
     recipe, lines = sc.to_recap_recipe(_m(shot=2.1), sc.summarise_structure(ENTRIES), days=5)
     assert recipe["recap_style"] == "cinematic" and recipe["recap_itinerary"] and recipe["recap_safe_text"]
     assert recipe["recap_font"] == "handwritten" and recipe["recap_end"] == "result" and recipe["recap_pace"] == "fast"
-    assert recipe["recap_aspect"] == "9:16" and recipe["video_filter"] == "none"
+    assert recipe["recap_aspect"] == "9:16" and recipe.get("video_filter") in (None, "cinematic_warm")
     assert recipe["recap_length"] == round(2.8 * 7)                   # one readable shot per day plus opening and ending
     assert any("not copied" in line for line in lines)
+
+
+def test_recipe_copies_a_clear_colour_look_and_the_widescreen_shape():
+    warm = {"p1": 0.0, "p50": 0.41, "p99": 0.9, "r": 0.46, "g": 0.38, "b": 0.30, "sat": 0.42, "noise": 0.004}
+    recipe, lines = sc.to_recap_recipe(_m(shot=1.5, colour=warm, width=1920, height=816), None, days=5)
+    assert recipe["recap_aspect"] == "2.35:1" and recipe["video_filter"] == "cinematic_warm" and recipe["recap_orientation"] == "landscape"
+    assert any(line.startswith("Colour:") for line in lines)
+    flat = {"p1": 0.05, "p50": 0.5, "p99": 0.9, "r": 0.5, "g": 0.5, "b": 0.5, "sat": 0.2, "noise": 0.004}
+    recipe, _ = sc.to_recap_recipe(_m(shot=1.5, colour=flat, width=1920, height=1080), None, days=5)
+    assert recipe["recap_aspect"] == "16:9" and "video_filter" not in recipe
+
+
+def test_small_bottom_text_becomes_subtitle_lines(tmp_path):
+    entries = [{"id": i, "text": ["land of timeless beauty"], "position": "bottom", "role": "label", "font": "sans", "fills_frame": True,
+                "color": "#e8d44a", "size": "small", "weight": "regular", "glow": False} for i in range(4)]
+    recipe, _ = sc.to_recap_recipe(_m(shot=1.5), sc.summarise_structure(entries), days=5)
+    assert "subtitle" in recipe["recap_text_style"] and "recap_itinerary" not in recipe
+    from engine import trip_recap as tr
+    layers = tr.cinematic_layers(str(tmp_path / "t"), "Charyn Canyon", style=recipe["recap_text_style"])
+    assert len(layers) == 1 and os.path.isfile(layers[0][0])
 
 
 def test_recipe_length_never_passes_the_limit_and_works_without_a_reader():
@@ -215,7 +235,7 @@ def test_text_look_reaches_the_recipe():
     assert recipe["recap_end"] == "result"
     from engine import trip_recap as tr
     ts = tr.parse_text_style(recipe["recap_text_style"])
-    assert ts == {"color": (248, 240, 164), "scale": 1.4, "bold": True, "glow": True}
+    assert ts == {"color": (248, 240, 164), "scale": 1.4, "bold": True, "glow": True, "subtitle": False}
     assert tr.parse_text_style("nonsense,size=x")["scale"] == 1.0
 
 

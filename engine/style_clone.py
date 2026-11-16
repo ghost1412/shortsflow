@@ -324,11 +324,14 @@ def to_recap_recipe(m, structure, days=5, max_seconds=60):
     """(recipe, lines): the recap options that make a recap like the reference. recipe maps option names (without --) to values.
     Without a read structure only the pace, shape and length are set. The reference's colour look is not forced on other footage."""
     shot = m["shot_seconds"]
-    recipe = {"recap_pace": "fast" if shot < 3.0 else "normal", "video_filter": "none"}
+    recipe = {"recap_pace": "fast" if shot < 3.0 else "normal"}
     lines = [f"Pace: {pace_label(shot)}, about {shot:.1f} s per shot."]
     if m.get("width") and m.get("height"):
-        recipe["recap_aspect"] = "9:16" if m["height"] > m["width"] else "16:9"
-        lines.append("Shape: " + ("vertical 9:16" if m["height"] > m["width"] else "wide 16:9") + ".")
+        ratio = m["width"] / max(1, m["height"])
+        recipe["recap_aspect"] = "9:16" if ratio < 1 else "2.35:1" if ratio > 2.0 else "16:9"
+        if recipe["recap_aspect"] != "9:16":
+            recipe["recap_orientation"] = "landscape"        # a wide recap uses the wide clips (a vertical clip would sit in blurred bars)
+        lines.append("Shape: " + {"9:16": "vertical 9:16", "2.35:1": "widescreen 2.35:1", "16:9": "wide 16:9"}[recipe["recap_aspect"]] + ".")
     days = max(1, int(days))
     seconds = round(max(shot, 2.8) * (days + 2))   # one shot for each day, plus the opening and the ending (a label needs about 2.8 s to be read)
     recipe["recap_length"] = int(max(15, min(max_seconds, seconds)))
@@ -357,6 +360,10 @@ def to_recap_recipe(m, structure, days=5, max_seconds=60):
         if scale and scale != 1.0:
             look.append(f"size={scale}")
         look += [w for w, on in (("bold", structure.get("text_bold")), ("glow", structure.get("text_glow"))) if on]
+        if structure.get("label_position") in ("bottom", "lower") and structure.get("text_size") in ("small", None):
+            look.append("subtitle")          # small lines at the bottom of the picture, like film subtitles
+            if not structure.get("day_labels"):
+                recipe.pop("recap_itinerary", None)
         if look:
             recipe["recap_text_style"] = ",".join(look)
             lines.append("Text look: " + ", ".join(look) + " (the exact font cannot be copied; the closest bundled one is used).")
@@ -373,7 +380,13 @@ def to_recap_recipe(m, structure, days=5, max_seconds=60):
         lines.append("Text: no text over the shots was found, so the normal recap look is kept.")
     else:
         lines.append("Text: not read (no picture reader is available: set GEMINI_API_KEY, or run Ollama with a vision model), so only pace, shape and length are copied.")
-    lines.append("Your footage's own colours are kept, and the reference's music and graphics are not copied.")
+    look, why = grade_for(m.get("colour"))
+    if look:
+        recipe["video_filter"] = look
+        lines.append(f"Colour: the {look.replace('_', ' ')} look ({why}), applied to your footage.")
+    else:
+        lines.append("Colour: " + why + "; your footage's own colours are kept.")
+    lines.append("The reference's music and graphics are not copied.")
     return recipe, lines
 
 
@@ -384,7 +397,7 @@ def recipe_for(reference, days=5, max_seconds=60, ffmpeg=None, run=subprocess.ru
         video = fetch_reference(video)
     if not video or not os.path.isfile(video):
         raise ValueError("The reference video was not found. Give a link or the path of a video file on this PC.")
-    m = analyse(video, ffmpeg, run, frames=[])
+    m = analyse(video, ffmpeg, run)
     if not m["duration"]:
         raise ValueError("The reference video could not be read.")
     pics = []

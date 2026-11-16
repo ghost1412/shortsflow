@@ -130,6 +130,23 @@ def test_rate_scenery_parses_one_request(monkeypatch):
     assert vc.rate_scenery([b"a"]) is None                     # no key: callers keep the colour score
 
 
+def test_scenery_ratings_are_remembered_by_the_picture(monkeypatch):
+    asked = []
+
+    def online(frames, key=None, timeout=120):
+        asked.append(list(frames))
+        return [{"score": float(len(f)), "overlay": False} for f in frames]
+    monkeypatch.setattr(vc, "_rate_scenery_online", online)
+    first = vc.rate_scenery([b"a" * 3, b"b" * 5])
+    assert first == [{"score": 3.0, "overlay": False}, {"score": 5.0, "overlay": False}]
+    again = vc.rate_scenery([b"b" * 5, b"c" * 7, b"a" * 3])          # only the new picture is sent, in any order and from any session
+    assert [r["score"] for r in again] == [5.0, 7.0, 3.0] and asked[1] == [b"c" * 7]
+    assert vc.rate_scenery([b"a" * 3, b"b" * 5]) == first and len(asked) == 2
+    monkeypatch.setenv("SHORTSFLOW_TRANSCRIPT_CACHE", "off")
+    vc.rate_scenery([b"a" * 3])
+    assert len(asked) == 3                                            # the cache switch turns it off
+
+
 def test_two_videos_with_the_same_window_do_not_share_a_cached_description(tmp_path):
     cache = tmp_path / "vc.json"
     ask = lambda frames, model, about: f"described {frames[0].decode()}"  # noqa: E731
