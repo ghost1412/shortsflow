@@ -310,6 +310,20 @@ def _text_look(entries):
             "text_glow": sum(1 for e in entries if e.get("glow") is True) > len(entries) / 2 if entries else False}
 
 
+def _held_headline(entries):
+    """True when the same headline text sits on most of the frames (one title held over the whole reel)."""
+    texts = []
+    for e in entries:
+        t = e.get("text") or []
+        t = [str(x).strip().lower() for x in (t if isinstance(t, list) else [t]) if str(x).strip()]
+        if t and str(e.get("role", "")).lower() in ("headline", "label"):
+            texts.append(" ".join(t))
+    if len(entries) < 3 or not texts:
+        return False
+    top = max(set(texts), key=texts.count)
+    return texts.count(top) >= max(3, 0.6 * len(entries))
+
+
 def summarise_structure(entries):
     """The layout facts in the entries: {"labels_over_footage", "day_labels", "label_position", "font", "headline", "closing_cta"}."""
     def lines(e):
@@ -328,6 +342,7 @@ def summarise_structure(entries):
             "headline": bool(lines(first)) and str(first.get("role", "")).lower() in ("headline", "label"),
             "closing_cta": bool(lines(last)) and str(last.get("role", "")).lower() == "cta",
             "full_bleed": sum(1 for e in entries if e.get("fills_frame") is True) > len(entries) / 2,
+            "held_headline": _held_headline(entries),
             **_text_look(labels or texted)}
 
 
@@ -350,9 +365,14 @@ def to_recap_recipe(m, structure, days=5, max_seconds=60):
         recipe["recap_shot_seconds"] = round(max(1.0, shot), 1)       # ... and cut as fast as the reference, so the shots are many (and cover more places)
     recipe["recap_length"] = int(max(15, min(max_seconds, seconds)))
     lines.append(f"Length: about {recipe['recap_length']} s, from the reference's rhythm and length (never more than {max_seconds} s).")
-    if structure and structure.get("labels_over_footage"):
+    held = bool(structure and structure.get("held_headline"))
+    if held:
+        recipe["recap_held_title"] = True
+        lines.append("Text: one headline stays over the whole video, so the trip name is held on screen (no label on each shot).")
+    if structure and (structure.get("labels_over_footage") or held):
         recipe["recap_style"] = "cinematic"
-        lines.append("Text: labels sit over the shots (not on separate cards), so the recap uses text over the footage.")
+        if not held:
+            lines.append("Text: labels sit over the shots (not on separate cards), so the recap uses text over the footage.")
         if structure.get("day_labels"):
             recipe["recap_itinerary"] = True
             lines.append("Labels: a small \"DAY N\" above the place name on each day's first shot.")
@@ -388,7 +408,7 @@ def to_recap_recipe(m, structure, days=5, max_seconds=60):
     if structure and structure.get("full_bleed") and recipe.get("recap_aspect") == "9:16":
         recipe["layout"] = "crop"
         lines.append("Picture: fills the whole frame (no blurred bars); landscape clips are cropped to fill it.")
-    if structure and structure.get("labels_over_footage"):
+    if structure and (structure.get("labels_over_footage") or held):
         pass
     elif structure is not None:
         lines.append("Text: no text over the shots was found, so the normal recap look is kept.")

@@ -247,6 +247,32 @@ def test_longer_beat_snapped_shots_mean_fewer_shots():
     assert tr.shrink_counts([1, 1], 1.0, 3.0) == [1, 1]                # every day keeps a shot
 
 
+def test_one_headline_held_over_every_shot(tmp_path):
+    entries = [{"id": i, "text": ["Romanticising", "Delhi."], "position": "middle", "role": "headline", "font": "serif", "fills_frame": True,
+                "color": "#fbc52c", "size": "large", "weight": "bold", "glow": False} for i in range(8)]
+    s = sc.summarise_structure(entries)
+    assert s["held_headline"] and not s["day_labels"]
+    recipe, lines = sc.to_recap_recipe(_m(shot=0.4, duration=6.3), s, days=5, max_seconds=60)
+    assert recipe["recap_held_title"] and recipe["recap_style"] == "cinematic" and recipe["recap_font"] == "display"
+    assert any("held on screen" in line for line in lines)
+    changing = [dict(e, text=[f"Place {i}"], role="label") for i, e in enumerate(entries)]
+    assert not sc.summarise_structure(changing)["held_headline"]           # different words on every shot are labels
+    import subprocess
+    import imageio_ffmpeg
+    from engine import trip_recap as tr
+    from PIL import Image
+    ff = imageio_ffmpeg.get_ffmpeg_exe()
+    src = str(tmp_path / "v.mp4")
+    subprocess.run([ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=blue:s=320x180:d=2:r=10", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+                    "-t", "2", "-shortest", "-pix_fmt", "yuv420p", src], check=True)
+    png = str(tmp_path / "h.png")
+    Image.new("RGBA", (320, 180), (255, 0, 0, 255)).save(png)
+    assert tr.hold_overlay(ff, src, png, 1.0, str(tmp_path / "t.mp4")) and os.path.isfile(src)
+    big = tr.held_headline_png(str(tmp_path / "hh.png"), "5-Day", "Kazakhstan", "color=#facc15,size=1.4,bold")
+    im = Image.open(big)
+    assert im.size == (tr.W, tr.H) and im.getchannel("A").getbbox() is not None
+
+
 def test_recipe_length_never_passes_the_limit_and_works_without_a_reader():
     recipe, lines = sc.to_recap_recipe(_m(shot=9.0), None, days=12, max_seconds=60)
     assert recipe["recap_length"] == 60 and "recap_style" not in recipe

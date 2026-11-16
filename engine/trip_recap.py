@@ -1633,7 +1633,50 @@ def dissolve_graph(durations, d=DISSOLVE_SECONDS, fade_in=0.5, fade_out=1.0):
     return ";".join(parts), "[vout]", "[aout]"
 
 
-def concat(ffmpeg, parts, out, session_dir, music=None, music_gain=0.25, music_start=0.0, music_only=False, dissolve=0.0):
+def held_headline_png(path, small, big, style=None):
+    """The headline that stays over the whole recap: a small line above the name, both in the chosen text look (font, colour, size from
+    --recap_font / --recap_text_style), left-aligned in the middle of the frame. One transparent full-frame picture."""
+    from PIL import Image, ImageDraw, ImageFont
+    u = min(W, H) / 1080.0
+    ts = parse_text_style(style)
+    ink = tuple(ts["color"]) + (255,) if ts["color"] else (255, 255, 255, 255)
+    name, factor = _text_font_file(str(big))
+    left = int(W * 0.08)
+    max_w = W - left - int(W * 0.08)
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+
+    def font(size):
+        try:
+            return ImageFont.truetype(os.path.join(FONT_DIR, name), max(14, int(size)))
+        except OSError:
+            return ImageFont.load_default()
+    size = 190 * u * factor * max(0.7, ts["scale"])
+    while size > 36 and d.textlength(str(big), font=font(size)) > max_w:
+        size -= 6
+    f_big, f_small = font(size), font(max(30 * u, size * 0.3))
+    y = int(H * 0.5)
+    for dx, dy, fill in ((3, 4, (0, 0, 0, 120)), (0, 0, ink)):
+        d.text((left + dx, y + dy), str(big), font=f_big, fill=fill, anchor="ls")
+        if small:
+            d.text((left + dx, y - int(size * 0.95) + dy), str(small), font=f_small, fill=fill, anchor="ls")
+    img.save(path)
+    return path
+
+
+def hold_overlay(ffmpeg, video, png, until, tmp):
+    """The transparent `png` over the video until second `until` (a headline held on screen); the video is replaced. Returns True when done."""
+    r = _proc.run([ffmpeg, "-y", "-loglevel", "error", "-i", video, "-i", png, "-filter_complex",
+                   f"[0:v][1:v]overlay=0:0:enable='lt(t,{until:.2f})'[v]", "-map", "[v]", "-map", "0:a?", *_enc(), "-c:a", "copy", tmp],
+                  capture_output=True, text=True)
+    if r.returncode != 0 or not os.path.isfile(tmp):
+        print("[Warning] The held headline could not be added: " + (r.stderr or "")[-160:])
+        return False
+    os.replace(tmp, video)
+    return True
+
+
+def concat(ffmpeg, parts, out, session_dir, music=None, music_gain=0.25, music_start=0.0, music_only=False, dissolve=0.0, held=None):
     lst = os.path.join(session_dir, "recap_parts.txt")
     with open(lst, "w", encoding="utf-8") as f:
         for p in parts:
@@ -1650,6 +1693,8 @@ def concat(ffmpeg, parts, out, session_dir, music=None, music_gain=0.25, music_s
                            capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError("Could not join the recap: " + (r.stderr or "")[-300:])
+    if held:                       # (png, seconds it stays): the held headline goes on before the music is added
+        hold_overlay(ffmpeg, joined, held[0], max(0.5, (video_info(joined)[0] or 0.0) - (held[1] or 0.0)), joined + ".held.mp4")      # held[1]: seconds at the end left clear (the end title)
     if music:
         total = video_info(joined)[0] or 0.0
         fades = f"afade=t=in:st=0:d=0.6,afade=t=out:st={max(0.0, total - 2.5):.2f}:d=2.5"
@@ -1922,7 +1967,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     result_opening = str(extras.get("opening") or "").lower() == "result"        # --recap_opening result: only the finished dish, then straight into the steps
     if result_opening:
         n_glimpses, glimpse_base, open_with_result = 1, 3.0, True
-    if extras.get("itinerary"):
+    if extras.get("itinerary") or extras.get("held_title"):
         n_glimpses = 0                  # an itinerary reel opens on its headline over the first shot: no hook line, no glimpses before it
     opening = ((n_glimpses * glimpse_base + (0.0 if result_opening else CARD_SECONDS)) if hype else 0.0) + closing_s      # glimpses + the trip title card + the closing card
     all_infos = []
@@ -2045,8 +2090,10 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     avoid = load_avoid(avoid) if isinstance(avoid, str) else set(avoid or ())
     if avoid:
         print(f"[Log] Picking new moments: {len(avoid)} moment(s) from earlier recaps are avoided.")
-    counts, clip_len = plan_days([len(i) for i in all_infos], max(float(total_seconds) - opening, len(all_infos) * (3.2 if fast else 6.0)),
-                                 card=0.0 if cine else CARD_SECONDS, clip=max(0.8, float(extras.get("shot_seconds") or CLIP_SECONDS)))          # the cinematic look puts the titles over the footage: no card time to reserve
+    shot_plan = max(0.8, float(extras.get("shot_seconds") or CLIP_SECONDS))
+    first_extra = len(all_infos) * max(0.0, first_base - shot_plan) if cine else 0.0      # each day's first shot stays on screen long enough to read its title
+    counts, clip_len = plan_days([len(i) for i in all_infos], max(float(total_seconds) - opening - first_extra, len(all_infos) * (3.2 if fast else 6.0)),
+                                 card=0.0 if cine else CARD_SECONDS, clip=shot_plan)          # the cinematic look puts the titles over the footage: no card time to reserve
     glimpse_s, title_s, first_min, music_start = glimpse_base, title_base, first_base, 0.0
     mute_orig = bool(cine and music and not keep_sound)      # the song carries the edit: the clips' own sound would break it at every cut
     if cine and music:
@@ -2229,8 +2276,8 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
                 note_shot(out, g["size"], [shown] if shown else [])
                 parts.append(out)
             print(f"[Log] Opening: hook \"{it['hook']}\" over {len(glimpses)} glimpse(s).")
-        if result_opening:
-            pass                                         # no title shot: the recipe starts right after the result
+        if result_opening or extras.get("held_title"):
+            pass                                         # no title shot: the recipe starts right after the result (a held headline is laid over the whole video later)
         elif cine:
             first_day = days[0]["moments"][0]
             other = next((g for g in (glimpses or []) if (g["file"], g["start"]) != (first_day["file"], first_day["start"])), None)
@@ -2288,10 +2335,10 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         for mi, (m, cap) in enumerate(zip(d["moments"], row["captions"]), 1):
             own = step_lines[di - 1] if di - 1 < len(step_lines) else ""            # --recap_lines: the part's own line
             label = (own if (own and not (cine and mi == 1)) else labels[di - 1][mi - 1] or ("" if cine else cap))   # cinematic: the place name only; no vague picture captions
-            cap_png = caption_png(os.path.join(parts_dir, f"cap_{di}_{mi}.png"), label, y_frac=(0.6 if extras.get("safe") else 0.74), lower=cine, subtitle=(extras.get("text_style") if film_text else None)) if label and not (cine and mi == 1) else None
+            cap_png = caption_png(os.path.join(parts_dir, f"cap_{di}_{mi}.png"), label, y_frac=(0.6 if extras.get("safe") else 0.74), lower=cine, subtitle=(extras.get("text_style") if film_text else None)) if label and not (cine and mi == 1) and not extras.get("held_title") else None
             out = os.path.join(parts_dir, f"clip_{di}_{mi}.mp4")
             lay, secs = None, m["end"] - m["start"]
-            if cine and mi == 1:
+            if cine and mi == 1 and not extras.get("held_title"):
                 itinerary = bool(extras.get("itinerary")) and len(days) > 1      # --recap_itinerary: "DAY 2" above the place name, nothing repeated below
                 lay = cinematic_layers(os.path.join(parts_dir, f"title_{di}"), itinerary_title(row["title"], di, trip_name) if (itinerary or film_text) else row["title"], own or ("" if itinerary else (f"{unit} {di}" if len(days) > 1 else "")),
                                        small=(f"{unit.upper()} {di}" if itinerary else f"{unit.upper()} {di} / {len(days)}" if extras.get("counter") and len(days) > 1 else ""),
@@ -2347,7 +2394,13 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
             except Exception as e:
                 print(f"[Warning] Subject cut-out skipped ({e}); plain cuts are used.")
     video = os.path.join(session_dir, "recap.mp4")
-    concat(ffmpeg, parts, video, session_dir, music=music, music_gain=0.9 if mute_orig else 0.25, music_start=music_start, music_only=mute_orig,
+    held_arg = None
+    if extras.get("held_title"):
+        from PIL import Image
+        base = os.path.join(parts_dir, "held")
+        held_headline_png(base + ".png", f"{len(days)}-{unit}" if len(days) > 1 else "", it["title"], extras.get("text_style"))
+        held_arg = (base + ".png", 0.0 if end_mode == "none" else closing_s)
+    concat(ffmpeg, parts, video, session_dir, held=held_arg, music=music, music_gain=0.9 if mute_orig else 0.25, music_start=music_start, music_only=mute_orig,
            dissolve=DISSOLVE_SECONDS if trans_name == "dissolve" else 0.0)
     edit_log = {}
     cut_kind = ((director or {}).get("sfx") or {}).get("cut") or ((director or {}).get("sfx") or {}).get("broll")
@@ -2480,7 +2533,7 @@ def run(args, target_bitrate=None, target_preset=None):
                       total_seconds=getattr(args, "recap_length", 60) or 60, music=getattr(args, "music", None),
                       visual=bool(getattr(args, "visual_context", False)), hook=getattr(args, "recap_hook", "") or "",
                       stops=getattr(args, "trip_stops", None), lines=getattr(args, "recap_lines", "") or "", open_with_result=bool(getattr(args, "recap_open_result", False)),
-                      extras={"speed": float(getattr(args, "recap_speed", 1.0) or 1.0), "end": getattr(args, "recap_end", "card") or "card", "end_text": getattr(args, "recap_end_text", "") or "", "counter": bool(getattr(args, "recap_counter", False)), "itinerary": bool(getattr(args, "recap_itinerary", False)), "plan_only": bool(getattr(args, "recap_plan_only", False)), "moments_file": getattr(args, "recap_moments", "") or "", "text_style": getattr(args, "recap_text_style", "") or "", "shot_seconds": float(getattr(args, "recap_shot_seconds", 0) or 0), "pace": getattr(args, "recap_pace", "normal") or "normal", "opening": getattr(args, "recap_opening", "normal") or "normal", "ingredients_title": getattr(args, "recap_ingredients_title", "") or "", "safe": bool(getattr(args, "recap_safe_text", False)), "ingredients": getattr(args, "recap_ingredients", "") or "", "ingredients_at": getattr(args, "recap_ingredients_at", "end") or "end"}, geocode=not getattr(args, "recap_no_geocode", False), enhance=getattr(args, "enhance", "off") or "off",
+                      extras={"speed": float(getattr(args, "recap_speed", 1.0) or 1.0), "end": getattr(args, "recap_end", "card") or "card", "end_text": getattr(args, "recap_end_text", "") or "", "counter": bool(getattr(args, "recap_counter", False)), "itinerary": bool(getattr(args, "recap_itinerary", False)), "plan_only": bool(getattr(args, "recap_plan_only", False)), "moments_file": getattr(args, "recap_moments", "") or "", "text_style": getattr(args, "recap_text_style", "") or "", "shot_seconds": float(getattr(args, "recap_shot_seconds", 0) or 0), "held_title": bool(getattr(args, "recap_held_title", False)), "pace": getattr(args, "recap_pace", "normal") or "normal", "opening": getattr(args, "recap_opening", "normal") or "normal", "ingredients_title": getattr(args, "recap_ingredients_title", "") or "", "safe": bool(getattr(args, "recap_safe_text", False)), "ingredients": getattr(args, "recap_ingredients", "") or "", "ingredients_at": getattr(args, "recap_ingredients_at", "end") or "end"}, geocode=not getattr(args, "recap_no_geocode", False), enhance=getattr(args, "enhance", "off") or "off",
                       enhance_strength=getattr(args, "enhance_strength", "medium") or "medium",
                       manual_rotate=getattr(args, "recap_rotate", "") or "", place_names=getattr(args, "place_names", "") or "", avoid=getattr(args, "recap_avoid", "") or "", kind=getattr(args, "recap_kind", "trip") or "trip", keep_sound=bool(getattr(args, "recap_keep_sound", False)),
                       grade_name=_explicit_filter(args), edit=getattr(args, "auto_edit", "") if getattr(args, "auto_edit", "none") != "none" else "",
