@@ -504,3 +504,22 @@ def test_itinerary_label_drops_the_day_prefix_and_administrative_areas():
     assert tr.itinerary_title("Day 3 - Charyn Canyon", 3, "Almaty") == "Charyn Canyon"
     assert tr.itinerary_title("Kaindy Lake", 2) == "Kaindy Lake"
     assert tr.itinerary_title("", 4) == "Day 4" and tr.itinerary_title("Day 2: Medeu District", 2) == "Day 2"
+
+
+def _jpg(colour, patch=0):
+    import io
+    from PIL import Image
+    img = Image.new("RGB", (64, 64), colour)
+    if patch:
+        img.paste((255, 255, 255), (0, 0, patch, patch))
+    b = io.BytesIO()
+    img.save(b, "JPEG")
+    return b.getvalue()
+
+
+def test_glare_and_a_turning_camera_rank_lower():
+    from engine import trip_recap as tr
+    assert tr.scenic_score(_jpg((60, 140, 200), patch=32)) < tr.scenic_score(_jpg((60, 140, 200)))
+    assert tr.shakiness([_jpg((10, 10, 10)), _jpg((240, 240, 240))]) > 0.9
+    assert tr.shakiness([_jpg((60, 140, 200)), _jpg((60, 140, 200))]) == 0.0
+    assert tr.shakiness([_jpg((60, 140, 200))]) == 0.0

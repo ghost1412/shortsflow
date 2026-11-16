@@ -1725,7 +1725,22 @@ def scenic_score(jpeg):
     contrast = min(1.0, st.stddev[0] / 70.0)
     bright = st.mean[0] / 255.0
     exposure = 1.0 - min(1.0, abs(bright - 0.5) * 2.0)           # very dark or blown-out frames are not scenic
-    return round(0.5 * sat + 0.3 * contrast + 0.2 * exposure, 4)
+    hist = lum.histogram()
+    glare = sum(hist[246:]) / float(64 * 64)                      # lens flare / sun in the lens: a patch of blown-out white
+    return round(max(0.0, 0.5 * sat + 0.3 * contrast + 0.2 * exposure - min(0.4, max(0.0, glare - 0.04) * 2.0)), 4)
+
+
+def shakiness(frames):
+    """0 (steady) .. 1 (the camera is turning or shaking) from how much two frames of one window differ; 0 when there are fewer than two."""
+    import io
+    from PIL import Image, ImageChops, ImageStat
+    if len(frames) < 2:
+        return 0.0
+    try:
+        a, b = (Image.open(io.BytesIO(f)).convert("L").resize((32, 32)) for f in frames[:2])
+    except Exception:
+        return 0.0
+    return min(1.0, ImageStat.Stat(ImageChops.difference(a, b)).mean[0] / 255.0 / 0.3)
 
 
 RECAP_PLAN_FILE = "recap_plan.json"
@@ -1802,7 +1817,7 @@ def pick_scenic(cands, n, grab, rate=None, score=scenic_score, shortlist=14):
         except Exception:
             frames = None
         if frames:
-            scored.append((score(frames[0]), c, frames[0]))
+            scored.append((score(frames[0]) * (1.0 - 0.5 * shakiness(frames)), c, frames[0]))      # a moving camera ranks lower
     if not scored:
         return list(cands[:n]), list(cands[n:])
     scored.sort(key=lambda t: t[0], reverse=True)
@@ -2139,7 +2154,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         cands.sort(key=lambda m: (infos_order(infos, m["file"]), m["start"]))
         if extras.get("itinerary") and cands:          # an itinerary reel shows each day's most scenic shot, not an evenly spread one
             from engine.visual_context import grab_frames as _gf
-            moments, spares = pick_scenic(cands, n_clips, grab or (lambda f, s_, e_: _gf(f, s_, e_, n=1, ffmpeg=ffmpeg)),
+            moments, spares = pick_scenic(cands, n_clips, grab or (lambda f, s_, e_: _gf(f, s_, e_, n=2, ffmpeg=ffmpeg)),
                                           rate=__import__("engine.visual_context", fromlist=["rate_scenery"]).rate_scenery if visual else None)
             print(f"[Log] Day {di}: the most scenic of {len(cands)} candidate shot(s){' (judged by the vision model)' if visual else ' (by colour and contrast)'}.")
         else:
