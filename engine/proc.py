@@ -15,6 +15,35 @@ def _flags(kwargs):
     return kwargs
 
 
+_DETACHED, _NEW_CONSOLE = 0x00000008, 0x00000010
+
+
+def with_no_window(kwargs):
+    """kwargs with CREATE_NO_WINDOW added (Windows only), unless the caller asked for a detached process or its own console."""
+    if NO_WINDOW:
+        flags = kwargs.get("creationflags", 0) or 0
+        if not flags & (_DETACHED | _NEW_CONSOLE):
+            kwargs["creationflags"] = flags | NO_WINDOW
+    return kwargs
+
+
+_installed = False
+
+
+def install():
+    """Make every program started through `subprocess` in this process (FFmpeg, Node, yt-dlp, Whisper helpers, ... also inside other
+    libraries) start without a console window on Windows. Safe to call more than once; does nothing on other systems."""
+    global _installed
+    if _installed or not NO_WINDOW:
+        return
+    original = subprocess.Popen.__init__
+
+    def init(self, *args, **kwargs):
+        original(self, *args, **with_no_window(kwargs))
+    subprocess.Popen.__init__ = init
+    _installed = True
+
+
 def run(*args, **kwargs):
     return subprocess.run(*args, **_flags(kwargs))
 

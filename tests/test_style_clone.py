@@ -153,7 +153,98 @@ def test_small_bottom_text_becomes_subtitle_lines(tmp_path):
     assert "subtitle" in recipe["recap_text_style"] and "recap_itinerary" not in recipe
     from engine import trip_recap as tr
     layers = tr.cinematic_layers(str(tmp_path / "t"), "Charyn Canyon", style=recipe["recap_text_style"])
-    assert len(layers) == 1 and os.path.isfile(layers[0][0])
+    assert len(layers) == 2 and all(os.path.isfile(p) for p, _t in layers)       # a soft band, then the line
+
+
+def test_film_reference_sets_its_own_length_not_one_shot_per_day(tmp_path):
+    entries = [{"id": i, "text": ["a line"], "position": "bottom", "role": "label", "font": "sans", "fills_frame": True,
+                "color": "#e8d44a", "size": "small", "weight": "regular", "glow": False} for i in range(4)]
+    recipe, _ = sc.to_recap_recipe(_m(shot=1.5, duration=92.0), sc.summarise_structure(entries), days=5, max_seconds=60)
+    assert recipe["recap_length"] == 60                       # as long as the reference, up to the limit
+    assert recipe["recap_shot_seconds"] == 1.5                # cut as fast as the reference
+    recipe, _ = sc.to_recap_recipe(_m(shot=1.5, duration=40.0), sc.summarise_structure(entries), days=5, max_seconds=60)
+    assert recipe["recap_length"] == 40
+    from engine import trip_recap as tr
+    from PIL import Image
+    tr.film_title_png(str(tmp_path / "e.png"), "Almaty")
+    assert Image.open(tmp_path / "e.png").size == (tr.W, tr.H)
+    tr.caption_png(str(tmp_path / "h.png"), "You have to see this place", y_frac=0.5, size=84, scrim=True)
+    assert os.path.isfile(tmp_path / "h.png")
+
+
+def test_every_place_gets_a_shot_when_a_spare_exists(tmp_path):
+    from engine import trip_recap as tr
+    place = {"a1": "Lake", "a2": "Lake", "a3": "Lake", "b1": "Canyon", "c1": "Gorge"}
+    of = lambda m: place.get(m["file"], "")                            # noqa: E731
+    shots = [{"file": "a1"}, {"file": "a2"}, {"file": "a3"}]
+    out, n = tr.cover_places(shots, [{"file": "b1"}, {"file": "c1"}, {"file": "a1"}], of)
+    assert n == 2 and sorted(m["file"] for m in out) == ["a1", "b1", "c1"] and len(out) == 3
+    out, n = tr.cover_places([{"file": "a1"}, {"file": "b1"}], [{"file": "c1"}], of)       # no place has two shots: nothing is swapped out
+    assert n == 0 and [m["file"] for m in out] == ["a1", "b1"]
+    cap = tr.caption_png(str(tmp_path / "c.png"), "Medeu Dam", subtitle="subtitle")
+    assert os.path.isfile(cap)
+
+
+def test_a_sideways_clip_turned_upright_does_not_sit_in_a_landscape_recap():
+    from engine import trip_recap as tr
+    wide = {"file": "w", "size": (1920, 1080)}
+    turned = {"file": "t", "size": (1080, 1920), "rotate": 90}          # stored wide, turned upright (fix_rotation swaps the size too): shown tall
+    out, n = tr.swap_wrong_shape([wide, turned], [{"file": "s", "size": (1920, 1080)}], "landscape")
+    assert n == 1 and [m["file"] for m in out] == ["w", "s"]
+    out, n = tr.swap_wrong_shape([wide, turned], [], "landscape")
+    assert n == 1 and [m["file"] for m in out] == ["w"]                 # no spare of the right shape: dropped
+    assert tr.swap_wrong_shape([turned], [], "landscape") == ([turned], 0)       # but a day keeps its only shot
+    assert tr.swap_wrong_shape([turned], [{"file": "s", "size": (1920, 1080)}], "any")[1] == 0
+
+
+def test_the_reader_waits_and_asks_again_when_gemini_is_busy(monkeypatch):
+    import io
+    import json
+    import urllib.error
+    from engine import visual_context as vc
+    monkeypatch.setattr(vc, "gemini_key", lambda: "K")
+    monkeypatch.setenv("SHORTSFLOW_VISION", "gemini")
+    monkeypatch.setattr(sc, "_RETRY_WAIT", 0)
+    answers = [urllib.error.HTTPError("u", 429, "Too Many Requests", {}, io.BytesIO(b"")), None]
+
+    class Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return json.dumps({"candidates": [{"content": {"parts": [{"text": '[{"id": 1, "text": ["Hi"], "role": "headline"}]'}]}}]}).encode()
+    calls = []
+
+    def fake(req, timeout=0):
+        calls.append(1)
+        first = answers.pop(0)
+        if first:
+            raise first
+        return Resp()
+    monkeypatch.setattr("urllib.request.urlopen", fake)
+    out = sc.ask_frames_json([b"x"], "p")
+    assert out and out[0]["text"] == ["Hi"] and len(calls) == 2
+
+
+def test_no_console_window_flag_is_added_unless_detached(monkeypatch):
+    from engine import proc
+    monkeypatch.setattr(proc, "NO_WINDOW", 0x08000000)
+    assert proc.with_no_window({})["creationflags"] == 0x08000000
+    assert proc.with_no_window({"creationflags": 0x200})["creationflags"] == 0x08000200
+    assert proc.with_no_window({"creationflags": 0x08 | 0x200}) == {"creationflags": 0x08 | 0x200}      # detached: left as asked
+    monkeypatch.setattr(proc, "NO_WINDOW", 0)
+    assert proc.with_no_window({}) == {}                                   # other systems: unchanged
+
+
+def test_longer_beat_snapped_shots_mean_fewer_shots():
+    from engine import trip_recap as tr
+    out = tr.shrink_counts([2, 11, 7, 8, 7], 1.5, 1.92)
+    assert sum(out) == round(35 * 1.5 / 1.92) and min(out) >= 1 and out[1] <= 11
+    assert tr.shrink_counts([2, 11, 7], 1.5, 1.52) == [2, 11, 7]       # a small change keeps the plan
+    assert tr.shrink_counts([1, 1], 1.0, 3.0) == [1, 1]                # every day keeps a shot
 
 
 def test_recipe_length_never_passes_the_limit_and_works_without_a_reader():

@@ -69,7 +69,8 @@ def analyse(video, ffmpeg=None, run=subprocess.run, frames=None):
     from engine import enhance
     if frames is None:
         frames = enhance.sample_frames(video, ffmpeg=ffmpeg, n=8, run=run)
-    colour = enhance.measure(frames)
+    lit = [f for f in frames if float(f.mean()) > 0.06]           # black frames and end cards must not pull the colour reading down
+    colour = enhance.measure(lit or frames)
     mean_db, peak_db = loudness(video, ffmpeg, run)
     return {"duration": info["duration"], "width": info["width"], "height": info["height"], "analysed_seconds": seen, "cuts": len(cuts),
             "shot_seconds": seen / shots, "first_shot_seconds": cuts[0] if cuts else seen, "colour": colour,
@@ -185,6 +186,9 @@ def _parse_json_array(text):
     return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
 
 
+_RETRY_WAIT = 8          # seconds; multiplied by the attempt number
+
+
 def ask_frames_json(frames, prompt, timeout=120):
     """The model's JSON answer about these JPEG frames: Gemini when a key is set (the frames are sent to Google), else a local Ollama vision
     model; [] when neither is available or the answer cannot be read."""
@@ -196,17 +200,24 @@ def ask_frames_json(frames, prompt, timeout=120):
     if key:
         parts = [{"text": prompt}] + [{"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(f).decode()}} for f in frames]
         body = json.dumps({"contents": [{"parts": parts}], "generationConfig": {"temperature": 0, "maxOutputTokens": 2500}}).encode()
+        import time
         for name in vc.GEMINI_MODELS:
-            req = urllib.request.Request(f"https://generativelanguage.googleapis.com/v1beta/models/{name}:generateContent", body,
-                                         {"Content-Type": "application/json", "x-goog-api-key": key})
-            try:
-                with urllib.request.urlopen(req, timeout=timeout) as r:
-                    data = json.load(r)
-                found = _parse_json_array("".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"]))
-                if found:
-                    return found
-            except Exception as e:
-                print(f"[Warning] Style clone: {name} did not answer ({str(e)[:80]}).")
+            for attempt in range(3):
+                req = urllib.request.Request(f"https://generativelanguage.googleapis.com/v1beta/models/{name}:generateContent", body,
+                                             {"Content-Type": "application/json", "x-goog-api-key": key})
+                try:
+                    with urllib.request.urlopen(req, timeout=timeout) as r:
+                        data = json.load(r)
+                    found = _parse_json_array("".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"]))
+                    if found:
+                        return found
+                    break
+                except Exception as e:
+                    if ("429" in str(e) or "503" in str(e)) and attempt < 2:
+                        time.sleep(_RETRY_WAIT * (attempt + 1))           # busy or over its limit: wait and ask the same model again
+                        continue
+                    print(f"[Warning] Style clone: {name} did not answer ({str(e)[:80]}).")
+                    break
         return []
     model = vc.pick_vision_model()
     if not model:
@@ -334,8 +345,11 @@ def to_recap_recipe(m, structure, days=5, max_seconds=60):
         lines.append("Shape: " + {"9:16": "vertical 9:16", "2.35:1": "widescreen 2.35:1", "16:9": "wide 16:9"}[recipe["recap_aspect"]] + ".")
     days = max(1, int(days))
     seconds = round(max(shot, 2.8) * (days + 2))   # one shot for each day, plus the opening and the ending (a label needs about 2.8 s to be read)
+    if not (structure and structure.get("day_labels")) and m.get("duration"):
+        seconds = max(seconds, round(float(m["duration"])))       # not a one-shot-per-day itinerary: as long as the reference (the limit below still applies)
+        recipe["recap_shot_seconds"] = round(max(1.0, shot), 1)       # ... and cut as fast as the reference, so the shots are many (and cover more places)
     recipe["recap_length"] = int(max(15, min(max_seconds, seconds)))
-    lines.append(f"Length: about {recipe['recap_length']} s for {days} day(s), one shot each, like the reference's rhythm (never more than {max_seconds} s).")
+    lines.append(f"Length: about {recipe['recap_length']} s, from the reference's rhythm and length (never more than {max_seconds} s).")
     if structure and structure.get("labels_over_footage"):
         recipe["recap_style"] = "cinematic"
         lines.append("Text: labels sit over the shots (not on separate cards), so the recap uses text over the footage.")

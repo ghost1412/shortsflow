@@ -179,6 +179,18 @@ def plan_counts(n_days, total_seconds, card=CARD_SECONDS, clip=CLIP_SECONDS):
     return n, round(max(2.5, min(8.0, per_day / n)), 2)
 
 
+def shrink_counts(counts, old_clip, new_clip):
+    """Fewer shots when each one got longer (cuts snapped to the music's beat), so the total length stays what was planned.
+    The biggest day gives up shots first and every day keeps at least one."""
+    counts = list(counts)
+    if new_clip <= old_clip * 1.05:
+        return counts
+    target = max(len(counts), int(round(sum(counts) * old_clip / new_clip)))
+    while sum(counts) > target and max(counts) > 1:
+        counts[counts.index(max(counts))] -= 1
+    return counts
+
+
 def plan_days(video_counts, total_seconds, card=CARD_SECONDS, clip=CLIP_SECONDS):
     """([moments for each day], seconds per moment). Days with more footage get more time: weight = sqrt(number of videos), so a
     day with 68 videos gets about 4 times the time of a day with 4 (not 17 times), and every day keeps at least one moment."""
@@ -192,7 +204,7 @@ def plan_days(video_counts, total_seconds, card=CARD_SECONDS, clip=CLIP_SECONDS)
         counts[counts.index(max(counts))] -= 1
     while sum(counts) < total_moments:                              # give the rest to the day with the most footage
         counts[max(range(n), key=lambda i: raw[i] - counts[i])] += 1
-    return counts, round(max(2.5, min(8.0, left / max(1, sum(counts)))), 2)
+    return counts, round(max(min(2.5, clip), min(8.0, left / max(1, sum(counts)))), 2)
 
 
 SAME_SPOT_KM = 0.15          # two shots filmed this close ...
@@ -215,6 +227,50 @@ def same_scene(a, b):
         return False
     from engine.geo import distance_km
     return abs(ta - tb) < SAME_SPOT_SECONDS and distance_km(la, lb) < SAME_SPOT_KM
+
+
+def shown_portrait(m):
+    """True when the shot is vertical as it is SHOWN (a size already follows a turn made by fix_rotation)."""
+    w, h = m["size"]
+    return h > w
+
+
+def swap_wrong_shape(moments, spares, orientation):
+    """(moments, changed): in a landscape (or portrait) recap, a shot of the other shape (a clip stored sideways and turned upright) is
+    replaced by a spare of the right shape, or dropped when there is none (a day always keeps at least one shot)."""
+    if orientation not in ("landscape", "portrait"):
+        return list(moments), 0
+    wrong = (lambda m: shown_portrait(m)) if orientation == "landscape" else (lambda m: not shown_portrait(m))
+    pool = [s for s in spares if not wrong(s)]
+    out, swapped = [], 0
+    for k, m in enumerate(moments):
+        if wrong(m) and pool:
+            out.append(pool.pop(0))
+            swapped += 1
+        elif wrong(m) and (out or any(not wrong(x) for x in moments[k + 1:])):
+            swapped += 1                                   # no spare of the right shape: the shot is dropped (a day always keeps one)
+        else:
+            out.append(m)
+    return out, swapped
+
+
+def cover_places(moments, spares, place_of):
+    """(moments, how many were swapped): a place with no shot gets one of the spares from it, in the spot of a shot from a place that has
+    two or more. `place_of(shot)` is the place name ("" when unknown). The number of shots never changes."""
+    moments = list(moments)
+    names = [place_of(m) for m in moments]
+    swapped = 0
+    for spare in spares:
+        p = place_of(spare)
+        if not p or p in names:
+            continue
+        victims = [i for i, n in enumerate(names) if not n or names.count(n) > 1]
+        if not victims:
+            break
+        i = victims[-1]
+        moments[i], names[i] = spare, p
+        swapped += 1
+    return moments, swapped
 
 
 def spread_moments(cands, n):
@@ -1116,7 +1172,8 @@ def subtitle_layers(path_base, title, ts, quick=False):
     d.text((x, y), text, font=font, fill=ink, anchor="mm")
     out = f"{path_base}_sub.png"
     img.save(out)
-    return [(out, 0.05 if quick else 0.4)]
+    band = scrim_png(f"{path_base}_subscrim.png", int(H * 0.93), int(H * 0.22), 130)      # keeps the line readable over rocks, snow or bright sky
+    return [(band, 0.0), (out, 0.05 if quick else 0.4)]
 
 
 def cinematic_layers(path_base, title, line="", small="", look=None, index=0, quick=False, safe=False, scrim=False, style=None):
@@ -1367,9 +1424,35 @@ def ingredients_card_png(path, items, title="Ingredients"):
     return path
 
 
-def caption_png(path, text, y_frac=0.74, size=78, lower=False):
+def film_title_png(path, text, dim=110):
+    """A bold end title like a film's: the name in big condensed capitals, centred, over a dimmed picture. (Anton, bundled)"""
+    from PIL import Image, ImageDraw, ImageFont
+    u = min(W, H) / 1080.0
+    img = Image.new("RGBA", (W, H), (0, 0, 0, dim))
+    d = ImageDraw.Draw(img)
+    word = str(text).upper()
+    size = int(260 * u)
+    while size > 40:
+        f = ImageFont.truetype(os.path.join(FONT_DIR, "Anton-Regular.ttf"), size)
+        if d.textlength(word, font=f) <= W * 0.8:
+            break
+        size -= 6
+    d.text((W // 2 + 3, H // 2 + 4), word, font=f, fill=(0, 0, 0, 160), anchor="mm")
+    d.text((W // 2, H // 2), word, font=f, fill=(245, 240, 230, 255), anchor="mm")
+    img.save(path)
+    return path
+
+
+def caption_png(path, text, y_frac=0.74, size=78, lower=False, scrim=False, subtitle=None):
     from PIL import Image, ImageDraw
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    if subtitle is not None:         # the film-style label (same as the first shot's): the soft band and the small line in one picture
+        for layer_png, _t in subtitle_layers(path + ".sub", text, parse_text_style(subtitle)):
+            img = Image.alpha_composite(img, Image.open(layer_png).convert("RGBA"))
+        img.save(path)
+        return path
+    if scrim:
+        img = Image.alpha_composite(img, Image.open(scrim_png(path + ".band.png", int(H * y_frac), int(H * 0.2), 120)).convert("RGBA"))
     d = ImageDraw.Draw(img)
     if lower:       # small, spaced, bottom-left lower third with a thin rule; wraps and shrinks to stay inside the frame
         u = min(W, H) / 1080.0
@@ -1833,6 +1916,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     dissolving = (transitions or "").strip().lower() == "dissolve"      # an explicit choice only; "auto" never dissolves
     if dissolving or extras.get("itinerary") or str(extras.get("pace") or "").lower() == "fast":
         fade_s = 0.05                    # no dip to black on every shot: straight cuts (an itinerary reel) or shots that melt into each other
+    film_text = parse_text_style(extras.get("text_style"))["subtitle"]         # small subtitle-style labels: the hook and the end title are in the same film style
     fast = str(extras.get("pace") or "").lower() == "fast"       # --recap_pace fast: a shorter opening and ending, and shorter parts
     n_glimpses, glimpse_base, title_base, first_base, closing_s = (2, 1.6, 2.4, 3.2, 2.4) if fast else (GLIMPSES, GLIMPSE_SECONDS, 3.4, 3.2, 3.2)
     result_opening = str(extras.get("opening") or "").lower() == "result"        # --recap_opening result: only the finished dish, then straight into the steps
@@ -1962,7 +2046,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     if avoid:
         print(f"[Log] Picking new moments: {len(avoid)} moment(s) from earlier recaps are avoided.")
     counts, clip_len = plan_days([len(i) for i in all_infos], max(float(total_seconds) - opening, len(all_infos) * (3.2 if fast else 6.0)),
-                                 card=0.0 if cine else CARD_SECONDS)          # the cinematic look puts the titles over the footage: no card time to reserve
+                                 card=0.0 if cine else CARD_SECONDS, clip=max(0.8, float(extras.get("shot_seconds") or CLIP_SECONDS)))          # the cinematic look puts the titles over the footage: no card time to reserve
     glimpse_s, title_s, first_min, music_start = glimpse_base, title_base, first_base, 0.0
     mute_orig = bool(cine and music and not keep_sound)      # the song carries the edit: the clips' own sound would break it at every cut
     if cine and music:
@@ -1971,6 +2055,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
             beat, music_start = grid
             snapped = on_beat(clip_len, beat, 2)
             if 0.6 * clip_len <= snapped <= 1.5 * clip_len:
+                counts = shrink_counts(counts, clip_len, snapped)          # longer shots: fewer of them, so the recap keeps its planned length
                 clip_len = snapped
             glimpse_s, title_s, first_min = on_beat(glimpse_base, beat), on_beat(title_base, beat), on_beat(first_base, beat)
             closing_s = on_beat(closing_s, beat)
@@ -2075,6 +2160,13 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         names = [p["name"] for p in all_places if p.get("name") and not is_plain_area(p["name"])]
         print(f"[Log] Places from GPS: {', '.join(dict.fromkeys(names)) or 'none named'}.")
         write_places_review(os.path.join(session_dir, "places_review.md"), all_places, trip_name)
+    if not extras.get("moments_file"):          # every named place gets a shot when a spare from it exists (reviewed shots are left as chosen)
+        for d in days:
+            def place_of(m, d=d):
+                return next((p["name"] for p in d["places"] if m["file"] in p["files"] and p.get("name") and not is_plain_area(p["name"])), "")
+            d["moments"], n_cov = cover_places(d["moments"], d.get("alts") or [], place_of)
+            if n_cov:
+                print(f"[Log] Swapped {n_cov} shot(s) so more of the day's places are shown.")
     for d in days:
         for m in d["moments"]:
             for p in d["places"]:
@@ -2086,6 +2178,11 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     turned = fix_rotation([m for d in days for m in d["moments"]], ffmpeg=ffmpeg, known=rot_known) if visual else 0      # sends frames to Gemini: only with --visual_context
     if turned:
         print(f"[Log] {turned} sideways video(s) turned upright.")
+    if not extras.get("moments_file"):
+        for d in days:
+            d["moments"], n_shape = swap_wrong_shape(d["moments"], d.get("alts") or [], orientation)
+            if n_shape:
+                print(f"[Log] Swapped {n_shape} shot(s) that came out the wrong shape (a sideways clip turned upright).")
     rotations = parse_rotations(manual_rotate)
     if rotations and apply_rotations([m for d in days for m in d["moments"]], rotations):       # (the title shot is taken from these afterwards)
         print(f"[Log] Manual rotation applied: {manual_rotate}.")
@@ -2120,7 +2217,10 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         if rotations:
             apply_rotations(glimpses, rotations)
         if glimpses:
-            hook_png = caption_png(os.path.join(parts_dir, "hook.png"), it["hook"], y_frac=0.3, size=96, lower=cine)
+            if film_text:       # a film-style reference: the hook is big and centred over a soft band, readable at a glance
+                hook_png = caption_png(os.path.join(parts_dir, "hook.png"), it["hook"], y_frac=0.5, size=int(84 * min(W, H) / 1080.0), lower=False, scrim=True)
+            else:
+                hook_png = caption_png(os.path.join(parts_dir, "hook.png"), it["hook"], y_frac=0.3, size=96, lower=cine)
             for gi, g in enumerate(glimpses, 1):
                 out = os.path.join(parts_dir, f"glimpse_{gi}.mp4")
                 shown = None if (cine and gi > 1) else hook_png      # cinematic: the hook once, on the first shot, not stamped on every one
@@ -2188,12 +2288,12 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         for mi, (m, cap) in enumerate(zip(d["moments"], row["captions"]), 1):
             own = step_lines[di - 1] if di - 1 < len(step_lines) else ""            # --recap_lines: the part's own line
             label = (own if (own and not (cine and mi == 1)) else labels[di - 1][mi - 1] or ("" if cine else cap))   # cinematic: the place name only; no vague picture captions
-            cap_png = caption_png(os.path.join(parts_dir, f"cap_{di}_{mi}.png"), label, y_frac=(0.6 if extras.get("safe") else 0.74), lower=cine) if label and not (cine and mi == 1) else None
+            cap_png = caption_png(os.path.join(parts_dir, f"cap_{di}_{mi}.png"), label, y_frac=(0.6 if extras.get("safe") else 0.74), lower=cine, subtitle=(extras.get("text_style") if film_text else None)) if label and not (cine and mi == 1) else None
             out = os.path.join(parts_dir, f"clip_{di}_{mi}.mp4")
             lay, secs = None, m["end"] - m["start"]
             if cine and mi == 1:
                 itinerary = bool(extras.get("itinerary")) and len(days) > 1      # --recap_itinerary: "DAY 2" above the place name, nothing repeated below
-                lay = cinematic_layers(os.path.join(parts_dir, f"title_{di}"), itinerary_title(row["title"], di, trip_name) if itinerary else row["title"], own or ("" if itinerary else (f"{unit} {di}" if len(days) > 1 else "")),
+                lay = cinematic_layers(os.path.join(parts_dir, f"title_{di}"), itinerary_title(row["title"], di, trip_name) if (itinerary or film_text) else row["title"], own or ("" if itinerary else (f"{unit} {di}" if len(days) > 1 else "")),
                                        small=(f"{unit.upper()} {di}" if itinerary else f"{unit.upper()} {di} / {len(days)}" if extras.get("counter") and len(days) > 1 else ""),
                                        look=frame_look(ffmpeg, m["file"], m["start"] + 1.0), index=di, quick=fast, safe=bool(extras.get("safe")), scrim=itinerary, style=extras.get("text_style"))
                 secs = max(secs, first_min)
@@ -2212,7 +2312,10 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         pass                                                       # the recap ends on its last shot
     elif end_mode == "result" and end_pick:
         end_text = str(extras.get("end_text") or it["title"] or "").strip()
-        end_cap = caption_png(os.path.join(parts_dir, "end_cap.png"), end_text, y_frac=0.42, size=104, lower=False) if end_text else None      # big and centred: the payoff line
+        if end_text and film_text:
+            end_cap = film_title_png(os.path.join(parts_dir, "end_cap.png"), end_text)
+        else:
+            end_cap = caption_png(os.path.join(parts_dir, "end_cap.png"), end_text, y_frac=0.42, size=104, lower=False) if end_text else None      # big and centred: the payoff line
         end_card = os.path.join(parts_dir, "end.mp4")
         render_clip(ffmpeg, end_pick["file"], end_pick["start"], closing_s, end_card, end_cap, layout, end_pick["size"], audio=has_audio(end_pick["file"]) and not mute_orig,
                     cap_from=0.2, cap_gap=0.2, grade=grade, fade_s=max(fade_s, 0.4), rotate=end_pick.get("rotate", 0), fix=fix_for(end_pick["file"]))
@@ -2221,7 +2324,9 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     else:
         end_line = " · ".join(trip_places[:4]) if trip_places else (" · ".join(stops) if stops else "")
         end_png = os.path.join(parts_dir, "end.png")
-        if cine:
+        if cine and film_text:
+            film_title_png(end_png, it["title"], dim=255)         # a film-style reference: the bold name on black, like the end of a film
+        elif cine:
             cinematic_card_png(end_png, it["title"], end_line, f"{len(days)} {unit.lower()}s" if len(days) > 1 else "")
         else:
             title_card_png(end_png, it["title"], end_line or "Thanks for watching", f"{len(days)} {unit.lower()}s" if len(days) > 1 else "")
@@ -2375,7 +2480,7 @@ def run(args, target_bitrate=None, target_preset=None):
                       total_seconds=getattr(args, "recap_length", 60) or 60, music=getattr(args, "music", None),
                       visual=bool(getattr(args, "visual_context", False)), hook=getattr(args, "recap_hook", "") or "",
                       stops=getattr(args, "trip_stops", None), lines=getattr(args, "recap_lines", "") or "", open_with_result=bool(getattr(args, "recap_open_result", False)),
-                      extras={"speed": float(getattr(args, "recap_speed", 1.0) or 1.0), "end": getattr(args, "recap_end", "card") or "card", "end_text": getattr(args, "recap_end_text", "") or "", "counter": bool(getattr(args, "recap_counter", False)), "itinerary": bool(getattr(args, "recap_itinerary", False)), "plan_only": bool(getattr(args, "recap_plan_only", False)), "moments_file": getattr(args, "recap_moments", "") or "", "text_style": getattr(args, "recap_text_style", "") or "", "pace": getattr(args, "recap_pace", "normal") or "normal", "opening": getattr(args, "recap_opening", "normal") or "normal", "ingredients_title": getattr(args, "recap_ingredients_title", "") or "", "safe": bool(getattr(args, "recap_safe_text", False)), "ingredients": getattr(args, "recap_ingredients", "") or "", "ingredients_at": getattr(args, "recap_ingredients_at", "end") or "end"}, geocode=not getattr(args, "recap_no_geocode", False), enhance=getattr(args, "enhance", "off") or "off",
+                      extras={"speed": float(getattr(args, "recap_speed", 1.0) or 1.0), "end": getattr(args, "recap_end", "card") or "card", "end_text": getattr(args, "recap_end_text", "") or "", "counter": bool(getattr(args, "recap_counter", False)), "itinerary": bool(getattr(args, "recap_itinerary", False)), "plan_only": bool(getattr(args, "recap_plan_only", False)), "moments_file": getattr(args, "recap_moments", "") or "", "text_style": getattr(args, "recap_text_style", "") or "", "shot_seconds": float(getattr(args, "recap_shot_seconds", 0) or 0), "pace": getattr(args, "recap_pace", "normal") or "normal", "opening": getattr(args, "recap_opening", "normal") or "normal", "ingredients_title": getattr(args, "recap_ingredients_title", "") or "", "safe": bool(getattr(args, "recap_safe_text", False)), "ingredients": getattr(args, "recap_ingredients", "") or "", "ingredients_at": getattr(args, "recap_ingredients_at", "end") or "end"}, geocode=not getattr(args, "recap_no_geocode", False), enhance=getattr(args, "enhance", "off") or "off",
                       enhance_strength=getattr(args, "enhance_strength", "medium") or "medium",
                       manual_rotate=getattr(args, "recap_rotate", "") or "", place_names=getattr(args, "place_names", "") or "", avoid=getattr(args, "recap_avoid", "") or "", kind=getattr(args, "recap_kind", "trip") or "trip", keep_sound=bool(getattr(args, "recap_keep_sound", False)),
                       grade_name=_explicit_filter(args), edit=getattr(args, "auto_edit", "") if getattr(args, "auto_edit", "none") != "none" else "",

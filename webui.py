@@ -18,6 +18,9 @@ import sys
 
 import gradio as gr
 
+from engine import proc as _no_console
+_no_console.install()                    # the runs started from the browser (and their helper programs) open no console window (Windows)
+
 from shortsflow import web_args
 
 try:  # checkout: the repo; pip install: the workspace folder `shortsflow` sets in SHORTSFLOW_HOME

@@ -3,6 +3,12 @@ import sys
 import threading
 import subprocess
 
+try:
+    from engine import proc as _no_console
+    _no_console.install()        # no console window for the helper programs (Windows)
+except Exception:
+    pass
+
 # PyInstaller Subprocess Hook: If running as compiled executable and given our flag, run backend.
 if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and sys.argv[1] == "--run-main-pipeline":
     sys.argv.pop(1)  # Remove flag
