@@ -310,7 +310,8 @@ def sky_side(jpeg):
         scores[side] = (float(np.mean(luma)) * (1 + max(0.0, blue) * 3) - float(np.std(luma)) * 1.5, blue)
     order = sorted(scores, key=lambda k: -scores[k][0])
     best, second = order[0], order[1]
-    if scores[best][0] >= 0.5 and scores[best][0] >= 1.3 * max(scores[second][0], 0.01) and scores[best][1] > 0.03:
+    needed = 0.03 if best == "top" else 0.15          # turning a picture needs a clearly BLUE band (grey pavement or a pale wall is not sky)
+    if scores[best][0] >= 0.5 and scores[best][0] >= 1.3 * max(scores[second][0], 0.01) and scores[best][1] > needed:
         return best
     return None
 

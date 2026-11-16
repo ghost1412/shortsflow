@@ -528,3 +528,14 @@ def test_latin_or_empty_hides_names_in_other_scripts():
     assert tr.latin_or_empty("Larkwater Lake") == "Larkwater Lake"
     assert tr.latin_or_empty("Café Öst") == "Café Öst"
     assert tr.latin_or_empty("Көлсай көлдері") == "" and tr.latin_or_empty(None) == ""
+
+
+def test_a_pale_bluish_grey_strip_is_not_taken_for_sky():
+    import io
+    from engine import visual_context as vc
+    from PIL import Image
+    img = Image.new("RGB", (120, 120), (70, 90, 40))              # grass and trees everywhere ...
+    img.paste((190, 205, 215), (0, 105, 120, 120))                # ... and a bright, slightly bluish pavement strip at the bottom
+    buf = io.BytesIO()
+    img.save(buf, "JPEG")
+    assert vc.sky_side(buf.getvalue()) is None                    # it must not turn the clip upside down

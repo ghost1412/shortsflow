@@ -1654,12 +1654,12 @@ def held_headline_png(path, small, big, style=None):
     size = 190 * u * factor * max(0.7, ts["scale"])
     while size > 36 and d.textlength(str(big), font=font(size)) > max_w:
         size -= 6
-    f_big, f_small = font(size), font(max(30 * u, size * 0.3))
+    f_big, f_small = font(size), font(max(46 * u, size * 0.42))
     y = int(H * 0.5)
     for dx, dy, fill in ((3, 4, (0, 0, 0, 120)), (0, 0, ink)):
         d.text((left + dx, y + dy), str(big), font=f_big, fill=fill, anchor="ls")
         if small:
-            d.text((left + dx, y - int(size * 0.95) + dy), str(small), font=f_small, fill=fill, anchor="ls")
+            d.text((left + dx, y - int(size * 1.0) + dy), str(small), font=f_small, fill=fill, anchor="ls")
     img.save(path)
     return path
 
