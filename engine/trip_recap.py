@@ -1008,6 +1008,18 @@ def pick_grade(ffmpeg, files, run=_proc.run, sample=6):
         return CINEMATIC_GRADE
 
 
+_DAY_PREFIX = re.compile(r"^\s*(day|part|stop|chapter)\s*\d+\s*[:.\-\u2013\u2014]\s*", re.IGNORECASE)
+
+
+def itinerary_title(title, day_number, fallback=""):
+    """The place name for an itinerary label: a leading "Day 3:" is dropped (the small "DAY 3" is drawn above it already) and an
+    administrative area ("Zhambyl District") is never shown; the trip name, then "Day N", stand in when nothing real is left."""
+    text = _DAY_PREFIX.sub("", str(title or "")).strip(" -\u2013\u2014:")
+    if text and not is_plain_area(text):
+        return text
+    return str(fallback or "").strip() or f"Day {day_number}"
+
+
 def scrim_png(path, centre, half, strength=150):
     """A transparent full-frame PNG with a soft dark band around row `centre` (fading out over `half` rows)."""
     import numpy as np
@@ -2150,7 +2162,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
             lay, secs = None, m["end"] - m["start"]
             if cine and mi == 1:
                 itinerary = bool(extras.get("itinerary")) and len(days) > 1      # --recap_itinerary: "DAY 2" above the place name, nothing repeated below
-                lay = cinematic_layers(os.path.join(parts_dir, f"title_{di}"), row["title"], own or ("" if itinerary else (f"{unit} {di}" if len(days) > 1 else "")),
+                lay = cinematic_layers(os.path.join(parts_dir, f"title_{di}"), itinerary_title(row["title"], di, trip_name) if itinerary else row["title"], own or ("" if itinerary else (f"{unit} {di}" if len(days) > 1 else "")),
                                        small=(f"{unit.upper()} {di}" if itinerary else f"{unit.upper()} {di} / {len(days)}" if extras.get("counter") and len(days) > 1 else ""),
                                        look=frame_look(ffmpeg, m["file"], m["start"] + 1.0), index=di, quick=fast, safe=bool(extras.get("safe")), scrim=itinerary, style=extras.get("text_style"))
                 secs = max(secs, first_min)

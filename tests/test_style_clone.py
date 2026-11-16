@@ -359,3 +359,11 @@ def test_reviewed_shots_match_the_same_file_written_another_way(tmp_path):
         chosen.write_text(json.dumps({"days": [[{"file": other, "start": 1, "end": 4}]]}), encoding="utf-8")
         tr.apply_chosen_moments(days, str(chosen))
         assert days[0]["moments"][0]["file"] == video
+
+
+def test_itinerary_label_drops_the_day_prefix_and_administrative_areas():
+    from engine import trip_recap as tr
+    assert tr.itinerary_title("Day 1: Zhambyl District", 1, "Almaty") == "Almaty"
+    assert tr.itinerary_title("Day 3 - Charyn Canyon", 3, "Almaty") == "Charyn Canyon"
+    assert tr.itinerary_title("Kaindy Lake", 2) == "Kaindy Lake"
+    assert tr.itinerary_title("", 4) == "Day 4" and tr.itinerary_title("Day 2: Medeu District", 2) == "Day 2"
