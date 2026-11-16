@@ -4,6 +4,12 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+## 0.8.1 (2026-11-16)
+
+- Recap made like a reference (`--recap_like`, still experimental): copies a reference's colour look, widescreen shape and landscape clips, the film-style look (subtitle text, hook, end title), its shot length and number of places, and a headline held over the whole recap when the reference does that. No black dip on fast cuts. Scenery ratings are remembered by picture, so the same footage is never rated twice.
+- Recap picking: itinerary and held-headline recaps rank down frames with lens flare or a blown-out patch and windows where the camera is turning or shaking.
+- Recap: itinerary labels drop a leading "Day N:" and administrative-area names; the local rotation check no longer turns a clip upside down because of a pale strip.
+
 ## 0.8.0 (2026-11-16)
 
 **Experimental: make a recap like a reference reel.** `--recap_like REFERENCE` (a link such as YouTube, or a video file) and the "Make the whole recap like this reel" box on the Recap screen read a reference reel's pace, picture shape, text layout (a "DAY N" label over each shot, a headline opening, the ending), label colour, size and lettering, and set the recap's options for you (anything you set yourself wins). It has been tried on one reference, so expect to adjust. To read the text it needs a picture reader: Gemini with your key (the reel's frames are sent to Google) or a local Ollama vision model; without one only pace, shape and length are copied. It approximates the look with the fonts that ship with ShortsFlow (it cannot copy an exact font) and never reuses the reference's footage, music or graphics. New options it uses: `--recap_itinerary` (an itinerary reel: "DAY 2" above the place name, straight cuts, a tiered opening headline, a soft dark band behind labels), `--recap_text_style` (colour, size, bold, glow), `--recap_font display` (a heavy display serif, Abril Fatface, SIL Open Font Licence) and `--layout crop` for recaps.
