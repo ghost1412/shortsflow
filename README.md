@@ -13,8 +13,10 @@
 
 <p align="center">
   <a href="https://pypi.org/project/shortsflow/"><img src="https://img.shields.io/pypi/v/shortsflow?style=flat&logo=pypi&logoColor=white&color=3775A9" alt="PyPI version" /></a>
+  <a href="https://pypi.org/project/shortsflow/"><img src="https://img.shields.io/pypi/pyversions/shortsflow?style=flat&logo=python&logoColor=white" alt="Python versions" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=flat" alt="MIT License" /></a>
   <a href="https://github.com/ghost1412/shortsflow/actions/workflows/tests.yml"><img src="https://github.com/ghost1412/shortsflow/actions/workflows/tests.yml/badge.svg" alt="Tests" /></a>
+  <a href="https://github.com/ghost1412/shortsflow/stargazers"><img src="https://img.shields.io/github/stars/ghost1412/shortsflow?style=flat&logo=github" alt="GitHub stars" /></a>
 </p>
 
 ## Try it in two minutes
@@ -25,6 +27,8 @@
 | 🍎🐧 **Mac or Linux** | `curl -fsSL https://raw.githubusercontent.com/ghost1412/shortsflow/main/install.sh \| sh` (needs Python 3.10+ and FFmpeg; installs into `~/.shortsflow`). |
 | 💻 **Any OS** | `pip install "shortsflow[clip]"`, then `shortsflow doctor`, then `shortsflow clip my_video.mp4` |
 | ☁️ **Nothing to install** | [Open in Colab](https://colab.research.google.com/github/ghost1412/shortsflow/blob/main/ShortsFlow_Colab.ipynb) (free GPU) |
+
+If it saves you a subscription, a ⭐ on this repo helps other people find it.
 
 No account or API key is needed to clip a video. A key (or a free local Ollama) adds AI-written titles and descriptions and lets the AI pick and score the moments (a cloud provider then receives the transcript text).
 
@@ -39,6 +43,16 @@ No account or API key is needed to clip a video. A key (or a free local Ollama) 
 - **The framing.** Face-tracked 9:16 crops, a cut to whoever is speaking in a two-person talk, and the whole picture over a blurred copy for slides and screen recordings.
 - **The captions.** Animated word-by-word captions (Hormozi, glow box, bounce), your logo and handle, and an editor to re-cut or restyle any clip.
 - **Tighter pacing.** `--tighten` removes silences and pauses between words, never a spoken word, and keeps laughter and applause.
+
+<p align="center">
+  <img src="assets/caption_previews/HORMOZI.jpg" width="120" alt="Hormozi caption style" />
+  <img src="assets/caption_previews/GLOW_BOX.jpg" width="120" alt="Glow box caption style" />
+  <img src="assets/caption_previews/KARAOKE.jpg" width="120" alt="Karaoke caption style" />
+  <img src="assets/caption_previews/NEON.jpg" width="120" alt="Neon caption style" />
+  <img src="assets/caption_previews/MARKER.jpg" width="120" alt="Marker caption style" />
+  <img src="assets/caption_previews/MINIMAL.jpg" width="120" alt="Minimal caption style" />
+  <br/><sub>Six of the 14 caption styles. Pick one in the app or with <code>--caption_style</code>.</sub>
+</p>
 
 ```bash
 # the one command most people need
@@ -78,9 +92,15 @@ The transcript of each video you process is also kept on your PC in `~/.shortsfl
 Browser app, desktop studio, CLI, Docker, REST API, an MCP server for AI agents, dubbing, trip and event recaps, photo reels, step-by-step videos,
 game moments, and 30+ idea-to-video formats. They are documented in **[docs/FEATURES.md](docs/FEATURES.md)** (the full feature reference).
 
+<p align="center">
+  <img src="demos/demo_short.gif" width="200" alt="An idea-to-video short made from one line of text" />
+  <img src="demos/demo_spot_the_lie.gif" width="200" alt="A spot-the-lie facts short" />
+  <br/><sub>Idea-to-video: a short from one line of text, and a "spot the lie" facts short.</sub>
+</p>
+
 ## Help and contributing
 
-- Something wrong? [Open an issue](https://github.com/ghost1412/shortsflow/issues) with `shortsflow doctor` output.
+- Something wrong? [Open an issue](https://github.com/ghost1412/shortsflow/issues) with the output of `shortsflow doctor --report` (it prints no keys and no folder names).
 - Status, known issues and how to verify a change: [ROADMAP.md](ROADMAP.md). Tests: `python -m pytest` (offline).
 - Sample footage in the demos is public domain or Creative Commons and credited where used.
 
