@@ -13,7 +13,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
+from engine import proc as _no_console
 from engine.paths import project_root
+
+_no_console.install()                    # jobs (and their helper programs) open no console window (Windows)
 
 LOG_TAIL = 20000
 

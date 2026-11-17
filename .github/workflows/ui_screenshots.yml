@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gradio: ["gradio>=5,<6", "gradio>=6,<7"]     # the Docker image pins 5.x, pip installs get 6.x
+        gradio: ["gradio>=5,<6", "gradio>=6,<7"]     # both majors are allowed by requirements-full.txt and pyproject.toml
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

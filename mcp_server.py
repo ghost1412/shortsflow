@@ -13,6 +13,12 @@ import threading
 import uuid
 from typing import Dict, Any
 
+try:
+    from engine import proc as _no_console
+    _no_console.install()        # the runs this server starts open no console window (Windows)
+except ImportError:              # the slim MCP image has no engine package
+    pass
+
 # Ensure stdout uses UTF-8 encoding
 if sys.stdout.encoding != 'utf-8':
     import io
