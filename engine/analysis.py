@@ -1410,7 +1410,7 @@ def identify_highlights(transcript_path, video_path=None, clip_count=5, mode="sh
         
         if not valid_highlights:
             print("[Warning] LLM analysis failed. Using Heuristic Signal Fallback (Top Peaks)...")
-            valid_highlights.extend(signal_picks(compressed_segments, mode, clip_count, target_duration, min_duration))
+            valid_highlights.extend(signal_picks(compressed_segments, mode, clip_count, target_duration, min_duration, transcript=transcript_data))
             valid_highlights.sort(key=lambda x: x['start'])
             valid_highlights = deduplicate_highlights(valid_highlights)
 
@@ -1431,7 +1431,7 @@ def identify_highlights(transcript_path, video_path=None, clip_count=5, mode="sh
         import traceback
         traceback.print_exc()
         try:    # an error anywhere above used to return one fixed 30 s slot; the signal picks still fill the asked length / count
-            picks = signal_picks(compressed_segments, mode, clip_count, target_duration, min_duration)
+            picks = signal_picks(compressed_segments, mode, clip_count, target_duration, min_duration, transcript=transcript_data)
             if picks:
                 print(f"[Warning] Using the signal fallback instead: {len(picks)} moment(s).")
                 return sorted(picks, key=lambda x: float(x['start']))
@@ -1536,10 +1536,20 @@ def opening_penalty(text):
     return min(1.0, penalty)
 
 
-def signal_picks(compressed_segments, mode, clip_count, target_duration, min_duration):
+def signal_picks(compressed_segments, mode, clip_count, target_duration, min_duration, transcript=None):
     """Moments picked from the audio / text signals alone, with no AI: the best windows (a mic check or a filler opening ranks lower).
-    Highlights reel: filled to the target length (fit_to_target trims the last one); shorts: the best peaks at least 30 s apart,
-    each cut to the asked length."""
+    Highlights reel: filled to the target length (fit_to_target trims the last one); shorts: the best peaks at least 30 s apart.
+    With SHORTSFLOW_SENTENCE_WINDOWS=1 and the `transcript`, shorts are sentence windows instead (engine.candidates: each starts and
+    ends on a sentence and is ranked by its own opening line); otherwise the best time windows, each cut to the asked length."""
+    if mode != "long" and transcript and os.environ.get("SHORTSFLOW_SENTENCE_WINDOWS") == "1":      # opt-in: not better than the windows yet
+        try:
+            from engine import candidates
+            picks = candidates.pick(transcript, compressed_segments, clip_count, target_duration or 30.0,
+                                    min_len=max(8.0, float(min_duration or 15.0) - 5.0), opening_rank=opening_rank)
+            if len(picks) >= min(clip_count, 1):
+                return picks
+        except Exception as e:
+            print(f"[Warning] Sentence-window picking failed ({e}); using the time windows.")
     fallback_candidates = sorted(compressed_segments,
                                  key=lambda x: x.get('norm_score', 0) + x.get('norm_audio', 0) + opening_rank(x.get('text')), reverse=True)
     if mode == "long" and target_duration:
