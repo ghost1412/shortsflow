@@ -523,3 +523,12 @@ def test_glare_and_a_turning_camera_rank_lower():
     assert tr.shakiness([_jpg((10, 10, 10)), _jpg((240, 240, 240))]) > 0.9
     assert tr.shakiness([_jpg((60, 140, 200)), _jpg((60, 140, 200))]) == 0.0
     assert tr.shakiness([_jpg((60, 140, 200))]) == 0.0
+
+
+def test_flare_and_plane_window_shots_rank_last_when_rated():
+    from engine import trip_recap as tr
+    cands = [{"file": f"v{i}.mp4", "start": 0, "end": 3} for i in range(3)]
+    frames = {c["file"]: str(i).encode() for i, c in enumerate(cands)}
+    rows = {b"0": {"score": 9, "flare": True}, b"1": {"score": 8, "airborne": True}, b"2": {"score": 7}}
+    chosen, others = tr.pick_scenic(cands, 1, lambda f, s, e: [frames[f]], rate=lambda fr: [rows[x] for x in fr], score=lambda j: 0.5)
+    assert chosen[0]["file"] == "v2.mp4"

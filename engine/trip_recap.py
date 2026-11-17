@@ -1826,7 +1826,8 @@ def pick_scenic(cands, n, grab, rate=None, score=scenic_score, shortlist=14):
     if rate:
         rated = rate([f for _s, _c, f in top])
         if rated and len(rated) == len(top):
-            final = [(float(r.get("score", 0)) + 0.5 * s, c) for (s, c, _f), r in zip(top, rated) if not r.get("overlay")] or final
+            final = [(float(r.get("score", 0)) + 0.5 * s - 3.0 * bool(r.get("flare")) - 6.0 * bool(r.get("airborne")), c)      # flare and plane-window shots rank last
+                     for (s, c, _f), r in zip(top, rated) if not r.get("overlay")] or final
     final.sort(key=lambda t: t[0], reverse=True)
     chosen, used_files = [], set()
     for s, c in final:
@@ -1865,7 +1866,7 @@ def pick_glimpses(days, k, length, grab=None, score=scenic_score, per_candidates
             for c, r in zip(top, rated):
                 if r.get("overlay"):
                     continue
-                c["score"] = float(r.get("score", 0)) + 0.5 * c["score"]          # the colour score breaks ties
+                c["score"] = float(r.get("score", 0)) + 0.5 * c["score"] - 3.0 * bool(r.get("flare")) - 6.0 * bool(r.get("airborne"))          # the colour score breaks ties
                 cands.append(c)
     for c in cands:
         c.pop("_frame", None)

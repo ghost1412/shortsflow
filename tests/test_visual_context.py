@@ -125,7 +125,7 @@ def test_rate_scenery_parses_one_request(monkeypatch):
     calls = []
     monkeypatch.setattr(vc.urllib.request, "urlopen", lambda req, timeout=0: calls.append(req) or Resp())
     out = vc.rate_scenery([b"a" * 600, b"b" * 600], key="K")
-    assert out == [{"score": 9.0, "overlay": False}, {"score": 3.0, "overlay": True}] and len(calls) == 1
+    assert out == [{"score": 9.0, "overlay": False, "flare": False, "airborne": False}, {"score": 3.0, "overlay": True, "flare": False, "airborne": False}] and len(calls) == 1
     monkeypatch.setattr(vc, "gemini_key", lambda: None)
     assert vc.rate_scenery([b"a"]) is None                     # no key: callers keep the colour score
 

@@ -137,7 +137,10 @@ SCENIC_PROMPT = ("These are {n} frames from different video clips of a trip, num
                  "rate each frame 1-10 for how breathtaking it looks as a first shot: wide natural scenery (lakes, mountains, canyons, "
                  "dramatic light) scores high; close-ups of people, food, streets, indoor, night or dark, blurry or boring frames score low. "
                  "Also set overlay true if the frame has added text, stickers or a social-media caption (not a place sign). "
-                 'Reply with JSON only: [{{"id": 1, "score": 7, "overlay": false}}, ...] with exactly {n} entries.')
+                 "Set flare true if a bright sun disc, lens flare or glare streaks are visible in the frame. "
+                 "Set airborne true if it was filmed from inside an aircraft (a window frame, a wing, clouds seen from above). "
+                 'Reply with JSON only: [{{"id": 1, "score": 7, "overlay": false, "flare": false, "airborne": false}}, ...] with exactly {n} entries.')
+SCENIC_VERSION = "v2:"      # part of the cache key: a new question means the cached ratings are asked again
 
 
 SCENERY_KEEP = 20000        # ratings kept; the oldest are dropped beyond this
@@ -167,7 +170,7 @@ def rate_scenery(frames, key=None, timeout=120):
             cache = {}
     except (OSError, ValueError):
         cache = {}
-    keys = [hashlib.sha1(f).hexdigest() for f in frames]
+    keys = [SCENIC_VERSION + hashlib.sha1(f).hexdigest() for f in frames]
     missing = [i for i, k in enumerate(keys) if k not in cache]
     if missing:
         got = _rate_scenery_online([frames[i] for i in missing], key, timeout)
@@ -210,7 +213,8 @@ def _rate_scenery_online(frames, key=None, timeout=120):
                 rows = rows.get("frames") or rows.get("ratings") or []
             by_id = {int(r["id"]): r for r in rows if isinstance(r, dict) and "id" in r}
             if len(by_id) >= max(1, len(frames) // 2):
-                return [{"score": max(0.0, min(10.0, float(by_id.get(i, {}).get("score", 0)))), "overlay": bool(by_id.get(i, {}).get("overlay"))}
+                return [{"score": max(0.0, min(10.0, float(by_id.get(i, {}).get("score", 0)))), "overlay": bool(by_id.get(i, {}).get("overlay")),
+                         "flare": bool(by_id.get(i, {}).get("flare")), "airborne": bool(by_id.get(i, {}).get("airborne"))}
                         for i in range(1, len(frames) + 1)]
         except Exception as e:
             if "429" in str(e) or "503" in str(e):              # rate limit / busy: wait and ask the same model again
