@@ -1727,7 +1727,15 @@ def scenic_score(jpeg):
     exposure = 1.0 - min(1.0, abs(bright - 0.5) * 2.0)           # very dark or blown-out frames are not scenic
     hist = lum.histogram()
     glare = sum(hist[246:]) / float(64 * 64)                      # lens flare / sun in the lens: a patch of blown-out white
-    return round(max(0.0, 0.5 * sat + 0.3 * contrast + 0.2 * exposure - min(0.4, max(0.0, glare - 0.04) * 2.0)), 4)
+    core = sum(hist[250:]) / float(64 * 64)
+    total, median = 0, 0
+    for v, n in enumerate(hist):
+        total += n
+        if total >= 64 * 64 / 2:
+            median = v
+            break
+    sun = 0.25 if (0.003 <= core <= 0.06 and median < 170) else 0.0     # a small blown-out spot in an otherwise darker frame: the sun in the lens
+    return round(max(0.0, 0.5 * sat + 0.3 * contrast + 0.2 * exposure - min(0.4, max(0.0, glare - 0.04) * 2.0 + sun)), 4)
 
 
 def shakiness(frames):

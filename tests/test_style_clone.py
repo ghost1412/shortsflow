@@ -532,3 +532,8 @@ def test_flare_and_plane_window_shots_rank_last_when_rated():
     rows = {b"0": {"score": 9, "flare": True}, b"1": {"score": 8, "airborne": True}, b"2": {"score": 7}}
     chosen, others = tr.pick_scenic(cands, 1, lambda f, s, e: [frames[f]], rate=lambda fr: [rows[x] for x in fr], score=lambda j: 0.5)
     assert chosen[0]["file"] == "v2.mp4"
+
+
+def test_a_small_sun_spot_ranks_lower_than_the_same_sky_without_it():
+    from engine import trip_recap as tr
+    assert tr.scenic_score(_jpg((60, 140, 200), patch=6)) < tr.scenic_score(_jpg((60, 140, 200))) - 0.1
