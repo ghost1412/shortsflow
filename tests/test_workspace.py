@@ -89,3 +89,21 @@ def test_bootstrap_cleans_the_workspace_env(tmp_path, monkeypatch):
     workspace.bootstrap(str(home))
     text = (home / ".env").read_text()
     assert "# GEMINI_API_KEY=your_gemini_api_key_here" in text and "\nPEXELS_API_KEY=real" in text
+
+
+def test_the_report_names_no_folder_account_or_key(tmp_path, monkeypatch):
+    home = tmp_path / "Some User" / "shortsflow"
+    home.mkdir(parents=True)
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "Some User"))
+    monkeypatch.setenv("HOME", str(tmp_path / "Some User"))
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_secret_value_123")
+    monkeypatch.delenv("PEXELS_API_KEY", raising=False)
+    text = workspace.report(str(home))
+    assert text.startswith("ShortsFlow ") and "Python: " in text and "FFmpeg: " in text
+    assert "Some User" not in text and "gsk_secret_value_123" not in text
+    assert "<workspace>" in text                      # the hint for the missing Pexels key points at the .env file
+
+
+def test_scrub_replaces_both_slash_styles_and_ignores_case():
+    out = workspace.scrub(r"see C:\Users\Jo\sf\.env and c:/users/jo/sf/x and C:\Users\Jo\other", r"C:\Users\Jo\sf")
+    assert out.count("<workspace>") == 2

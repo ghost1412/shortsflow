@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting. The two things that help most are the `shortsflow doctor` output and, for installer problems, `install.log`.
+        Thanks for reporting. The two things that help most are the `shortsflow doctor --report` output and, for installer problems, `install.log`.
   - type: dropdown
     id: how
     attributes:
@@ -28,8 +28,8 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Output of `shortsflow doctor`
-      description: Open "ShortsFlow Terminal" (or any terminal) and run `shortsflow doctor`. It prints no keys.
+      label: Output of `shortsflow doctor --report`
+      description: Open "ShortsFlow Terminal" (or any terminal) and run `shortsflow doctor --report`. It prints no keys and no folder or account names.
       render: text
   - type: textarea
     id: log

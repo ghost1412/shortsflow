@@ -113,3 +113,45 @@ def doctor(home):
     checks.append(("PEXELS_API_KEY (stock footage)", real(os.getenv("PEXELS_API_KEY")) or bool(keys.get("PEXELS_API_KEY")),
                    f"only for idea-to-video modes: free key at pexels.com/api, add PEXELS_API_KEY to {os.path.join(home, '.env')}"))
     return checks
+
+
+def _tool_version(name, flag):
+    """First line of `<tool> <flag>`, "not found" when the tool is missing or does not answer."""
+    exe = shutil.which(name)
+    if not exe:
+        return "not found"
+    try:
+        out = subprocess.run([exe, flag], capture_output=True, text=True, timeout=10)
+        return ((out.stdout or out.stderr).strip().splitlines() or ["?"])[0][:80]
+    except (OSError, subprocess.SubprocessError):
+        return "found, did not answer"
+
+
+def scrub(text, home):
+    """`text` with the workspace folder and the user's home folder replaced by placeholders, so a pasted report names no account."""
+    for path, word in sorted(((home, "<workspace>"), (os.path.expanduser("~"), "<home>")), key=lambda x: -len(x[0])):
+        for form in {path, path.replace("\\", "/"), path.replace("/", "\\")}:
+            if form and form not in ("/", "\\"):
+                text = re.sub(re.escape(form), lambda m: word, text, flags=re.I)
+    return text
+
+
+def report(home):
+    """A block to paste into a bug report: versions and the doctor checks. No keys, no folder or account names."""
+    import platform
+    import sys
+    from shortsflow import __version__
+    lines = [f"ShortsFlow {__version__} ({'checkout' if is_checkout() else 'installed package'})",
+             f"OS: {platform.system()} {platform.release()} ({platform.machine()})",
+             f"Python: {platform.python_version()}" + (" (packaged app)" if getattr(sys, "frozen", False) else ""),
+             f"FFmpeg: {_tool_version('ffmpeg', '-version')}",
+             f"Node: {_tool_version('node', '--version')}"]
+    try:
+        import torch
+        lines.append(f"Torch: {torch.__version__}, GPU: {'yes' if torch.cuda.is_available() else 'no'}")
+    except Exception:
+        lines.append("Torch: not installed")
+    for label, ok, hint in doctor(home):
+        lines.append(f"{'OK ' if ok else 'FIX'}  {label}" + ("" if ok else f"  ->  {hint}"))
+    return scrub("\n".join(lines), home)
+

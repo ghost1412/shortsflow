@@ -2,6 +2,7 @@
 
     shortsflow init                     create the workspace, install Remotion
     shortsflow doctor                   check FFmpeg / Node / API keys
+    shortsflow doctor --report          the same as a block to paste into a bug report (no keys, no folder names)
     shortsflow clip VIDEO_OR_URL        cut a long video into vertical shorts (no API key needed; --count N, --captions)
     shortsflow clip A.mp4 B.mp4 | FOLDER   several videos in turn, with a summary table; --watch FOLDER clips new files as they appear
     shortsflow webui [--open]           browser app: paste a link or upload a video, press one button (needs `pip install "shortsflow[webui]"`)
@@ -131,6 +132,9 @@ def main(argv=None):
     if cmd == "init":
         return _init(home)
     if cmd == "doctor":
+        if "--report" in argv[1:]:
+            print(workspace.report(home))       # paste-ready for a bug report: no keys, no folder or account names
+            sys.exit(0)
         sys.exit(_doctor(home))
     if cmd == "webui":
         try:

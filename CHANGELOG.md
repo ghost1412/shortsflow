@@ -4,6 +4,12 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- `shortsflow doctor --report` prints a block to paste into a bug report: versions (ShortsFlow, OS, Python, FFmpeg, Node, GPU) and the doctor checks, with no keys and no folder or account names.
+- A clip run saves every moment that was in the running, best first (`candidates.json` in the session folder). With `--gold`, `scripts/clip_benchmark.py` adds recall@5 and recall@8.
+- `scripts/picker_bench.py`: an offline benchmark of the moment picker on the transcripts of the four public test videos (no video, no AI, seconds); `--ablate` shows what each picking rule is worth.
+- Experimental, off by default: `SHORTSFLOW_SENTENCE_WINDOWS=1` picks no-key shorts as sentence windows (`engine/candidates.py`). It does not beat the current picker on the benchmark yet.
+- Python 3.10 is now tested in CI; `requirements-full.txt` allows Gradio 6 like `pyproject.toml`; runs started by the MCP server and the API open no console window on Windows.
+
 ## 0.8.1 (2026-11-16)
 
 - Recap made like a reference (`--recap_like`, still experimental): copies a reference's colour look, widescreen shape and landscape clips, the film-style look (subtitle text, hook, end title), its shot length and number of places, and a headline held over the whole recap when the reference does that. No black dip on fast cuts. Scenery ratings are remembered by picture, so the same footage is never rated twice.
