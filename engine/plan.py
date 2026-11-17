@@ -5,16 +5,41 @@ import os
 PLAN_FILE = "plan.json"
 
 
-def write_plan(session_dir, highlights, source_video):
-    """Write plan.json: one entry per moment (start, end, title, score, reason). Returns the path."""
+def spare_moments(session_dir, highlights, n=3):
+    """Up to `n` runner-up moments for the review step: the next best of the run's ranked candidates (candidates.json) that overlap
+    neither a chosen moment nor each other. [] when the run saved no candidates."""
+    try:
+        with open(os.path.join(session_dir, "candidates.json"), encoding="utf-8") as f:
+            rows = json.load(f)
+    except (OSError, ValueError):
+        return []
+    taken = [(float(h["start"]), float(h["end"])) for h in highlights]
+    out = []
+    for row in rows if isinstance(rows, list) else []:
+        try:
+            start, end = float(row["start"]), float(row["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if len(out) < n and end > start and all(end <= a or start >= b for a, b in taken):
+            out.append(row)
+            taken.append((start, end))
+    return out
+
+
+def write_plan(session_dir, highlights, source_video, spares=()):
+    """Write plan.json: one entry per moment (start, end, title, score, reason). `spares` (runner-up moments) follow the chosen ones
+    and carry "spare": true: the review step shows them unticked, and they are not rendered unless chosen. Returns the path."""
     moments = []
-    for i, h in enumerate(highlights, start=1):
+    for i, h in enumerate(list(highlights) + list(spares), start=1):
+        spare = i > len(highlights)
         moments.append({
             "index": i, "start": round(float(h["start"]), 2), "end": round(float(h["end"]), 2),
-            "title": str(h.get("title") or h.get("hook") or f"Moment {i}")[:120],
+            "title": str(h.get("title") or h.get("hook") or (f"Runner-up {i - len(highlights)}" if spare else f"Moment {i}"))[:120],
             "score": h.get("final_score", h.get("viral_score")),
             "reason": (str(h.get("warning") or "") + (" " if h.get("warning") and h.get("reason") else "") + str(h.get("reason") or ""))[:300],
         })
+        if spare:
+            moments[-1]["spare"] = True
     path = os.path.join(session_dir, PLAN_FILE)
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"source_video": source_video, "moments": moments}, f, ensure_ascii=False, indent=1)

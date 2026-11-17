@@ -793,7 +793,9 @@ def _stream_clip(cmd, results, long_form, minutes, find, plan_only=False):
         from engine.plan import read_plan
         plan = read_plan(os.path.dirname(results))
         if plan and plan["moments"]:
-            yield (f"📝 Found {len(plan['moments'])} moment(s). Nothing is rendered yet: check and adjust them in the **Review the moments** "
+            picked = sum(not m.get("spare") for m in plan["moments"])
+            yield (f"📝 Found {picked} moment(s)" + (f" and {len(plan['moments']) - picked} runner-up(s)" if picked < len(plan["moments"]) else "")
+                   + ". Nothing is rendered yet: check and adjust them in the **Review the moments** "
                    "section below, then press **Render these moments**."), log, []
         else:
             yield "❌ No moments were found. " + (_why(log) or "Open 'Technical details' below for the reason."), log, []
@@ -1389,7 +1391,9 @@ def build_ui():
                     if not plan or not plan.get("moments"):
                         return
                     from shortsflow import timeline as _tl
-                    gr.Markdown(f"### Review the moments: {len(plan['moments'])} found\nNothing is rendered yet. Watch each one, adjust the start and end, untick a moment to drop it, then render."
+                    n_spare = sum(bool(m.get("spare")) for m in plan["moments"])
+                    gr.Markdown(f"### Review the moments: {len(plan['moments']) - n_spare} found\nNothing is rendered yet. Watch each one, adjust the start and end, untick a moment to drop it, then render."
+                                + (f" Below them are {n_spare} runner-up(s) the tool ranked next: tick one to render it too." if n_spare else "")
                                 + (f"\n\n**Picture:** {plan['framing_note']}" if plan.get("framing_note") else ""))
                     moms = plan["moments"]
                     total = plan.get("total") or 0.0
@@ -1398,7 +1402,8 @@ def build_ui():
                         others = [(o["start"], o["end"]) for o in moms if o["index"] != m["index"]]
                         with gr.Group():
                             score = f" · {int(m['score'])}/100" if isinstance(m.get("score"), (int, float)) else ""
-                            keep = gr.Checkbox(value=True, label=f"{m['title']}{score}", interactive=True)
+                            keep = gr.Checkbox(value=not m.get("spare"), interactive=True,      # a runner-up is offered, not chosen
+                                               label=(f"Runner-up (tick to render it too): {m['title']}{score}" if m.get("spare") else f"{m['title']}{score}"))
                             if m.get("reason"):
                                 gr.Markdown(f"_{m['reason']}_")
                             with gr.Row(equal_height=False):

@@ -4,6 +4,7 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Review step: below the chosen moments, up to three runner-ups the tool ranked next are shown unticked; tick one to render it too. `--plan_only` writes them to `plan.json` with `"spare": true`.
 - `shortsflow doctor --report` prints a block to paste into a bug report: versions (ShortsFlow, OS, Python, FFmpeg, Node, GPU) and the doctor checks, with no keys and no folder or account names.
 - A clip run saves every moment that was in the running, best first (`candidates.json` in the session folder). With `--gold`, `scripts/clip_benchmark.py` adds recall@5 and recall@8.
 - `scripts/picker_bench.py`: an offline benchmark of the moment picker on the transcripts of the four public test videos (no video, no AI, seconds); `--ablate` shows what each picking rule is worth.

@@ -214,9 +214,12 @@ def run(args, target_bitrate, target_preset):
     print_clip_score_table(highlights)
     
     if getattr(args, "plan_only", False):
-        from engine.plan import write_plan
-        path = write_plan(session_dir, highlights, args.source_video)
-        print(f"[Log] 📝 Plan written to {path}: {len(highlights)} moment(s). Nothing was rendered (--plan_only).")
+        from engine.plan import write_plan, spare_moments
+        by_tool = args.extract_mode == "shorts" and not getattr(args, "moments", None)          # a reel, or moments given by hand, has no runners-up
+        spares = spare_moments(session_dir, highlights) if by_tool else []
+        path = write_plan(session_dir, highlights, args.source_video, spares=spares)
+        print(f"[Log] 📝 Plan written to {path}: {len(highlights)} moment(s)" + (f" and {len(spares)} runner-up(s)" if spares else "")
+              + ". Nothing was rendered (--plan_only).")
         sys.exit(0)
 
     # 🟢 Handle Preview Mode

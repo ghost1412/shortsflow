@@ -176,3 +176,39 @@ def test_reviewed_plan_keeps_title_score_and_warning(tmp_path):
     assert (a["title"], a["final_score"], a["reason"]) == ("Boss", 77, "Looks like filmed footage. Big fight")
     assert b["reason"] == "Chosen by you" and "title" not in b
     assert apply_carry([{"start": 10.0, "end": 40.0, "reason": "Chosen by you"}], str(tmp_path / "none"))[0]["reason"] == "Chosen by you"
+
+
+def test_runner_up_moments_come_from_the_ranked_candidates_and_overlap_nothing(tmp_path):
+    import json
+    chosen = [{"start": 10.0, "end": 40.0, "title": "A"}, {"start": 100.0, "end": 130.0, "title": "B"}]
+    assert plan.spare_moments(str(tmp_path), chosen) == []                          # a run without candidates.json has none
+    pool = [dict(c, rank=i + 1) for i, c in enumerate(chosen)] + [
+        {"start": 30.0, "end": 60.0, "final_score": 70},      # overlaps the first pick
+        {"start": 200.0, "end": 230.0, "final_score": 60},
+        {"start": 220.0, "end": 250.0, "final_score": 50},    # overlaps the runner-up before it
+        {"start": 300.0, "end": 330.0, "final_score": 40}, {"start": 400.0, "end": 430.0, "final_score": 30},
+        {"start": 500.0, "end": 530.0, "final_score": 20}, {"start": "x"}]
+    (tmp_path / "candidates.json").write_text(json.dumps(pool), encoding="utf-8")
+    spares = plan.spare_moments(str(tmp_path), chosen)
+    assert [s["start"] for s in spares] == [200.0, 300.0, 400.0]
+    plan.write_plan(str(tmp_path), chosen, "v.mp4", spares=spares)
+    moments = plan.read_plan(str(tmp_path))["moments"]
+    assert [m.get("spare", False) for m in moments] == [False, False, True, True, True]
+    assert [m["index"] for m in moments] == [1, 2, 3, 4, 5] and moments[2]["title"] == "Runner-up 1" and moments[2]["score"] == 60
+
+
+def test_the_review_renders_only_ticked_moments_so_an_unticked_runner_up_is_left_out(tmp_path, monkeypatch):
+    import json
+    import pytest
+    pytest.importorskip("gradio")
+    import webui
+    chosen = [{"start": 10.0, "end": 40.0, "title": "A"}]
+    plan.write_plan(str(tmp_path), chosen, "v.mp4", spares=[{"start": 200.0, "end": 230.0}])
+    (tmp_path / "command.json").write_text(json.dumps({"cmd": ["python", "main.py", "--plan_only"]}), encoding="utf-8")
+    seen = {}
+    monkeypatch.setattr(webui, "_stream_clip", lambda cmd, *a: seen.update(cmd=cmd) or iter(()))
+    monkeypatch.setattr(webui, "save_command", lambda session, cmd: None)
+    list(webui.render_plan(str(tmp_path), True, False, 10.0, 200.0, 40.0, 230.0, ""))        # keeps, starts, ends, own moments
+    assert seen["cmd"][seen["cmd"].index("--moments") + 1] == "10.00-40.00"
+    list(webui.render_plan(str(tmp_path), True, True, 10.0, 200.0, 40.0, 230.0, ""))
+    assert seen["cmd"][seen["cmd"].index("--moments") + 1] == "10.00-40.00, 200.00-230.00"
