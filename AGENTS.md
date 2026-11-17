@@ -143,6 +143,6 @@ python gui_app.py
 4. **Privacy of the optional cloud helpers**:
    * Everything runs locally by default. Only these leave the PC, and each is optional: Gemini/Groq/HF LLM calls (`--llm_provider`), Gemini picture descriptions (`--visual_context` with a key), OpenStreetMap place names (trip recap; off with `--recap_no_geocode`), Google Drive upload (only when asked). Say so in any docs or UI text you add about them.
    * Personal footage, its recaps and any user-pasted links (Drive, Photos) never go into the README, docs, tests or the CHANGELOG; use made-up ids in tests.
-5. **Task Board & Parallel Work**:
-   * Open work, workstream ownership, hot-spot files and verification steps live in **[ROADMAP.md](ROADMAP.md)**. Claim a task there before starting.
+5. **Verifying Work**:
+   * Hot-spot files, verification steps and known issues live in **[ROADMAP.md](ROADMAP.md)**.
    * Verify rendering without an LLM key: `python scripts/offline_facts_render.py`.

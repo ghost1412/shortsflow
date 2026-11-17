@@ -81,7 +81,7 @@ game moments, and 30+ idea-to-video formats. They are documented in **[docs/FEAT
 ## Help and contributing
 
 - Something wrong? [Open an issue](https://github.com/ghost1412/shortsflow/issues) with `shortsflow doctor` output.
-- Roadmap and open tasks: [ROADMAP.md](ROADMAP.md). Tests: `python -m pytest` (offline).
+- Status, known issues and how to verify a change: [ROADMAP.md](ROADMAP.md). Tests: `python -m pytest` (offline).
 - Sample footage in the demos is public domain or Creative Commons and credited where used.
 
 ## License

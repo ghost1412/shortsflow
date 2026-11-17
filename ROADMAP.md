@@ -1,35 +1,26 @@
-# ShortsFlow Roadmap & Agent Hand-off
+# ShortsFlow: status and how to verify changes
 
-Living task board for Claude Code, Cursor, Copilot and other agents (and humans) working on this repo,
-alone or in parallel. Read [AGENTS.md](AGENTS.md) first for architecture and commands.
+For agents and people working on this repo. Read [AGENTS.md](AGENTS.md) first for architecture and commands.
+What changed in each release is in [CHANGELOG.md](CHANGELOG.md); measured clip quality is in [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
-**Goals**
-1. Grow GitHub stars: make the project easy to try and clearly better than paid clippers.
-2. Keep the production channel ([@spottheliee](https://www.youtube.com/@spottheliee)) healthy. It is
-   fed by `.github/workflows/daily_generate.yml` every 4 hours (6 videos/day) in `FACTS` ("spot the lie") mode.
+_Last updated: 2026-11-17_
 
-_Last updated: 2026-10-29_
+- **Never** push generated media, `.env`, `token*.json` or `client_secrets*.json`.
+- `main` feeds a scheduled channel (`.github/workflows/daily_generate.yml`): anything that changes the scheduled output must be
+  render-checked first (see *Verifying changes*).
 
----
-
-## How to work on this board
-
-- **Claim a task** by putting your agent/branch name in its `Owner` cell in the same commit as your first change.
-  Skip tasks that are already claimed.
-- **One workstream = one branch** (`ws/<letter>-<slug>`, e.g. `ws/b-rest-api`). Keep to the files listed for your
-  workstream; if you must touch a shared file (see below), keep the change small and mention it in the PR.
-- **When done**: tick the box, add a one-line note with the commit/PR, and move anything you discovered into
-  *Known issues* or a new task.
-- **Never** push generated media, `.env`, `token*.json` or `client_secrets*.json`. `main` feeds a live channel:
-  anything that changes the scheduled FACTS output must be render-checked first (see *Verifying changes*).
-
-### Shared hot-spot files (coordinate before big edits)
+### Hot-spot files (keep edits small, one change at a time)
 | File | Why it's risky |
 |---|---|
-| `engine/modes/generate.py` (~1.3k lines) | The idea-to-video path the live channel runs: per-mode script, backgrounds, Remotion call, metadata, upload |
-| `engine/script_gen.py` | All LLM prompts and the provider fallback chain (Gemini → Ollama → HuggingFace) |
-| `remotion-video/src/ShortFlow.tsx` | Single 1.6k-line composition used by every Remotion mode |
-| `.github/workflows/daily_generate.yml` | Runs the live channel |
+| `engine/video_gen.py` (~3.6k lines) | Cutting, cropping and rendering of every clip; `extract_segments` is one long function |
+| `engine/modes/clip_extract.py` | The whole clip path in one `run()` |
+| `engine/analysis.py` | Transcription and moment picking; a change here moves the benchmark numbers |
+| `engine/modes/generate.py` (~1.3k lines) | The idea-to-video path the scheduled channel runs |
+| `engine/script_gen.py` (~2.7k lines) | All LLM prompts and the provider fallback chain (Gemini → Ollama → HuggingFace) |
+| `engine/trip_recap.py` (~2.6k lines) | The recap modes |
+| `webui.py` (~2k lines) | The browser app; several tests depend on the order of its form values |
+| `remotion-video/src/ShortFlow.tsx` (~2.3k lines) | Single composition used by every Remotion mode |
+| `.github/workflows/daily_generate.yml` | Runs the scheduled channel |
 
 ---
 
@@ -37,10 +28,12 @@ _Last updated: 2026-10-29_
 
 | What | Command |
 |---|---|
-| Tests | `python -m pytest` (offline, ~1 s) |
+| Tests | `python -m pytest` (offline, a few minutes) |
 | Python syntax | `python -m py_compile main.py engine/*.py engine/modes/*.py webui.py mcp_server.py` |
 | Remotion types | `cd remotion-video && npx tsc --noEmit -p .` (must be 0 errors - CI enforces it) |
 | CI | `tests.yml` (pytest + tsc + lint, every push/PR), `e2e.yml` (real FACTS render) |
+| Clip picking | `python scripts/picker_bench.py` (offline, seconds); full measure: the Clip Benchmark workflow, see [docs/BENCHMARKS.md](docs/BENCHMARKS.md) |
+| Clip quality of a run | `python scripts/clip_benchmark.py <session> --picture` |
 | Full FACTS render **without an LLM key** | `python scripts/offline_facts_render.py` → `sessions/offline_test/*.mp4` (needs `PEXELS_API_KEY`, Node, FFmpeg) |
 | Real FACTS render | `python main.py --mode FACTS --use_remotion --skip-upload` (needs an LLM key) |
 | Inspect frames | `ffmpeg -ss 9 -i <video>.mp4 -frames:v 1 frame.jpg` |
@@ -52,80 +45,20 @@ _Last updated: 2026-10-29_
 
 ## Recently done
 
-- [x] Browser WebUI (`webui.py`), Colab notebook, Dockerfile + `.dockerignore`, `requirements-full.txt`, `SKILL.md` (af2988e)
-- [x] GHCR image publishing workflow `docker-publish.yml` (603442d)
-- [x] FACTS quality: strict 1-lie validator, shuffled lie position, fresh hooks, per-fact stock-footage queries,
-      background cuts synced to "Number N", `FACT N / 3` badge, spoiler in description, ElevenLabs return bug,
-      Pexels resolution pick, clip looping, caption outline (375f0de)
-- [x] Scheduled runs default to `FACTS` (repo variable `SCHEDULED_MODE` overrides); CI passes Gemini/Groq/OpenAI/
-      DeepSeek/Anthropic/OpenRouter keys; failed generations exit 1; FACTS limited to safe categories;
-      unknown categories no longer map to random kids/intimacy sub-topics
+See [CHANGELOG.md](CHANGELOG.md) for the full list. Highlights since the first public release:
 
----
-
-## Parallel workstreams
-
-Workstreams A–F touch mostly separate files and can run at the same time.
-
-### A. Channel reliability & quality (owner of `daily_generate.yml`, FACTS path in `script_gen.py`)
-| | Task | Owner | Notes |
-|---|---|---|---|
-| [x] | A1. Topic memory: the last 40 hooks/facts (`facts_seen` in `~/.cache/shortsflow/puzzle_history.json`, kept between daily runs by the workflow cache) go into the FACTS prompt as "do not repeat" | Claude | Reused-content risk on YouTube |
-| [x] | A2. Second-pass fact check (`engine/fact_check.py`): a second call judges every claim; a script it disputes is written again, a disputed sub-topic is dropped | Claude | Credibility of a facts channel |
-| [ ] | A3. Pin the answer as the first comment after upload (YouTube `commentThreads.insert`) instead of only in the description | | `engine/social_gen.py` uploader |
-| [ ] | A4. Analytics loop: pull views/retention per video weekly, weight categories/hook styles that perform | | `youtube_analytics.json` is stale (March) |
-| [ ] | A5. Use the thumbnail badge generator for FACTS uploads | | |
-| [ ] | A6. Badge timing: show `FACT 1 / 3` only from the first "Number 1", not during the hook | | `ShortFlow.tsx` `BackgroundSegment` + `main.py` `find_fact_start_times` |
-
-### B. Automation API (new files under `api/`)
-| | Task | Owner | Notes |
-|---|---|---|---|
-| [x] | B1. FastAPI server with OpenAPI docs: `POST /v1/shorts`, `POST /v1/clips`, `GET /v1/jobs/{id}`, `GET /v1/jobs/{id}/files` | | Reuse the subprocess pattern from `webui.py` |
-| [x] | B2. Completion webhooks with optional HMAC signature | | |
-| [x] | B3. API keys via env, job queue with concurrency limit | | |
-| [x] | B4. `examples/n8n/` workflow JSON + README section | | Big star driver for openshorts / short-video-maker |
-| [x] | B5. Expose the API from the Docker image (second port) | | Touches `Dockerfile`, `docker-compose.yml` |
-
-### C. Clipping UX (`webui.py`, `engine/analysis.py`)
-| | Task | Owner | Notes |
-|---|---|---|---|
-| [x] | C1. Show virality score + hook title per clip in the WebUI (scores already exist; use `--output_json`) | | Opus Clip's headline feature |
-| [x] | C2. `--layout single/split/active`; active = speaker switching (issue #27) in `engine/speaker_focus.py` | Claude | YuNet face detector (bundled, Haar fallback); who-is-speaking from voice pitch when the two voices differ (92 % of speaking time right on a real interview vs 45 % for mouth motion), mouth motion x audio otherwise (weak on real footage). Same-gender pairs are unverified |
-| [ ] | C4. Active speaker: try MediaPipe Face Mesh lip landmarks instead of Haar + frame difference (more accurate, needs Python <= 3.12) | | Analysis takes ~0.8x clip length at 1280 px |
-| [x] | C3. In-browser preview + re-render a single clip with a different caption style | | |
-
-### D. Distribution (`README.md`, new `spaces/`, packaging)
-| | Task | Owner | Notes |
-|---|---|---|---|
-| [~] | D1. Hugging Face Space running `webui.py` (CPU): files ready in `space/` (README front matter, app.py, requirements, packages); not created or pushed yet | Claude | Needs the owner to create the Space and push `space/` |
-| [ ] | D2. WebUI demo GIF at the top of the README | | |
-| [x] | D3. `pip install shortsflow`: move `main.py` + `engine/` into a package, resolve asset paths from the package, console script `shortsflow` | | Large; conflicts with anything touching `main.py` - schedule alone |
-| [ ] | D4. Submit MCP server to awesome-mcp-servers / Smithery / Glama | | Human task |
-
-### E. Voices & visuals (`engine/voice_gen.py`, `ShortFlow.tsx`)
-| | Task | Owner | Notes |
-|---|---|---|---|
-| [x] | E1. Kokoro (local, free) TTS provider with word timestamps | | |
-| [ ] | E2. Fish Audio TTS provider | | |
-| [x] | E3. 0 tsc errors: `Html5Video` with `loop` for split/avatar clips | Claude | |
-| [x] | E4. Bundled OFL caption font (Anton) via `staticFile`; Impact stays as fallback | Claude | |
-
-### F. Code health (any)
-| | Task | Owner | Notes |
-|---|---|---|---|
-| [x] | F1. Bounded dependency versions in `requirements*.txt` | Claude | Lower bound = known-good, cap below next major; yt-dlp uncapped |
-| [x] | F2. Pre-flight in `daily_generate.yml` (imports + pytest) and `e2e.yml`: real FACTS render on engine changes + weekly, output checked with ffprobe | Claude | Needs `PEXELS_API_KEY` secret (already used by the channel) |
-| [~] | F3. `tests/` pytest suite (31 tests) + `tests.yml` on 3.11/3.12 + Remotion tsc | Claude | Next: tests for social_gen metadata, remotion_renderer props, clip scoring |
-| [x] | F4. Split `main.py` (2.4k -> 270 lines: args + dispatch). Idea-to-video path in `engine/modes/generate.py`, standalone pipelines in `engine/modes/`, shared helpers in `engine/pipeline.py` | Claude | Next: break `generate.run` per mode (it still has per-mode if/elif chains and `'x' in locals()` checks) |
-| [ ] | F5. Merge `.env.example` / `env.example` (only `env.example` is tracked) | | |
+- Browser app with a review step (the tool proposes moments, you keep or drop them), dubbing, recaps and photo reels
+- `pip install shortsflow`, Windows installer, `install.sh`, Docker image, MCP server, REST API with webhooks
+- Active-speaker layouts, face-safe captions, auto-enhance, word-level cuts after a render
+- Clip benchmark on public videos with published weak spots, gold sets and an offline picker benchmark
+- Scheduled channel: topic memory, second-pass fact check, weighted mode mix
 
 ---
 
 ## Known issues
 
+- **Picking is the weakest number**: see "Weak spots, honestly" in [docs/BENCHMARKS.md](docs/BENCHMARKS.md). The gold sets are model-labelled.
+- The bundled caption fonts are not loaded by the Remotion bundle; captions fall back to system fonts.
 - Remotion props are not schema-validated at render time; `null` is passed for optional fields and works today.
-- `get_video_duration` in `main.py` returns 10.0 on ffprobe failure, which can mis-size backgrounds silently.
-
-## Open decisions (ask the repo owner)
-
-- ~~Should scheduled runs ever use modes other than FACTS?~~ Yes: weighted mix via `scripts/pick_scheduled_mode.py` (repo variable `SCHEDULED_MODE` overrides; 2026-11-07).
+- `get_video_duration` in `engine/modes/generate.py` returns 10.0 on ffprobe failure, which can mis-size backgrounds silently.
+- The command line has many flags and no grouping in `--help`.
