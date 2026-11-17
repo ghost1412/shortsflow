@@ -234,3 +234,33 @@ def test_gold_scores_a_short_clip_inside_a_long_moment_counts():
     assert q.gold_scores([{"start": 929, "end": 961}], [[905, 936]]) == {"recall": 0.0, "precision": 0.0}
     # a long clip around a short moment counts when it holds at least half of that moment
     assert q.gold_scores([{"start": 0, "end": 90}], [[10, 40]]) == {"recall": 1.0, "precision": 1.0}
+
+
+def test_recall_at_k_counts_the_gold_moments_within_reach_of_the_best_k():
+    pool = [{"start": 100, "end": 130}, {"start": 0, "end": 30}, {"start": 200, "end": 230}]
+    gold = [[0, 30], [200, 230]]
+    assert q.recall_at(pool, gold, 1) == 0.0
+    assert q.recall_at(pool, gold, 2) == 0.5
+    assert q.recall_at(pool, gold, 8) == 1.0
+    assert q.recall_at([], gold, 5) is None
+
+
+def test_report_adds_recall_at_5_and_8_when_the_run_saved_its_candidates(tmp_path):
+    (tmp_path / "transcript.json").write_text(json.dumps({"segments": SEGS}), encoding="utf-8")
+    (tmp_path / "results.json").write_text(json.dumps({"source_video": "talk.mp4", "settings": {"user_context": ""},
+                                                       "clips": [{"start": 1, "end": 19, "title": "x"}]}), encoding="utf-8")
+    gold = {"talk.mp4": [[1, 19], [300, 330]]}
+    assert "recall@5" not in q.report(str(tmp_path), gold=gold)              # older runs have no candidates.json
+    pool = [{"start": 1, "end": 19, "rank": 1}] + [{"start": 40 * i, "end": 40 * i + 20, "rank": i + 1} for i in range(1, 6)] \
+        + [{"start": 300, "end": 330, "rank": 7}]
+    (tmp_path / "candidates.json").write_text(json.dumps(pool), encoding="utf-8")
+    r = q.report(str(tmp_path), gold=gold)
+    assert (r["recall@5"], r["recall@8"]) == (0.5, 1.0)
+
+
+def test_write_candidates_numbers_the_pool_best_first_and_never_raises(tmp_path):
+    from engine.analysis import write_candidates
+    path = tmp_path / "candidates.json"
+    write_candidates(str(path), [{"start": 5, "end": 30, "final_score": 80}, {"start": 50, "end": 80, "final_score": 60}])
+    assert [(r["rank"], r["start"]) for r in json.loads(path.read_text(encoding="utf-8"))] == [(1, 5), (2, 50)]
+    write_candidates(str(tmp_path / "no_such_folder" / "c.json"), [])

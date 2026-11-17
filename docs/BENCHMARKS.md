@@ -47,6 +47,23 @@ All values are shares of clips from 0 to 1 unless noted; higher is better except
 - **No comparison with Opus Clip yet.** These numbers measure ShortsFlow against its own rules, several of which the picker uses too. They do not show that the clips are better than a competitor's. A side-by-side on public footage is the next thing to publish; recall and precision against a set of "best moments" (`--gold`) are in the next item.
 - **One run per video, Whisper `base` on CPU.** The `medium` or `large` models are more accurate (and much faster on a GPU). Results vary a little between runs because the picker is not seeded.
 
+## Picking beyond the final clips: recall@k
+
+A run now saves every moment that was in the running, best first, as `candidates.json` in its session folder. With `--gold`,
+`scripts/clip_benchmark.py` adds **recall@5** and **recall@8**: the share of gold moments among the best 5 and best 8 candidates.
+Recall@8 above recall@5 means the picker had the moment within reach and ranked it too low; equal values mean it never saw it.
+
+For quick work on the picking rules there is an offline benchmark on the transcripts of the four public videos
+(`docs/gold/transcripts/`): no video, no AI, no network, under a minute. It leaves out the loudness and motion signals, so the
+workflow above stays the full measure.
+
+```bash
+python scripts/picker_bench.py                  # against the model-labelled gold sets
+python scripts/picker_bench.py --suffix _human  # against docs/gold/<name>_human.json, once a person has labelled them
+```
+
+Transcript-only baseline, no AI key (2026-11-17, model-labelled gold): mean recall 0.12, precision 0.25, recall@8 0.20.
+
 ## Reproduce
 
 ```bash

@@ -291,6 +291,22 @@ def gold_scores(clips, gold, min_cover=0.5, rule="shorter"):
     return {"recall": round(found / len(gs), 2), "precision": round(right / len(cs), 2)}
 
 
+def recall_at(candidates, gold, k, min_cover=0.5, rule="shorter"):
+    """Recall when the best `k` candidates are kept (`candidates` best first, as candidates.json stores them): the share of gold
+    moments the picker had within reach. None without candidates or gold."""
+    return gold_scores(list(candidates or [])[:max(0, int(k))], gold, min_cover=min_cover, rule=rule)["recall"]
+
+
+def load_candidates(session_dir):
+    """The run's ranked candidate list (candidates.json), [] when the run has none (older runs, or moments given by hand)."""
+    try:
+        with open(os.path.join(session_dir, "candidates.json"), encoding="utf-8") as f:
+            rows = json.load(f)
+    except (OSError, ValueError):
+        return []
+    return [r for r in rows if isinstance(r, dict) and "start" in r and "end" in r] if isinstance(rows, list) else []
+
+
 def video_key(results, session_dir):
     """The name a gold file uses for this run: the source video's file name, else the session folder name."""
     src = str((results or {}).get("source_video") or "")
@@ -334,6 +350,10 @@ def report(session_dir, gold=None, picture=False):
             print(f"warning: gold file has no entry for '{out['video']}' (keys: {', '.join(sorted(gold))}); no recall/precision for this run",
                   file=sys.stderr)
         out.update(gold_scores(res.get("clips", []), gold.get(out["video"])))
+        pool = load_candidates(session_dir)
+        if pool:
+            for k in (5, 8):
+                out[f"recall@{k}"] = recall_at(pool, gold.get(out["video"]), k)
     if reel:
         clips = [c for c in res.get("clips", []) if "start" in c and "end" in c]
         out["reel_s"] = round(sum(float(c["end"]) - float(c["start"]) for c in clips), 1)
