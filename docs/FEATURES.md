@@ -272,7 +272,8 @@ python main.py --mode CASE --prompt "The topic" --sources https://example.com/ar
 | `--case_template` | `case` (what happened / how / impact / what could change), `postmortem`, `history`, `explainer`, or the path of a JSON file of `{id, title, question, scene}` sections |
 | `--case_theme` | The whole look, not only the colours: `dark` (cyber network, default), `clean`, `warm`, `neon` (synthwave grid), `newsroom` (red and white, striped), `blueprint` (technical drawing, monospace), `terminal` (green phosphor, scanlines), `editorial` (serif on paper), `midnight` (calm aurora). Each sets the colours, the animated background, the card style and the type. |
 | `--case_formats` | `16:9,9:16` by default (YouTube and LinkedIn, Reels and Shorts) |
-| `--case_no_manim` / `--case_no_footage` | Skip the Manim animation / the stock footage (faster) |
+| `--case_background` | What is behind the scenes: `footage` (stock video found from the topic, needs `PEXELS_API_KEY`; default), `images` (stock photos), `none` (only the look's own animated background), or the path of your own image or video, used for every section |
+| `--case_no_manim` / `--case_no_footage` | Skip the Manim animation / the stock pictures (faster) |
 
 What is made: a script checked against the sources (`script.json`), one narration per section (ElevenLabs when `ELEVENLABS_API_KEY` is set, else the general
 voice step), drawn scenes that light up as each item is spoken, captions, synthesised light music and sound effects (nothing downloaded, nothing licensed),

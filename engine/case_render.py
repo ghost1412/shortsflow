@@ -171,7 +171,7 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
             sections[-1]["clipRate"] = clip["rate"]
         sections[-1]["beats"] = beats_for(ws, end - start)
         if foot:
-            sections[-1]["footage"] = [{"src": f["path"], "seconds": f["seconds"]} for f in foot]
+            sections[-1]["footage"] = [{"src": f["path"], "seconds": f.get("seconds") or 10.0, "kind": f.get("kind", "video")} for f in foot]
         words += [{"word": w["word"], "start": round(w["start"] + start, 3), "end": round(w["end"] + start, 3)} for w in ws]
     props = {"title": script["title"], "theme": theme, "introSeconds": intro, "outroSeconds": outro, "verified": bool(script.get("verified")),
              "sources": [s["ref"] for s in script.get("sources", [])], "captionsOff": not captions, "sections": sections, "words": words,
@@ -336,6 +336,60 @@ def attach_footage(script, session_dir, aspect="16:9", fetch=None, cache_dir=Non
     return out
 
 
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+VIDEO_EXTS = (".mp4", ".mov", ".webm", ".mkv", ".m4v")
+
+
+def attach_images(script, session_dir, aspect="16:9", fetch=None, cache_dir=None):
+    """[None | [{"path", "kind": "image"}]] per section: a stock photo for each of the section's `footage` phrases, one per beat."""
+    from engine import case_footage
+    fetch = fetch or case_footage.fetch_image
+    cache_dir = cache_dir or os.path.join(os.path.expanduser("~"), ".shortsflow", "photos")
+    orientation = "portrait" if aspect == "9:16" else "landscape"
+    out = []
+    for sec in script["sections"]:
+        phrases = sec.get("footage") or []
+        phrases = [phrases] if isinstance(phrases, str) else phrases
+        found = []
+        for phrase in phrases:
+            got = fetch(phrase, cache_dir, orientation) if phrase else None
+            if got and all(got != f["path"] for f in found):
+                found.append({"path": got, "kind": "image"})
+        out.append(found or None)
+    return out
+
+
+def user_background(script, path, probe=None):
+    """The same background for every section: the user's own image or video. Returns the per-section list, or None when `path` is not
+    a readable image or video file."""
+    if not path or not os.path.isfile(path):
+        return None
+    ext = os.path.splitext(path)[1].lower()
+    if ext in IMAGE_EXTS:
+        item = {"path": path, "kind": "image"}
+    elif ext in VIDEO_EXTS:
+        item = {"path": path, "seconds": float((probe or _duration)(path) or 10.0), "kind": "video"}
+    else:
+        return None
+    return [[dict(item)] for _ in script["sections"]]
+
+
+def backgrounds_for(script, session_dir, aspect, choice="footage", has_pexels=True):
+    """Per-section backgrounds for the `--case_background` choice: "footage" (stock video, needs the Pexels key), "images" (stock photos,
+    needs the key), "none" (the style's own animated background only), or the path of the user's own image or video."""
+    choice = (choice or "footage").strip()
+    if choice == "none":
+        return None
+    if choice == "footage":
+        return attach_footage(script, session_dir, aspect) if has_pexels else None
+    if choice == "images":
+        return attach_images(script, session_dir, aspect) if has_pexels else None
+    own = user_background(script, choice.strip('"'))
+    if own is None:
+        print(f"[Warning] --case_background '{choice}' is not an image or video file; using the style's own background.")
+    return own
+
+
 def sfx_for(props, path):
     """Write the sound-effects wav for a props dict: a whoosh at each section start, a pop at each label cue."""
     from engine import case_sfx
@@ -372,7 +426,7 @@ def render_case(props, audio_path, output_path, music_path=None, aspect="16:9"):
                 for f in s["footage"]:
                     rel = copy_to_public(f["src"], assets)
                     if rel:
-                        kept.append({"src": rel, "seconds": f["seconds"]})
+                        kept.append({"src": rel, "seconds": f["seconds"], "kind": f.get("kind", "video")})
                 if kept:
                     s["footage"] = kept
                 else:

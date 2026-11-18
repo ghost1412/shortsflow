@@ -445,7 +445,11 @@ def parse_sources(text, limit=3):
     return [ln.strip() for ln in str(text or "").splitlines() if ln.strip()][:limit]
 
 
-def case_args(topic, sources_text="", template="case", theme="dark", formats=("16:9", "9:16"), no_manim=False, no_footage=False, session_dir=None):
+CASE_BACKGROUNDS = {"Stock video": "footage", "Stock photos": "images", "Style only (no pictures)": "none", "My own image or video": "file"}
+
+
+def case_args(topic, sources_text="", template="case", theme="dark", formats=("16:9", "9:16"), no_manim=False, no_footage=False, session_dir=None,
+              background="footage", background_file=None):
     """Command-line arguments for a case explainer (--mode CASE). Raises ValueError with a plain message when the topic is empty."""
     topic = (topic or "").strip()
     if not topic:
@@ -459,6 +463,10 @@ def case_args(topic, sources_text="", template="case", theme="dark", formats=("1
         args.append("--case_no_manim")
     if no_footage:
         args.append("--case_no_footage")
+    if background == "file" and background_file:
+        args += ["--case_background", str(background_file)]
+    elif background in ("footage", "images", "none"):
+        args += ["--case_background", background]
     if session_dir:
         args += ["--session_dir", session_dir]
     return args

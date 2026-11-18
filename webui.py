@@ -521,13 +521,16 @@ def photo_reel(files, reel_type, name="", texts="", music=None, duration=24, fol
     yield "❌ No reel was made." + (f" {reason}" if reason else " Open 'Technical details' for the reason."), log, None
 
 
-def case_video(topic, sources, template, theme_label, formats, no_manim, no_footage):
+def case_video(topic, sources, template, theme_label, formats, no_manim, background_label, background_file):
     """Case explainer tab: a topic and sources in, a sectioned explainer video out. Yields (status, log, videos)."""
     import time
     session = os.path.join(ROOT, "sessions", time.strftime("case_%Y%m%d_%H%M%S"))
     theme = next((k for k, v in web_args.CASE_THEME_LABELS.items() if v == theme_label), "dark")
     try:
-        args = web_args.case_args(topic, sources, template, theme, formats, no_manim, no_footage, session)
+        background = web_args.CASE_BACKGROUNDS.get(background_label, "footage")
+        if background == "file" and not background_file:
+            raise ValueError("Add an image or video file, or choose another background.")
+        args = web_args.case_args(topic, sources, template, theme, formats, no_manim, False, session, background, background_file)
     except ValueError as e:
         raise gr.Error(str(e))
     cmd = [*_pipeline_cmd(), *args]
@@ -1960,16 +1963,17 @@ def build_ui():
                         c_theme = gr.Dropdown(list(web_args.CASE_THEME_LABELS.values()), value=web_args.CASE_THEME_LABELS["dark"], label="Look")
                         c_formats = gr.CheckboxGroup(["16:9", "9:16"], value=["16:9", "9:16"], label="Shapes",
                                                      info="16:9 for YouTube and LinkedIn, 9:16 for Reels and Shorts. Each shape takes its own render time.")
-                        with gr.Row():
-                            c_nomanim = gr.Checkbox(False, label="No animation (faster)")
-                            c_nofoot = gr.Checkbox(False, label="No stock footage")
+                        c_bg = gr.Dropdown(list(web_args.CASE_BACKGROUNDS), value="Stock video", label="Behind the scenes",
+                                           info="Stock video and photos are found from the topic (needs a free Pexels key in .env). Style only uses the look's own moving background.")
+                        c_bgfile = gr.File(label="Your own background (used when 'My own image or video' is chosen)", file_types=["image", "video"], type="filepath")
+                        c_nomanim = gr.Checkbox(False, label="No animation (faster)")
                         c_btn = gr.Button("🧾 Make my video", variant="primary")
                         c_stop = gr.Button("⏹ Stop", variant="stop")
                         c_status = gr.Markdown("Waiting for a topic...")
                         c_video = gr.Files(label="Your videos", height=110)
                 with gr.Accordion("Technical details", open=False):
                     c_log = gr.Textbox(label="Full log", lines=14, max_lines=14, autoscroll=True)
-                c_run = c_btn.click(case_video, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_nofoot], [c_status, c_log, c_video])
+                c_run = c_btn.click(case_video, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_bg, c_bgfile], [c_status, c_log, c_video])
                 c_stop.click(stop_jobs, None, c_status, cancels=[c_run])
 
         gr.Markdown("API keys are read from `.env` (`GEMINI_API_KEY`, `PEXELS_API_KEY`, ...). "

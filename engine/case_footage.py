@@ -61,3 +61,38 @@ def fetch(query, cache_dir, orientation="landscape", api_key=None, get=None, max
     except Exception as e:
         print(f"[Warning] Stock footage for '{query}' failed ({str(e)[:100]}).")
     return None
+
+
+PHOTO_API = "https://api.pexels.com/v1/search"
+
+
+def fetch_image(query, cache_dir, orientation="landscape", api_key=None, get=None):
+    """Path of a stock photo for `query` (Pexels), None when there is no key, no result or the download fails. `get` replaces requests.get.
+    Landscape asks for the 1880-pixel-wide size, portrait for the 800 x 1200 one."""
+    query = " ".join(str(query or "").split())
+    api_key = api_key or os.getenv("PEXELS_API_KEY", "")
+    if not query or not api_key:
+        return None
+    if get is None:
+        import requests
+        get = requests.get
+    path = cache_path(cache_dir, query, orientation + "_photo").replace(".mp4", ".jpg")
+    if os.path.exists(path):
+        return path
+    try:
+        r = get(PHOTO_API, params={"query": query, "per_page": 6, "orientation": orientation}, headers={"Authorization": api_key}, timeout=20)
+        r.raise_for_status()
+        for photo in r.json().get("photos", []):
+            src = photo.get("src") or {}
+            link = src.get("large2x" if orientation == "landscape" else "portrait") or src.get("large")
+            if not link:
+                continue
+            data = get(link, timeout=60)
+            data.raise_for_status()
+            os.makedirs(cache_dir, exist_ok=True)
+            with open(path, "wb") as f:
+                f.write(data.content)
+            return path
+    except Exception as e:
+        print(f"[Warning] Stock photo for '{query}' failed ({str(e)[:100]}).")
+    return None

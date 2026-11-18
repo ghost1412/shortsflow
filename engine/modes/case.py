@@ -80,7 +80,7 @@ def run(args, target_bitrate=None, target_preset=None):
         from engine.light_music import ensure_track
         music = ensure_track()
     want_manim = not getattr(args, "case_no_manim", False)
-    want_footage = not getattr(args, "case_no_footage", False) and bool(os.getenv("PEXELS_API_KEY"))
+    choice = "none" if getattr(args, "case_no_footage", False) else (getattr(args, "case_background", None) or "footage")
     theme = getattr(args, "case_theme", None) or "dark"
 
     results = []
@@ -88,7 +88,7 @@ def run(args, target_bitrate=None, target_preset=None):
         tag = aspect.replace(":", "x")
         portrait = aspect == "9:16"
         clips = cr.attach_clips(script, timing, session_dir, ask_code, portrait=portrait, scenes=("flow",)) if want_manim else None
-        footage = cr.attach_footage(script, session_dir, aspect) if want_footage else None
+        footage = cr.backgrounds_for(script, session_dir, aspect, choice, has_pexels=bool(os.getenv("PEXELS_API_KEY")))
         props = cr.build_props(script, timing, words, theme=theme, music_volume=0.2, clips=clips, footage=footage)
         voice_track = cr.join_audio(audios, timing, os.path.join(session_dir, f"voice_all_{tag}.mp3"),
                                     sfx=cr.sfx_for(props, os.path.join(session_dir, f"sfx_{tag}.wav")))

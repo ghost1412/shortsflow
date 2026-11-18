@@ -2,7 +2,7 @@
 // drawn from its on-screen labels, over a themed background, with word-timed captions. No custom fonts (a font load stalled the CI
 // renderer before), no stock footage: everything is drawn, so a run needs no key and no download.
 import React from "react";
-import { AbsoluteFill, Audio, Loop, OffthreadVideo, Sequence, interpolate, random, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Img, Loop, OffthreadVideo, Sequence, interpolate, random, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import katex from "katex";
 import { z } from "zod";
 
@@ -25,7 +25,7 @@ export const caseVideoSchema = z.object({
     title: z.string(),
     scene: z.enum(CASE_SCENES).default("quote"),
     labels: z.array(z.string()).default([]),
-    footage: z.array(z.object({ src: z.string(), seconds: z.number() })).default([]),   // stock clips, one per beat, shown behind the scene
+    footage: z.array(z.object({ src: z.string(), seconds: z.number().default(10), kind: z.enum(["video", "image"]).default("video") })).default([]),   // stock clips, one per beat, shown behind the scene
     beats: z.array(z.tuple([z.number(), z.number()])).default([]),                       // seconds after the section starts: a new picture at each
     clip: z.string().optional(),                // a rendered animation (Manim) drawn for this section, shown instead of the plain scene
     clipRate: z.number().default(1),
@@ -437,7 +437,7 @@ const Equation: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
 const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation } as const;
 
 // one beat of stock footage: it punches in with a flash, drifts to one side, and repeats when the clip is shorter than the beat
-const BeatFootage: React.FC<{ src: string; seconds: number; index: number; frames: number; start: number; opacity: number }> = ({ src, seconds, index, frames, start, opacity }) => {
+const BeatFootage: React.FC<{ src: string; seconds: number; kind?: "video" | "image"; index: number; frames: number; start: number; opacity: number }> = ({ src, seconds, kind, index, frames, start, opacity }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const punch = interpolate(frame, [0, 12], [1.2, 1.04], { extrapolateRight: "clamp" });
@@ -445,9 +445,13 @@ const BeatFootage: React.FC<{ src: string; seconds: number; index: number; frame
   const flash = interpolate(frame, [0, 7], [0.5, 0], { extrapolateRight: "clamp" });
   return (
     <AbsoluteFill>
-      <Loop durationInFrames={Math.max(15, Math.round(seconds * fps))}>
-        <OffthreadVideo src={asset(src)} muted startFrom={start} style={{ width: "100%", height: "100%", objectFit: "cover", opacity, transform: `scale(${punch + frame * 0.0006}) translateX(${drift}%)` }} />
-      </Loop>
+      {kind === "image" ? (
+        <Img src={asset(src)} style={{ width: "100%", height: "100%", objectFit: "cover", opacity, transform: `scale(${punch + frame * 0.0011}) translateX(${drift * 1.4}%)` }} />
+      ) : (
+        <Loop durationInFrames={Math.max(15, Math.round(seconds * fps))}>
+          <OffthreadVideo src={asset(src)} muted startFrom={start} style={{ width: "100%", height: "100%", objectFit: "cover", opacity, transform: `scale(${punch + frame * 0.0006}) translateX(${drift}%)` }} />
+        </Loop>
+      )}
       <AbsoluteFill style={{ background: "#ffffff", opacity: flash }} />
     </AbsoluteFill>
   );
@@ -476,7 +480,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
             const len = Math.max(8, Math.round((b[1] - b[0]) * fps));
             return (
               <Sequence key={i} from={from} durationInFrames={len}>
-                <BeatFootage opacity={p.light ? 0.42 : 0.66} src={clip.src} seconds={clip.seconds} index={i} frames={len} start={Math.round((i % 3) * 1.5 * fps) % Math.max(1, Math.round(clip.seconds * fps))} />
+                <BeatFootage opacity={p.light ? 0.42 : 0.66} src={clip.src} seconds={clip.seconds} kind={clip.kind} index={i} frames={len} start={Math.round((i % 3) * 1.5 * fps) % Math.max(1, Math.round(clip.seconds * fps))} />
               </Sequence>
             );
           })}
