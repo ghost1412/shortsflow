@@ -262,6 +262,11 @@ _Honest take: the paid tools have a nicer editor, hosted convenience and tested 
 A topic and sources in, a sectioned explainer video out: what happened, how it worked, what it cost, what could change. It works for any
 subject that fits sections (an event, a failure, a product, a scam, a historic moment), not one field.
 
+<p align="center">
+  <img src="../demos/demo_case_16x9.gif" width="520" alt="A case explainer made from one Wikipedia page: an animated diagram floating over stock footage, then big-number cards, with a source chip and word-timed captions" />
+  <br/><sub>Made from one Wikipedia page with one command (GIF: silent, shortened and compressed; the video has narration and music).</sub>
+</p>
+
 ```bash
 python main.py --mode CASE --prompt "The topic" --sources https://example.com/article
 python main.py --mode CASE --prompt "The topic" --sources LINK --case theme=neon --case formats=16:9 --case background=images

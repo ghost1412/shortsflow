@@ -95,7 +95,8 @@ game moments, source-grounded explainers (`--mode CASE`: a topic and links in, a
 <p align="center">
   <img src="demos/demo_short.gif" width="200" alt="An idea-to-video short made from one line of text" />
   <img src="demos/demo_spot_the_lie.gif" width="200" alt="A spot-the-lie facts short" />
-  <br/><sub>Idea-to-video: a short from one line of text, and a "spot the lie" facts short.</sub>
+  <img src="demos/demo_case_9x16.gif" width="200" alt="A case explainer made from one Wikipedia page: an animated diagram over stock footage, a source chip and captions" />
+  <br/><sub>Idea-to-video: a short from one line of text, a "spot the lie" facts short, and a case explainer made from a single web page (<code>--mode CASE</code>).</sub>
 </p>
 
 ## Help and contributing
