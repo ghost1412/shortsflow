@@ -1,8 +1,9 @@
 """CASE mode: a topic (and, ideally, source links) in, a finished sectioned explainer video out.
 
-    python main.py --mode CASE --prompt "The topic" --sources https://example.com/article --case_template case
-    python main.py --mode CASE --case_resume sessions/case_123 --case_theme neon      # same script and voice, new look: minutes, no new voice
-    python main.py --mode CASE --case_resume sessions/case_123 --case_draft           # a small, fast render to judge the pictures and pacing
+    python main.py --mode CASE --prompt "The topic" --sources https://example.com/article
+    python main.py --mode CASE --case resume=sessions/case_123 --case theme=neon      # same script and voice, new look: minutes, no new voice
+    python main.py --mode CASE --case resume=sessions/case_123 --case draft           # a small, fast render to judge the pictures and pacing
+    python main.py --mode CASE --case help                                            # every option (they live in engine/case_options.py)
 
 Works for any subject that fits sections (an event, a failure, a product, a scam, a historic moment). The script is written from the
 sources only (engine/case_study.py); the voice, the drawn scenes, optional Manim animation and stock footage, captions, music and
@@ -18,27 +19,27 @@ MODE = "CASE"       # the --mode value that reaches run() (see shortsflow/_main.
 DRAFT_SCALE = 0.5   # a draft is rendered at half size: about a quarter of the pixels
 
 
-def _formats(text):
-    from engine.case_render import SIZES
-    out = [f.strip() for f in str(text or "16:9,9:16").split(",") if f.strip()]
-    bad = [f for f in out if f not in SIZES]
-    if bad or not out:
-        print(f"[Error] --case_formats: unknown shape {bad or text!r}; use a list such as 16:9,9:16 (known: {', '.join(SIZES)}).")
-        sys.exit(2)
-    return list(dict.fromkeys(out))
+def _options(args):
+    """The validated CASE options (engine/case_options.py). Exits with the reason on a bad key or value; `--case help` lists them all."""
+    from engine import case_options
+    try:
+        return case_options.from_args(args)
+    except case_options.OptionError as e:
+        print(("[Log] " if "CASE options" in str(e) else "[Error] ") + str(e))
+        sys.exit(0 if "CASE options" in str(e) else 2)
 
 
-def _make_script(args, session_dir):
+def _make_script(args, session_dir, opts):
     """Write the script from the topic and sources. Exits with a clear message when it cannot."""
     from engine import case_study as cs
     from engine.script_gen import get_llm_response
     topic = (getattr(args, "prompt", None) or getattr(args, "category", None) or "").strip()
     if not topic:
         print("[Error] --mode CASE needs the topic: --prompt \"...\" (and, for facts you can trust, --sources LINK_OR_FILE, up to 3), "
-              "or --case_resume FOLDER to redo a finished run.")
+              "or --case resume=FOLDER to redo a finished run.")
         sys.exit(2)
     try:
-        template = cs.load_template(getattr(args, "case_template", None) or "case")
+        template = cs.load_template(opts["template"])
     except ValueError as e:
         print(f"[Error] {e}")
         sys.exit(2)
@@ -86,27 +87,28 @@ def run(args, target_bitrate=None, target_preset=None):
     from engine import case_render as cr
     from engine.script_gen import get_llm_response
 
-    formats = _formats(getattr(args, "case_formats", None))
-    draft = bool(getattr(args, "case_draft", False))
-    resume = (getattr(args, "case_resume", None) or "").strip().strip('"')
+    opts = _options(args)
+    formats = opts["formats"].split(",")
+    draft = bool(opts["draft"])
+    resume = opts["resume"]
     if resume:
         session_dir = resume
         try:
             with open(os.path.join(session_dir, "script.json"), encoding="utf-8") as f:
                 script = json.load(f)
         except (OSError, ValueError):
-            print(f"[Error] --case_resume: no script.json in '{session_dir}'. Give the folder of an earlier CASE run.")
+            print(f"[Error] --case resume: no script.json in '{session_dir}'. Give the folder of an earlier CASE run.")
             sys.exit(2)
         print(f"--- CASE explainer, redoing the render of '{script.get('title', '')}' ({', '.join(formats)}{', draft' if draft else ''}) ---")
     else:
         session_dir = args.session_dir if getattr(args, "session_dir", None) else os.path.join("sessions", f"case_{int(time.time())}")
         os.makedirs(session_dir, exist_ok=True)
         topic = (getattr(args, "prompt", None) or getattr(args, "category", None) or "").strip()
-        print(f"--- CASE explainer: '{topic}' ({getattr(args, 'case_template', None) or 'case'} template, {', '.join(formats)}{', draft' if draft else ''}) ---")
-        script = _make_script(args, session_dir)
-        if getattr(args, "case_plan_only", False):
-            print(f"[Log] Script written to {os.path.join(session_dir, 'script.json')}. Nothing was spoken or rendered (--case_plan_only). "
-                  f"Edit it if you like, then: --mode CASE --case_resume {session_dir}")
+        print(f"--- CASE explainer: '{topic}' ({opts['template']} template, {', '.join(formats)}{', draft' if draft else ''}) ---")
+        script = _make_script(args, session_dir, opts)
+        if opts["plan_only"]:
+            print(f"[Log] Script written to {os.path.join(session_dir, 'script.json')}. Nothing was spoken or rendered (plan_only). "
+                  f"Edit it if you like, then: --mode CASE --case resume={session_dir}")
             sys.exit(0)
 
     audios, words = _narration(args, script, session_dir, bool(resume))
@@ -116,9 +118,9 @@ def run(args, target_bitrate=None, target_preset=None):
     if not music or not os.path.exists(music):
         from engine.light_music import ensure_track
         music = ensure_track()
-    want_manim = not getattr(args, "case_no_manim", False)
-    choice = "none" if getattr(args, "case_no_footage", False) else (getattr(args, "case_background", None) or "footage")
-    theme = getattr(args, "case_theme", None) or "dark"
+    want_manim = bool(opts["manim"])
+    choice = opts["background"]
+    theme = opts["theme"]
 
     def ask_code(prompt):
         return get_llm_response(prompt, system_prompt="You write Manim Community Edition code.", max_tokens=16000, timeout=300)

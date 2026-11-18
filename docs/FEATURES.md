@@ -263,20 +263,25 @@ A topic and sources in, a sectioned explainer video out: what happened, how it w
 subject that fits sections (an event, a failure, a product, a scam, a historic moment), not one field.
 
 ```bash
-python main.py --mode CASE --prompt "The topic" --sources https://example.com/article --case_template case
+python main.py --mode CASE --prompt "The topic" --sources https://example.com/article
+python main.py --mode CASE --prompt "The topic" --sources LINK --case theme=neon --case formats=16:9 --case background=images
+python main.py --mode CASE --case help          # every option
 ```
+
+Sources are given with `--sources` (up to three: a link, a text file or pasted notes; without one the video is marked UNVERIFIED). Everything else is a
+`--case KEY=VALUE` option, repeatable (a bare switch means on), or the same keys in a JSON file given with `--case_file` (for a series that should always look
+alike; `--case` values win). The options live in one place, `engine/case_options.py`, which the command line, the browser tab and the tests all read.
 
 | Option | What it does |
 | :--- | :--- |
-| `--sources LINK_OR_FILE` | Up to three sources (link, text file or pasted notes). The script holds nothing they do not. No source: the video is marked UNVERIFIED. |
-| `--case_template` | `case` (what happened / how / impact / what could change), `postmortem`, `history`, `explainer`, or the path of a JSON file of `{id, title, question, scene}` sections |
-| `--case_theme` | The whole look, not only the colours: `dark` (cyber network, default), `clean`, `warm`, `neon` (synthwave grid), `newsroom` (red and white, striped), `blueprint` (technical drawing, monospace), `terminal` (green phosphor, scanlines), `editorial` (serif on paper), `midnight` (calm aurora). Each sets the colours, the animated background, the card style and the type. |
-| `--case_formats` | `16:9,9:16` by default (YouTube and LinkedIn, Reels and Shorts) |
-| `--case_background` | What is behind the scenes: `footage` (stock video found from the topic, needs `PEXELS_API_KEY`; default), `images` (stock photos), `none` (only the look's own animated background), or the path of your own image or video, used for every section |
-| `--case_plan_only` | Write the script (`script.json` in the session folder) and stop, so you can read and edit it. Then render it with `--case_resume FOLDER`; the narration is made again from your edited text |
-| `--case_resume FOLDER` | Redo the render of an earlier run with its saved script, narration and animations: change `--case_theme`, `--case_background` or `--case_formats` and get a new video in minutes with no new voice to pay for |
-| `--case_draft` | A small, fast render (half size, no new animations; about a minute when the narration exists) to judge the look, pictures and pacing before the full one. Combine with `--case_resume` |
-| `--case_no_manim` / `--case_no_footage` | Skip the Manim animation / the stock pictures (faster) |
+| `template` | The sections: `case` (what happened / how / impact / what could change, default), `postmortem`, `history`, `explainer`, or the path of a JSON file of `{id, title, question, scene}` sections |
+| `theme` | The whole look, not only the colours: `dark` (cyber network, default), `clean`, `warm`, `neon` (synthwave grid), `newsroom` (red and white, striped), `blueprint` (technical drawing, monospace), `terminal` (green phosphor, scanlines), `editorial` (serif on paper), `midnight` (calm aurora) |
+| `formats` | `16:9,9:16` by default (YouTube and LinkedIn, Reels and Shorts) |
+| `background` | What is behind the scenes: `footage` (stock video found from the topic, needs `PEXELS_API_KEY`; default), `images` (stock photos), `none` (only the look's own animated background), or the path of your own image or video, used for every section |
+| `manim` | `manim=off` skips the Manim animation of the explaining sections (faster) |
+| `plan_only` | Write the script (`script.json` in the session folder) and stop, so you can read and edit it. Then render it with `resume=FOLDER`; the narration is made again from your edited text |
+| `resume` | Redo the render of an earlier run's folder with its saved script, narration and animations: change `theme`, `background` or `formats` and get a new video in minutes with no new voice to pay for |
+| `draft` | A small, fast render (half size, no new animations; about a minute when the narration exists) to judge the look, pictures and pacing before the full one. Combine with `resume` |
 
 What is made: a script checked against the sources (`script.json`), one narration per section (ElevenLabs when `ELEVENLABS_API_KEY` is set, else the general
 voice step), drawn scenes that light up as each item is spoken, captions, synthesised light music and sound effects (nothing downloaded, nothing licensed),

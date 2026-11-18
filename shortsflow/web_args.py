@@ -434,7 +434,9 @@ def photo_reel_args(photos_dir, reel_type, name="", texts="", music=None, durati
     return args
 
 
-CASE_THEMES = ["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"]
+from engine import case_options as _case_options
+
+CASE_THEMES = list(_case_options.THEMES)      # one list: engine/case_options.py
 CASE_THEME_LABELS = {"dark": "Dark (cyber network)", "clean": "Clean (light)", "warm": "Warm", "neon": "Neon (synthwave)", "newsroom": "Newsroom (red and white)",
                      "blueprint": "Blueprint (technical drawing)", "terminal": "Terminal (green phosphor)", "editorial": "Editorial (serif on paper)",
                      "midnight": "Midnight (calm aurora)"}
@@ -450,31 +452,27 @@ CASE_BACKGROUNDS = {"Stock video": "footage", "Stock photos": "images", "Style o
 
 def case_args(topic, sources_text="", template="case", theme="dark", formats=("16:9", "9:16"), no_manim=False, no_footage=False, session_dir=None,
               background="footage", background_file=None, resume=None, draft=False, plan_only=False):
-    """Command-line arguments for a case explainer (--mode CASE). Raises ValueError with a plain message when the topic is empty."""
+    """Command-line arguments for a case explainer (--mode CASE). The options travel as `--case KEY=VALUE` pairs built from the shared schema
+    (engine/case_options.py). Raises ValueError with a plain message when the topic is empty."""
     topic = (topic or "").strip()
     if not topic and not resume:
         raise ValueError("Type the topic of the video first.")
-    shapes = [f for f in (formats or []) if f in ("16:9", "9:16", "1:1", "4:5")] or ["16:9"]
-    args = ["--mode", "CASE", *(["--prompt", topic] if topic else []), "--case_template", (template or "case").strip() or "case",
-            "--case_theme", theme if theme in CASE_THEMES else "dark", "--case_formats", ",".join(shapes), "--skip_upload"]
+    shapes = [f for f in (formats or []) if f in _case_options.SHAPES] or ["16:9"]
+    if no_footage:
+        background = "none"
+    values = {"template": (template or "case").strip() or "case", "theme": theme if theme in CASE_THEMES else "dark", "formats": ",".join(shapes),
+              "manim": not no_manim, "draft": bool(draft), "plan_only": bool(plan_only), "resume": str(resume or "")}
+    if background == "file" and background_file:
+        values["background"] = str(background_file)
+    elif background in _case_options.BACKGROUND_KINDS:
+        values["background"] = background
+    args = ["--mode", "CASE", *(["--prompt", topic] if topic else []), "--skip_upload"]
+    for pair in _case_options.to_pairs(values):
+        args += ["--case", pair]
     for source in parse_sources(sources_text):
         args += ["--sources", source]
-    if no_manim:
-        args.append("--case_no_manim")
-    if no_footage:
-        args.append("--case_no_footage")
-    if background == "file" and background_file:
-        args += ["--case_background", str(background_file)]
-    elif background in ("footage", "images", "none"):
-        args += ["--case_background", background]
-    if resume:
-        args += ["--case_resume", str(resume)]
-    elif session_dir:
+    if session_dir and not resume:
         args += ["--session_dir", session_dir]
-    if draft:
-        args.append("--case_draft")
-    if plan_only:
-        args.append("--case_plan_only")
     return args
 
 

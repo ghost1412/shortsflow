@@ -11,9 +11,8 @@ def ts_themes():
 
 
 def cli_themes():
-    src = (ROOT / "shortsflow" / "_main.py").read_text(encoding="utf-8")
-    block = re.search(r'"--case_theme", choices=\[(.*?)\]', src, re.S).group(1)
-    return re.findall(r'"([a-z]+)"', block)
+    from engine import case_options
+    return list(case_options.THEMES)
 
 
 def test_the_cli_offers_exactly_the_styles_the_video_composition_knows():
@@ -32,10 +31,12 @@ def test_case_tab_arguments():
     assert web_args.parse_sources("  https://a.example/x \n\n notes here \nthree\nfour") == ["https://a.example/x", "notes here", "three"]
     args = web_args.case_args("The topic", "https://a.example/x\nnotes", "postmortem", "neon", ["9:16", "bogus"], True, True, "sessions/s")
     assert args[:4] == ["--mode", "CASE", "--prompt", "The topic"]
-    assert args[args.index("--case_template") + 1] == "postmortem" and args[args.index("--case_theme") + 1] == "neon"
-    assert args[args.index("--case_formats") + 1] == "9:16"
-    assert args.count("--sources") == 2 and "--case_no_manim" in args and "--case_no_footage" in args
-    assert web_args.case_args("t", theme="nonsense")[web_args.case_args("t", theme="nonsense").index("--case_theme") + 1] == "dark"
+    pairs = [args[i + 1] for i, a in enumerate(args) if a == "--case"]
+    assert "template=postmortem" in pairs and "theme=neon" in pairs and "formats=9:16" in pairs
+    assert "manim=off" in pairs and "background=none" in pairs                       # no_footage means no pictures
+    assert args.count("--sources") == 2
+    bad = web_args.case_args("t", theme="nonsense")
+    assert "theme=nonsense" not in [bad[i + 1] for i, a in enumerate(bad) if a == "--case"]    # an unknown look falls back to the default (nothing sent)
     try:
         web_args.case_args("  ")
     except ValueError as e:

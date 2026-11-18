@@ -120,7 +120,8 @@ def test_case_tab_resume_and_draft_arguments(tmp_path):
     import json
     from shortsflow import web_args
     args = web_args.case_args("", resume="sessions/case_1", draft=True, theme="neon")
-    assert "--prompt" not in args and args[args.index("--case_resume") + 1] == "sessions/case_1" and "--case_draft" in args
+    pairs = [args[i + 1] for i, a in enumerate(args) if a == "--case"]
+    assert "--prompt" not in args and "resume=sessions/case_1" in pairs and "draft" in pairs
     assert "--session_dir" not in args
     session = tmp_path / "sessions" / "case_9"
     session.mkdir(parents=True)
