@@ -96,17 +96,9 @@ def _window(text):
     return (a, b)
 
 
-def run(args, target_bitrate, target_preset):
-    import time
-    from engine.video_gen import extract_segments
-    from engine.analysis import process_source_video
-    from engine.social_gen import generate_viral_metadata
-    
-    print(f"--- Starting AI Extraction: {args.source_video} ---")
-    
-    session_dir = args.session_dir if args.session_dir else f"sessions/extraction_{int(time.time())}"
-    os.makedirs(session_dir, exist_ok=True)
-    
+def check_brand_and_tighten(args):
+    """Load the brand kit now (a missing logo or a bad position used to surface only after the whole render) and warn about
+    --tighten_mode speed with animated captions. Returns the brand kit or None; exits with code 2 on a brand kit problem."""
     # Check the brand kit now: a missing logo or a bad position used to surface only after the whole render, before
     # metadata.json and --output_json were written
     brand_kit = None
@@ -122,7 +114,12 @@ def run(args, target_bitrate, target_preset):
     # --tighten_mode speed is a MoviePy-only effect: the animated-caption (Remotion) path cuts instead
     if getattr(args, "use_remotion", False) and getattr(args, "tighten", False) and getattr(args, "tighten_mode", "cut") == "speed":
         print("[Warning] --tighten_mode speed is not available with animated captions (--use_remotion): the pauses are cut instead.")
+    return brand_kit
 
+
+def prepare_source(args, session_dir):
+    """Download a URL source into the session and apply --cut / --edit_transcript. Sets args.source_video to the local (edited)
+    file; returns the source URL (None for a local file), which chapters are cached under."""
     source_url = args.source_video if is_url(args.source_video) else None   # chapters are cached under the URL, not the file
     # 🟢 Auto-download video if source_video is a URL
     if is_url(args.source_video):
@@ -137,6 +134,22 @@ def run(args, target_bitrate, target_preset):
             args.source_video, session_dir, phrases=getattr(args, "cut", None),
             edit_path=getattr(args, "edit_transcript", None), keep_fillers=getattr(args, "remove_fillers", False),
             language=getattr(args, "language", "en"))
+    return source_url
+
+
+def run(args, target_bitrate, target_preset):
+    import time
+    from engine.video_gen import extract_segments
+    from engine.analysis import process_source_video
+    from engine.social_gen import generate_viral_metadata
+    
+    print(f"--- Starting AI Extraction: {args.source_video} ---")
+    
+    session_dir = args.session_dir if args.session_dir else f"sessions/extraction_{int(time.time())}"
+    os.makedirs(session_dir, exist_ok=True)
+    
+    brand_kit = check_brand_and_tighten(args)
+    source_url = prepare_source(args, session_dir)
 
     print("[Log] Running Transcript-based Highlight Analysis...")
     # 🟢 EXPERT GUARD: Prevention of Mode Confusion
