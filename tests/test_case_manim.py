@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from engine import case_manim as cm
 
 GOOD = "from manim import *\nclass ExplainerScene(Scene):\n    def construct(self):\n        self.wait(1)\n"
@@ -58,6 +60,7 @@ def test_render_scene_asks_for_a_transparent_clip_and_returns_the_webm(tmp_path,
         return R()
     monkeypatch.setattr("subprocess.run", fake_run)
     monkeypatch.setattr(cm, "check_clip", lambda mov, portrait=False: [])
+    monkeypatch.setattr("engine.manim_overlap.overlap_problems", lambda code, d, portrait=False: [])
     out = cm.render_scene(GOOD, str(tmp_path), portrait=False)
     assert out.endswith("ExplainerScene.webm")
     assert "-t" in seen["cmds"][0] and any("yuva420p" in c for c in seen["cmds"])
@@ -124,3 +127,33 @@ def test_every_kit_block_named_in_the_prompt_exists_in_the_kit():
                    "box", "label", "callout", "fit", "highlight_each"):
         assert f"def {needed}(" in kit
         assert needed in prompt, f"the prompt does not mention {needed}"
+
+
+def test_overlap_sentences_name_the_texts():
+    from engine import manim_overlap as mo
+    out = mo.sentences([[["text", "Ransom", "Deadline"], 0.5], [["box", "Label", ""], 0.2], [["text", "A", "B"], 0.9]])
+    assert out[0].startswith('the texts "A" and "B" overlap (90%') and 'crosses the edge of a box' in out[2] and len(out) == 3
+    assert mo.with_probe("print(1)") is None and "_overlap_snapshot" in mo.with_probe("from manim import *\nx = 1")
+
+
+def test_a_scene_with_overlapping_texts_fails_the_render_before_the_picture_is_made(tmp_path, monkeypatch):
+    import pytest
+    ran = []
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: ran.append(a) or (_ for _ in ()).throw(AssertionError("manim must not run")))
+    monkeypatch.setattr("engine.manim_overlap.overlap_problems", lambda code, d, portrait=False: ['the texts "A" and "B" overlap (50% of the smaller); move them apart'])
+    with pytest.raises(RuntimeError) as e:
+        cm.render_scene(GOOD, str(tmp_path), portrait=False)
+    assert 'the texts "A" and "B" overlap' in str(e.value) and not ran
+
+
+def test_the_overlap_probe_finds_a_real_overlap_and_passes_a_clean_scene(tmp_path):
+    pytest.importorskip("manim")
+    from engine import manim_overlap as mo
+    bad = ("from manim import *\nclass ExplainerScene(Scene):\n    def construct(self):\n"
+           "        a = Text('First label here', font_size=40)\n        b = Text('Second label here', font_size=40).shift(RIGHT * 0.5 + DOWN * 0.1)\n"
+           "        self.play(FadeIn(a), FadeIn(b))\n        self.wait(0.5)\n")
+    good = ("from manim import *\nclass ExplainerScene(Scene):\n    def construct(self):\n"
+            "        a = Text('First label here', font_size=30).shift(UP)\n        b = Text('Second label here', font_size=30).shift(DOWN)\n"
+            "        box = RoundedRectangle(width=5, height=1.2).shift(UP)\n        self.play(FadeIn(a), FadeIn(b), Create(box))\n        self.wait(0.5)\n")
+    assert mo.overlap_problems(bad, str(tmp_path / "bad"))
+    assert mo.overlap_problems(good, str(tmp_path / "good")) == []
