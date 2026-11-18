@@ -97,10 +97,21 @@ def default_fetch(url, timeout=15):
     return r.text
 
 
-def gather_sources(items, fetch=None):
-    """[{"id": "S1", "ref", "text"}] from up to three items: a link (fetched), the path of a text file, or pasted text.
-    Items that cannot be read are skipped (the second return value lists them with the reason)."""
+def default_fetch_raw(url, timeout=30):
+    """The bytes of a link (a PDF)."""
+    import requests
+    r = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0 (compatible; reader)"})
+    r.raise_for_status()
+    return r.content
+
+
+def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None):
+    """[{"id": "S1", "ref", "text"}] from up to three items: a web link (its paragraphs), a PDF link or file, a YouTube link (its captions), a
+    caption file (.srt, .vtt), a text file, or pasted text. Items that cannot be read are skipped (the second return value lists them with the
+    reason). `fetch`, `fetch_raw`, `youtube` replace the network readers (tests)."""
+    from engine import case_sources
     fetch = fetch or default_fetch
+    fetch_raw = fetch_raw or default_fetch_raw
     sources, skipped = [], []
     for item in [str(i).strip() for i in (items or []) if str(i).strip()][:MAX_SOURCES + 5]:
         if len(sources) >= MAX_SOURCES:
@@ -108,10 +119,16 @@ def gather_sources(items, fetch=None):
             continue
         try:
             if re.match(r"https?://\S+$", item):
-                text, ref = _plain(fetch(item)), item
+                if case_sources.is_youtube(item):
+                    import tempfile
+                    text = case_sources.youtube_text(item, workdir or tempfile.mkdtemp(prefix="case_captions_"), youtube)
+                elif case_sources.is_pdf_name(item):
+                    text = case_sources.pdf_text(fetch_raw(item))
+                else:
+                    text = _plain(fetch(item))
+                ref = item
             elif os.path.isfile(item):
-                with open(item, encoding="utf-8", errors="replace") as f:
-                    text, ref = _plain(f.read()), os.path.basename(item)
+                text, ref = _plain(case_sources.read_file(item)), os.path.basename(item)
             else:
                 text, ref = " ".join(item.split()), "pasted notes"
         except Exception as e:

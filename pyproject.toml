@@ -45,7 +45,9 @@ webui = ["gradio>=5,<7"]
 subject = ["torch>=2.2,<3", "torchvision>=0.17,<1", "opencv-python>=4.10,<5"]
 # Simplified <-> Traditional Chinese captions (--zh_script)
 zh = ["opencc-python-reimplemented>=0.1.7,<1"]
-full = ["shortsflow[clip,local-voice,explainer,webui,zh]", "gtts>=2.5,<3"]
+# PDF sources for --mode CASE
+sources = ["pypdf>=5,<7"]
+full = ["shortsflow[clip,local-voice,explainer,webui,zh,sources]", "gtts>=2.5,<3"]
 
 [project.scripts]
 shortsflow = "shortsflow.cli:main"

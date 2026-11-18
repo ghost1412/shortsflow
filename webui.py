@@ -2003,7 +2003,7 @@ def build_ui():
                 with gr.Row():
                     with gr.Column():
                         c_topic = gr.Textbox(label="Topic", placeholder="What the video explains, in a short title")
-                        c_sources = gr.Textbox(label="Sources (up to three, one per line: a web link, or notes)", lines=4,
+                        c_sources = gr.Textbox(label="Sources (up to three, one per line: a web link, a PDF or YouTube link, a file path, or notes)", lines=4,
                                                placeholder="https://example.com/article\nhttps://example.com/another",
                                                info="Without a source the video is marked UNVERIFIED. The text of the sources goes to your AI text provider.")
                         c_template = gr.Dropdown(["case", "postmortem", "history", "explainer"], value="case", label="Sections",
