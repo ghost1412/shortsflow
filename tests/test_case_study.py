@@ -76,3 +76,9 @@ def test_gather_sources_keeps_the_paragraphs_not_the_page_furniture():
             + "<footer>Terms Privacy</footer></html>")
     sources, _ = cs.gather_sources(["https://example.com/x"], fetch=lambda u: page)
     assert "Paragraph 3" in sources[0]["text"] and "Subscribe" not in sources[0]["text"] and "Privacy" not in sources[0]["text"]
+
+
+def test_step_numbers_are_not_claims():
+    assert cs.unsupported("Step 2: Hit by sandstorm winds", SRC) == []
+    assert cs.unsupported("Phase 3: spread", SRC) == []
+    assert cs.unsupported("Step 2: stole 9,000 records", SRC) == ["9,000"]      # a real figure is still checked

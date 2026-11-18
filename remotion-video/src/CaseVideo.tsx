@@ -316,7 +316,7 @@ const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checkl
 const SectionScene: React.FC<{ index: number; total: number; section: Props["sections"][number]; p: Pal; accent: string; frames: number }> = ({ index, total, section, p, accent, frames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const { u, h } = useUnit();
+  const { u, h, portrait } = useUnit();
   const View = SCENE_VIEWS[section.scene];
   const fade = Math.min(interpolate(frame, [0, 10], [0, 1], { extrapolateRight: "clamp" }), interpolate(frame, [frames - 10, frames], [1, 0], { extrapolateLeft: "clamp" }));
   const push = 1 + 0.05 * (frame / frames);            // a slow push-in over the whole section
@@ -332,7 +332,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
           <AbsoluteFill style={{ background: `linear-gradient(180deg, ${p.bg1}cc 0%, ${p.bg1}66 45%, ${p.bg1}dd 100%)` }} />
         </AbsoluteFill>
       )}
-      <AbsoluteFill style={{ padding: `${80 * u}px ${70 * u}px ${Math.max(300 * u, h * 0.16)}px`, transform: `scale(${push})`, transformOrigin: "50% 45%" }}>
+      <AbsoluteFill style={{ padding: `${80 * u}px ${70 * u}px ${Math.max(300 * u, h * (portrait ? 0.22 : 0.16))}px`, transform: `scale(${push})`, transformOrigin: "50% 45%" }}>
         <div style={{ marginBottom: 36 * u }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 24 * u }}>
             <div style={{ fontFamily: MONO, fontSize: 34 * u, color: accent, letterSpacing: 2 }}>{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div>
@@ -342,7 +342,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
         </div>
         <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
           {section.clip ? (
-            <div style={{ height: "100%", aspectRatio: "16 / 9", maxWidth: "100%", borderRadius: 26 * u, overflow: "hidden", border: `2px solid ${accent}55`, boxShadow: `0 0 ${50 * u}px ${accent}22`, background: "#05070d" }}>
+            <div style={{ height: "100%", aspectRatio: portrait ? "4 / 5" : "16 / 9", maxWidth: "100%", borderRadius: 26 * u, overflow: "hidden", border: `2px solid ${accent}55`, boxShadow: `0 0 ${50 * u}px ${accent}22`, background: "#05070d" }}>
               <OffthreadVideo src={asset(section.clip)} muted playbackRate={section.clipRate} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
           ) : (

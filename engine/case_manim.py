@@ -17,7 +17,7 @@ MAX_TRIES = 3
 
 def manim_prompt(section, seconds, topic="", portrait=False, accent="#00e5a8", error=None):
     """The model prompt for one section's Manim scene."""
-    bounds = "x in [-3.8, 3.8], y in [-6.5, 6.5] (a tall vertical screen: stack things downwards)" if portrait else "x in [-4.2, 4.2], y in [-2.3, 2.3]"
+    bounds = "x in [-3.4, 3.4], y in [-4.2, 4.2] (a tall frame: stack things downwards)" if portrait else "x in [-4.2, 4.2], y in [-2.3, 2.3]"
     labels = "; ".join(str(x) for x in section.get("on_screen") or [])
     text = f"""Write ONE Manim Community Edition scene that visually explains this part of a video, in about {int(seconds)} seconds of animation.
 
@@ -86,11 +86,12 @@ def render_scene(code, out_dir, portrait=False, fps=30, timeout=300):
     import sys
     os.makedirs(out_dir, exist_ok=True)
     script = os.path.join(out_dir, "scene.py")
-    if not portrait:      # a smaller frame (9 x 5.06 units) makes everything drawn in it larger on screen
-        code = code.replace("from manim import *", "from manim import *\nconfig.frame_width = 9\nconfig.frame_height = 5.0625", 1)
+    # a smaller frame makes everything drawn in it larger on screen: 9 x 5.06 units for 16:9, 7.2 x 9 for the 4:5 portrait panel
+    frame = "config.frame_width = 7.2\nconfig.frame_height = 9" if portrait else "config.frame_width = 9\nconfig.frame_height = 5.0625"
+    code = code.replace("from manim import *", "from manim import *\n" + frame, 1)
     with open(script, "w", encoding="utf-8") as f:
         f.write(code)
-    size = "1080,1920" if portrait else "1920,1080"
+    size = "1080,1350" if portrait else "1920,1080"
     cmd = [sys.executable, "-m", "manim", "-ql", "--fps", str(fps), "-r", size, "--media_dir", out_dir, script, "ExplainerScene"]
     res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     if res.returncode != 0:

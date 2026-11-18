@@ -149,6 +149,9 @@ _NUMBER = re.compile(r"\d[\d,.]*\d|\d")
 _NAME = re.compile(r"(?<![.!?]\s)(?<!^)\b[A-Z][a-zA-Z0-9]{3,}\b")
 
 
+_ORDINAL = re.compile(r"\b(?:step|stage|phase|part|point|number|no\.?)\s*\d+\b[:.)-]?|^\s*\d+[.)]\s", re.I)
+
+
 def _digits(s):
     return re.sub(r"\D", "", s)
 
@@ -157,6 +160,7 @@ def unsupported(sentence, source_text):
     """The numbers and capitalised names in `sentence` that the sources never mention (case-insensitive; numbers compared by digits)."""
     low = source_text.lower()
     source_numbers = {_digits(n) for n in _NUMBER.findall(source_text)}
+    sentence = _ORDINAL.sub(" ", sentence)         # "Step 2:" numbers the steps of a diagram; it is not a claim about the world
     out = []
     for n in _NUMBER.findall(sentence):
         if _digits(n) not in source_numbers:
