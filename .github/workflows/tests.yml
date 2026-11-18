@@ -59,7 +59,8 @@ jobs:
           for needed in ("shortsflow/cli.py", "engine/speaker_focus.py", "shortsflow/_bundle/remotion-video/src/ShortFlow.tsx",
                          "shortsflow/_bundle/assets/models/face_detection_yunet_2023mar.onnx", "shortsflow/api/app.py",
                          "shortsflow/webui.py", "shortsflow/onboarding.py", "shortsflow/review.py", "shortsflow/brand.py",
-                         "engine/rerender.py", "shortsflow/_bundle/assets/caption_previews/HORMOZI.jpg"):
+                         "engine/rerender.py", "shortsflow/_bundle/assets/caption_previews/HORMOZI.jpg",
+                         "engine/modes/case.py", "engine/manim_kit.py", "shortsflow/_bundle/remotion-video/src/CaseVideo.tsx"):
               assert needed in names, f"missing from wheel: {needed}"
           assert not any("node_modules" in n for n in names), "node_modules leaked into the wheel"
           print(len(names), "files OK")
