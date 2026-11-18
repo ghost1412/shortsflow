@@ -279,6 +279,15 @@ voice step), drawn scenes that light up as each item is spoken, captions, synthe
 stock footage behind the scenes when `PEXELS_API_KEY` is set, and a Manim animation for the explaining sections. Scenes: timeline, flow, counters, checklist,
 terminal, quote and formula (LaTeX, shown with KaTeX).
 
+Pacing: a section is not one long scene. It is cut into beats of about 3.5 to 6.5 seconds, each ending at a sentence end, and every beat changes the
+picture behind the scene (a different stock clip, a punch-in with a flash, a small camera drift) while the drawn scene keeps its place. Items on screen appear
+in the order the narrator says them. The Manim animation of a mechanism is transparent and floats over the footage in a frosted panel; diagram boxes, timeline
+points and number cards carry a small icon chosen from the words of their label.
+
+Needs: a text AI key for the script and the animation code (Gemini, Groq, OpenAI or a local model), FFmpeg, Node (Remotion) and, for the animation, Manim.
+Optional: `ELEVENLABS_API_KEY` (narrator voice; without it the general voice step is used, which sounds plainer), `PEXELS_API_KEY` (stock footage). A free
+Gemini key can hit its rate limit during a run; the run falls back to a lighter model, and a section whose animation cannot be made keeps its plain scene.
+
 What leaves the PC: the source text and the topic go to the AI text provider; a two to four word search phrase per section goes to Pexels; the narration text goes
 to the voice service. Nothing else. Check the facts of anything you publish: the check removes what the sources do not hold, it cannot tell you the sources are right.
 
