@@ -144,6 +144,10 @@ python gui_app.py
 4. **Privacy of the optional cloud helpers**:
    * Everything runs locally by default. Only these leave the PC, and each is optional: Gemini/Groq/HF LLM calls (`--llm_provider`), Gemini picture descriptions (`--visual_context` with a key), OpenStreetMap place names (trip recap; off with `--recap_no_geocode`), Google Drive upload (only when asked). Say so in any docs or UI text you add about them.
    * Personal footage, its recaps and any user-pasted links (Drive, Photos) never go into the README, docs, tests or the CHANGELOG; use made-up ids in tests.
-5. **Verifying Work**:
+5. **Options of a mode** (house rule):
+   * A mode takes its options through ONE schema (`engine/mode_options.py`: `OptionSet`, `Option`), as one repeatable flag `--<mode> KEY=VALUE` plus `--<mode>_file FILE.json`; see `engine/case_options.py` and `--mode CASE --case help`.
+   * Do NOT add one command-line flag per option to `shortsflow/_main.py`. A new option is one line in the mode's schema; the browser tab builds its `--<mode>` pairs from the same schema (`web_args.case_args`), and a test pins the flag set.
+   * Existing modes keep their old flags until someone touches them; when you do, move them into a schema and keep the old flags working (hidden) so nobody's scripts break.
+6. **Verifying Work**:
    * Hot-spot files, verification steps and known issues live in **[ROADMAP.md](ROADMAP.md)**.
    * Verify rendering without an LLM key: `python scripts/offline_facts_render.py`.
