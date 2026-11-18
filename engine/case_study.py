@@ -67,7 +67,7 @@ def load_template(spec="case"):
     raise ValueError(f"Unknown template '{spec}'. Presets: {', '.join(PRESETS)}; or give the path of a JSON file.")
 
 
-MAX_SOURCE_CHARS = 6000
+MAX_SOURCE_CHARS = 14000
 MAX_SOURCES = 3
 
 
@@ -121,12 +121,13 @@ def build_prompt(topic, template, sources):
             parts.append(f"[{s['id']}] ({s['ref']})\n{s['text']}")
     else:
         parts.append("No sources were given. Use only well-known facts you are certain about, and leave out numbers you are unsure of.")
-    parts += ["", "One section per question, in this order:"]
+    parts += ["", "Every section needs several specific sentences with the real names, dates and figures from the sources, not a summary of a summary. "
+              "Advice in the last section may be general, but must not add facts.", "", "One section per question, in this order:"]
     for s in template:
         parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  Scene kind: {s['scene']}")
     parts += ["", "Return raw JSON only:",
-              '{"title": "<plain title, no emoji>", "sections": [{"id": "<section id>", "narration": "<2-4 short spoken sentences>", '
-              '"on_screen": ["<3-5 short labels or steps shown on screen>"], "cites": ["S1"]}]}']
+              '{"title": "<plain title, no emoji>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, concrete: who, what, when, how many, in order>", '
+              '"on_screen": ["<3-5 short labels, steps or figures shown on screen, never empty>"], "cites": ["S1"]}]}']
     return "\n".join(parts)
 
 
