@@ -291,61 +291,10 @@ def cut_and_render(args, session_dir, highlights, transcript_path, spoken_transc
     return highlights, extracted_files, final_silence
 
 
-def run(args, target_bitrate, target_preset):
-    import time
+def finish_clips(args, session_dir, highlights, extracted_files, transcript_path, spoken_transcript_path, final_silence, brand_kit):
+    """B-roll, audio clean-up, cold open, auto-edit sound effects and the brand kit, applied to the finished clips.
+    Returns (cold_infos, edit_logs): what the cold open and the auto-edit did per clip, for the SRT export and results.json."""
     from engine import timing
-    from engine.social_gen import generate_viral_metadata
-    
-    print(f"--- Starting AI Extraction: {args.source_video} ---")
-    
-    session_dir = args.session_dir if args.session_dir else f"sessions/extraction_{int(time.time())}"
-    os.makedirs(session_dir, exist_ok=True)
-    
-    brand_kit = check_brand_and_tighten(args)
-    source_url = prepare_source(args, session_dir)
-
-    print("[Log] Running Transcript-based Highlight Analysis...")
-    # 🟢 EXPERT GUARD: Prevention of Mode Confusion
-    if args.extract_mode == "shorts" and args.target_duration > 60:
-        print(f"[Warning] Target duration {args.target_duration}s exceeds YouTube Shorts limit (60s).")
-        print("[Log] Capping short duration at 60s. For longer highlights, use --extract_mode long.")
-        args.target_duration = 60
-        
-    highlights, transcript_path, interest_points, silence_intervals, game_auto, game_framing = pick_moments(args, session_dir, source_url)
-    # The filler pass needs the words as spoken: a translated transcript has no "um" in it
-    spoken_transcript_path = transcript_path
-
-    # Captions in another language: translate the word-timed transcript once the moments are chosen
-    if getattr(args, "caption_lang", None):
-        from engine.caption_translate import resolve_language, translate_transcript
-        try:
-            transcript_path = translate_transcript(transcript_path, resolve_language(args.caption_lang))
-        except (ValueError, RuntimeError) as e:
-            print(f"[Error] {e}")
-            sys.exit(2)
-
-    # Chinese captions in the script the user asked for (before the clips, captions and titles are made)
-    zh_script = getattr(args, "zh_script", "auto") or "auto"
-    if zh_script != "auto":
-        from engine.zh_script import convert_highlights, convert_transcript
-        transcript_path = convert_transcript(transcript_path, zh_script)
-        convert_highlights(highlights, zh_script)
-
-    if game_auto and game_framing == "auto":
-        from engine import game_framing as _gf
-        args.layout, why = _gf.choose(args.source_video, highlights)
-        args.layout = "fit" if args.layout == "fit" else "single"
-        print(f"[Log] Game framing (auto): {'whole picture over a blurred copy (fit)' if args.layout == 'fit' else 'full-screen portrait crop'} - {why}. "
-              "Override with --game_framing fit or crop.")
-
-    # 🟢 Print the beautiful new score table
-    print_clip_score_table(highlights)
-    
-    stop_for_plan_or_preview(args, session_dir, highlights)
-
-    highlights, extracted_files, final_silence = cut_and_render(args, session_dir, highlights, transcript_path, spoken_transcript_path, interest_points,
-                                                 silence_intervals, target_bitrate, target_preset)
-
     # Auto B-roll: stock cutaways on spoken nouns, overlaid on the finished vertical clips (engine/broll.py)
     broll_events = {}                      # clip file -> [{t, kind, keyword}] (the auto-edit sound effects use them)
     if getattr(args, "broll", False) and extracted_files:
@@ -470,6 +419,66 @@ def run(args, target_bitrate, target_preset):
         from engine.reel_captions import join_clips
         reel_out = join_clips(extracted_files, os.path.join(session_dir, "reel_joined.mp4"), transition=getattr(args, "transitions", "auto"))
         print(f"[Log] Joined reel: {reel_out}" if reel_out else "[Warning] The shorts could not be joined into one reel (--join_reel); they are unchanged.")
+    return cold_infos, edit_logs
+
+
+def run(args, target_bitrate, target_preset):
+    import time
+    from engine import timing
+    from engine.social_gen import generate_viral_metadata
+    
+    print(f"--- Starting AI Extraction: {args.source_video} ---")
+    
+    session_dir = args.session_dir if args.session_dir else f"sessions/extraction_{int(time.time())}"
+    os.makedirs(session_dir, exist_ok=True)
+    
+    brand_kit = check_brand_and_tighten(args)
+    source_url = prepare_source(args, session_dir)
+
+    print("[Log] Running Transcript-based Highlight Analysis...")
+    # 🟢 EXPERT GUARD: Prevention of Mode Confusion
+    if args.extract_mode == "shorts" and args.target_duration > 60:
+        print(f"[Warning] Target duration {args.target_duration}s exceeds YouTube Shorts limit (60s).")
+        print("[Log] Capping short duration at 60s. For longer highlights, use --extract_mode long.")
+        args.target_duration = 60
+        
+    highlights, transcript_path, interest_points, silence_intervals, game_auto, game_framing = pick_moments(args, session_dir, source_url)
+    # The filler pass needs the words as spoken: a translated transcript has no "um" in it
+    spoken_transcript_path = transcript_path
+
+    # Captions in another language: translate the word-timed transcript once the moments are chosen
+    if getattr(args, "caption_lang", None):
+        from engine.caption_translate import resolve_language, translate_transcript
+        try:
+            transcript_path = translate_transcript(transcript_path, resolve_language(args.caption_lang))
+        except (ValueError, RuntimeError) as e:
+            print(f"[Error] {e}")
+            sys.exit(2)
+
+    # Chinese captions in the script the user asked for (before the clips, captions and titles are made)
+    zh_script = getattr(args, "zh_script", "auto") or "auto"
+    if zh_script != "auto":
+        from engine.zh_script import convert_highlights, convert_transcript
+        transcript_path = convert_transcript(transcript_path, zh_script)
+        convert_highlights(highlights, zh_script)
+
+    if game_auto and game_framing == "auto":
+        from engine import game_framing as _gf
+        args.layout, why = _gf.choose(args.source_video, highlights)
+        args.layout = "fit" if args.layout == "fit" else "single"
+        print(f"[Log] Game framing (auto): {'whole picture over a blurred copy (fit)' if args.layout == 'fit' else 'full-screen portrait crop'} - {why}. "
+              "Override with --game_framing fit or crop.")
+
+    # 🟢 Print the beautiful new score table
+    print_clip_score_table(highlights)
+    
+    stop_for_plan_or_preview(args, session_dir, highlights)
+
+    highlights, extracted_files, final_silence = cut_and_render(args, session_dir, highlights, transcript_path, spoken_transcript_path, interest_points,
+                                                 silence_intervals, target_bitrate, target_preset)
+
+    cold_infos, edit_logs = finish_clips(args, session_dir, highlights, extracted_files, transcript_path, spoken_transcript_path,
+                                         final_silence, brand_kit)
 
     # Export SRT for each extracted file
     if getattr(args, 'srt', False) and extracted_files and os.path.exists(transcript_path):
