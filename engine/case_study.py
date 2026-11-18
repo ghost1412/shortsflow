@@ -105,10 +105,11 @@ def default_fetch_raw(url, timeout=30):
     return r.content
 
 
-def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None):
+def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None, audio=None, transcribe=None, trim=None):
     """[{"id": "S1", "ref", "text"}] from up to three items: a web link (its paragraphs), a PDF link or file, a YouTube link (its captions), a
     caption file (.srt, .vtt), a text file, or pasted text. Items that cannot be read are skipped (the second return value lists them with the
-    reason). `fetch`, `fetch_raw`, `youtube` replace the network readers (tests)."""
+    reason). A YouTube video without captions, and an audio or video file, are listened to by the speech model on this PC (minutes, first 40 minutes
+    only). `fetch`, `fetch_raw`, `youtube`, `audio`, `transcribe`, `trim` replace the network and speech readers (tests)."""
     from engine import case_sources
     fetch = fetch or default_fetch
     fetch_raw = fetch_raw or default_fetch_raw
@@ -121,12 +122,21 @@ def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None
             if re.match(r"https?://\S+$", item):
                 if case_sources.is_youtube(item):
                     import tempfile
-                    text = case_sources.youtube_text(item, workdir or tempfile.mkdtemp(prefix="case_captions_"), youtube)
+                    folder = workdir or tempfile.mkdtemp(prefix="case_captions_")
+                    try:
+                        text = case_sources.youtube_text(item, folder, youtube)
+                    except case_sources.NoCaptions:
+                        print("[Log] This video has no captions: listening to its audio on this PC (this can take several minutes)...")
+                        text = case_sources.transcribe_file(case_sources.youtube_audio(item, folder, audio), folder, transcribe=transcribe, trim=trim)
                 elif case_sources.is_pdf_name(item):
                     text = case_sources.pdf_text(fetch_raw(item))
                 else:
                     text = _plain(fetch(item))
                 ref = item
+            elif os.path.isfile(item) and case_sources.is_audio_or_video_file(item):
+                import tempfile
+                print(f"[Log] Listening to {os.path.basename(item)} on this PC (this can take several minutes)...")
+                text, ref = case_sources.transcribe_file(item, workdir or tempfile.mkdtemp(prefix="case_listen_"), transcribe=transcribe, trim=trim), os.path.basename(item)
             elif os.path.isfile(item):
                 text, ref = _plain(case_sources.read_file(item)), os.path.basename(item)
             else:

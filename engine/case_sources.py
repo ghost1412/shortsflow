@@ -14,6 +14,14 @@ class SourceError(RuntimeError):
     """A source that could not be read; the message is for the user."""
 
 
+class NoCaptions(SourceError):
+    """A YouTube video without captions: the caller may fall back to listening to its audio."""
+
+
+AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".ogg", ".opus", ".aac", ".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi")
+MAX_TRANSCRIBE_MINUTES = 40       # a longer recording is transcribed up to here (the first part)
+
+
 def is_youtube(url):
     return bool(re.match(r"https?://(?:www\.|m\.)?(?:youtube\.com/(?:watch|shorts|live)|youtu\.be/)", str(url or "").strip(), re.I))
 
@@ -69,7 +77,7 @@ def youtube_text(url, workdir, download=None):
     download = download or _download_captions
     path = download(url, workdir)
     if not path or not os.path.isfile(path):
-        raise SourceError("this video has no captions to read")
+        raise NoCaptions("this video has no captions to read")
     with open(path, encoding="utf-8", errors="replace") as f:
         text = subtitle_text(f.read())
     if len(text) < 40:
@@ -93,6 +101,78 @@ def _download_captions(url, workdir):
         raise SourceError("the video could not be reached (" + " ".join(str(e).split())[:80] + ")")
     found = sorted(n for n in os.listdir(workdir) if n.startswith("captions.") and n.endswith(".vtt"))
     return os.path.join(workdir, found[0]) if found else None
+
+
+def youtube_audio(url, workdir, download=None):
+    """The audio of a YouTube video as a file path (audio only, nothing else is downloaded). `download(url, workdir)` replaces yt-dlp (tests)."""
+    download = download or _download_audio
+    path = download(url, workdir)
+    if not path or not os.path.isfile(path):
+        raise SourceError("the audio of this video could not be downloaded")
+    return path
+
+
+def _download_audio(url, workdir):
+    try:
+        import yt_dlp
+    except ImportError:
+        raise SourceError("reading a YouTube video needs yt-dlp")
+    os.makedirs(workdir, exist_ok=True)
+    opts = {"format": "bestaudio/best", "outtmpl": os.path.join(workdir, "audio.%(ext)s"), "quiet": True, "no_warnings": True, "noprogress": True,
+            "socket_timeout": 40, "retries": 3}
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+    except Exception as e:
+        raise SourceError("the audio could not be downloaded (" + " ".join(str(e).split())[:80] + ")")
+    found = sorted(n for n in os.listdir(workdir) if n.startswith("audio.") and not n.endswith((".part", ".ytdl")))
+    return os.path.join(workdir, found[0]) if found else None
+
+
+def is_audio_or_video_file(path):
+    return os.path.splitext(str(path))[1].lower() in AUDIO_EXTS
+
+
+def transcribe_file(path, workdir, language="en", max_minutes=MAX_TRANSCRIBE_MINUTES, transcribe=None, trim=None):
+    """The words spoken in an audio or video file, written out by the speech model on this PC (the same Whisper the clip tool uses; a transcript
+    already made of the same file is reused). Only the first `max_minutes` are listened to. Raises SourceError when nothing is heard.
+    `transcribe(path, workdir, language)` returns the path of a transcript.json; `trim(path, workdir, seconds)` returns the file to transcribe."""
+    os.makedirs(workdir, exist_ok=True)
+    trim = trim or _trim_audio
+    short = trim(path, workdir, int(max_minutes * 60))
+    if transcribe is None:
+        from engine.analysis import transcribe_video as transcribe_video
+
+        def transcribe(p, d, lang):
+            return transcribe_video(p, d, language=lang)
+    import json
+    try:
+        transcript = transcribe(short, workdir, language)
+        with open(transcript, encoding="utf-8") as f:
+            data = json.load(f)
+    except SourceError:
+        raise
+    except Exception as e:
+        raise SourceError("the speech could not be transcribed (" + " ".join(str(e).split())[:80] + ")")
+    text = " ".join(" ".join(str(seg.get("text", "")).split()) for seg in data.get("segments", []))
+    if len(text) < 40:
+        raise SourceError("almost no speech was heard in this file")
+    return text
+
+
+def _trim_audio(path, workdir, seconds):
+    """A 16 kHz mono wav of the first `seconds` of `path` (a small, quick file for the speech model)."""
+    import shutil
+    import subprocess
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        import imageio_ffmpeg
+        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    out = os.path.join(workdir, "listen.wav")
+    res = subprocess.run([ffmpeg, "-y", "-v", "error", "-i", path, "-t", str(seconds), "-vn", "-ac", "1", "-ar", "16000", out], capture_output=True, text=True)
+    if res.returncode != 0 or not os.path.isfile(out):
+        raise SourceError("the audio of this file could not be read (" + " ".join((res.stderr or "").split())[:80] + ")")
+    return out
 
 
 def read_file(path):

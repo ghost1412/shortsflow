@@ -100,3 +100,62 @@ def test_a_pdf_without_the_package_says_what_to_install(monkeypatch):
     with pytest.raises(src.SourceError) as e:
         src.pdf_text(b"%PDF")
     assert "pip install pypdf" in str(e.value)
+
+
+def _fake_transcribe(text):
+    import json
+    import os
+
+    def run(path, workdir, language):
+        out = os.path.join(workdir, "transcript.json")
+        with open(out, "w", encoding="utf-8") as f:
+            json.dump({"segments": [{"text": text[:50]}, {"text": text[50:]}]}, f)
+        return out
+    return run
+
+
+def test_transcribe_file_listens_to_the_trimmed_audio_and_joins_the_segments(tmp_path):
+    seen = {}
+
+    def trim(path, workdir, seconds):
+        seen["seconds"] = seconds
+        return str(tmp_path / "short.wav")
+    speech = "The ship ran aground on the morning of 23 March and the canal closed for six days."
+    text = src.transcribe_file(str(tmp_path / "talk.mp4"), str(tmp_path), transcribe=_fake_transcribe(speech), trim=trim)
+    assert text.replace("  ", " ") == " ".join(speech[:50].split() + speech[50:].split()) and seen["seconds"] == src.MAX_TRANSCRIBE_MINUTES * 60
+    with pytest.raises(src.SourceError) as e:
+        src.transcribe_file(str(tmp_path / "x.mp3"), str(tmp_path), transcribe=_fake_transcribe("hmm"), trim=lambda p, w, s: p)
+    assert "almost no speech" in str(e.value)
+
+    def broken(path, workdir, language):
+        raise RuntimeError("model missing")
+    with pytest.raises(src.SourceError) as e:
+        src.transcribe_file(str(tmp_path / "x.mp3"), str(tmp_path), transcribe=broken, trim=lambda p, w, s: p)
+    assert "could not be transcribed" in str(e.value)
+
+
+def test_a_youtube_video_without_captions_is_listened_to(tmp_path):
+    audio = tmp_path / "audio.m4a"
+    audio.write_bytes(b"x")
+    speech = "Nobody wrote captions for this one, so the speech model heard it instead, and it said enough."
+    sources, skipped = cs.gather_sources(["https://www.youtube.com/watch?v=abc"], youtube=lambda u, d: None, audio=lambda u, d: str(audio),
+                                         transcribe=_fake_transcribe(speech), trim=lambda p, w, s: p, workdir=str(tmp_path))
+    assert not skipped and "speech model heard it" in sources[0]["text"] and sources[0]["ref"].endswith("abc")
+
+
+def test_a_local_audio_or_video_file_is_transcribed_and_a_failure_is_a_skip(tmp_path):
+    clip = tmp_path / "interview.mp4"
+    clip.write_bytes(b"x")
+    speech = "The engineer explained that the update changed one file and that every machine then failed to start."
+    sources, skipped = cs.gather_sources([str(clip)], transcribe=_fake_transcribe(speech), trim=lambda p, w, s: p, workdir=str(tmp_path))
+    assert sources[0]["ref"] == "interview.mp4" and "engineer explained" in sources[0]["text"] and not skipped
+
+    def nothing(path, workdir, language):
+        raise src.SourceError("almost no speech was heard in this file")
+    sources, skipped = cs.gather_sources([str(clip)], transcribe=nothing, trim=lambda p, w, s: p, workdir=str(tmp_path))
+    assert sources == [] and "almost no speech" in skipped[0][1]
+
+
+def test_audio_extensions():
+    assert src.is_audio_or_video_file("C:/x/Talk.MP3") and src.is_audio_or_video_file("a.mkv") and not src.is_audio_or_video_file("a.pdf")
+    assert not src.is_audio_or_video_file("notes.txt")

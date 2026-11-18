@@ -268,7 +268,7 @@ python main.py --mode CASE --prompt "The topic" --sources LINK --case theme=neon
 python main.py --mode CASE --case help          # every option
 ```
 
-Sources are given with `--sources` (up to three; without one the video is marked UNVERIFIED). Each can be a web page (its paragraphs), a PDF link or file (`pip install pypdf`, or `pip install "shortsflow[sources]"`; scans without text are not read), a YouTube link (its own or automatic captions; the video is not downloaded), a caption file (`.srt`, `.vtt`), a text or Markdown file, or notes pasted as text. Everything else is a
+Sources are given with `--sources` (up to three; without one the video is marked UNVERIFIED). Each can be a web page (its paragraphs), a PDF link or file (`pip install pypdf`, or `pip install "shortsflow[sources]"`; scans without text are not read), a YouTube link (its own or automatic captions; with none, only the audio is downloaded and the speech model on this PC listens to it), an audio or video file (listened to the same way; only the first 40 minutes),  a caption file (`.srt`, `.vtt`), a text or Markdown file, or notes pasted as text. Everything else is a
 `--case KEY=VALUE` option, repeatable (a bare switch means on), or the same keys in a JSON file given with `--case_file` (for a series that should always look
 alike; `--case` values win). The options live in one place, `engine/case_options.py`, which the command line, the browser tab and the tests all read.
 
