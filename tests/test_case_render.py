@@ -23,7 +23,7 @@ def test_read_words_both_shapes(tmp_path):
 def test_build_props_shifts_words_to_their_section():
     words = [[{"word": "a", "start": 0.0, "end": 0.5}], [{"word": "b", "start": 0.1, "end": 0.6}]]
     props = cr.build_props(SCRIPT, [(2.0, 8.0), (8.0, 12.0)], words, theme="warm")
-    assert props["theme"] == "warm" and props["verified"] is True and props["sources"] == ["https://example.com/a"]
+    assert props["theme"] == "warm" and props["verified"] is True and props["sources"] == ["example.com"]
     assert [s["start"] for s in props["sections"]] == [2.0, 8.0]
     assert props["words"][1] == {"word": "b", "start": 8.1, "end": 8.6}
     assert "audioUrl" not in props and "accent" not in props
@@ -114,3 +114,16 @@ def test_attach_footage_one_clip_per_phrase_and_skips_misses(tmp_path):
     assert len(got[1]) == 1 and got[2] is None
     props = cr.build_props(dict(SCRIPT, sections=SCRIPT["sections"][:1] * 1), [(2.0, 12.0)], [[]], footage=[got[0]])
     assert props["sections"][0]["footage"][0]["src"].endswith("ships_at_sea.mp4") and props["sections"][0]["beats"]
+
+
+def test_source_chips_and_the_removed_claims_reach_the_props():
+    script = dict(SCRIPT, dropped=[{"sentence": "x", "unsupported": ["9"]}, {"sentence": "y", "unsupported": ["Zed"]}],
+                  sources=[{"id": "S1", "ref": "https://www.example.com/a/b"}, {"id": "S2", "ref": "C:/docs/notes.txt"}])
+    script["sections"] = [dict(SCRIPT["sections"][0], cites=["S2"]), dict(SCRIPT["sections"][1], cites=[])]
+    props = cr.build_props(script, [(2.0, 8.0), (8.0, 12.0)], [[], []])
+    assert props["sections"][0]["sourceLabels"] == ["notes.txt"]
+    assert props["sections"][1]["sourceLabels"] == ["example.com", "notes.txt"]       # no citation given: every source
+    assert props["sources"] == ["example.com", "notes.txt"] and props["removedClaims"] == 2
+    assert cr.source_label("pasted notes") == "pasted notes" and cr.source_label("https://a.b/c") == "a.b"
+    unverified = cr.build_props(dict(script, verified=False, sources=[]), [(2.0, 8.0), (8.0, 12.0)], [[], []])
+    assert unverified["sections"][0]["sourceLabels"] == []

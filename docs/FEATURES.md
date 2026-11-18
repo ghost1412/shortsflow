@@ -285,6 +285,8 @@ terminal, quote and formula (LaTeX, shown with KaTeX).
 
 In the browser app, pick **Case explainer** on the first screen. To check the script before anything is spoken or rendered, press **Write the script first**: you get the script as plain text (headings, stock-footage words, narration, labels), edit it or delete a section, and press **Render this script**. Or: type the topic, paste up to three links or notes, choose the sections, the look and the shapes, and press **Make my video**. The finished files are listed on the page and saved in `sessions/case_...`.
 
+Trust on screen: each section shows a small "SOURCE" chip with where its facts come from, and the end card says how many sentences were left out because the sources do not hold them. Animations: the model builds each Manim scene from a tested kit of diagram blocks (chain, branch, cycle, before and after, bar) that keeps text sized and everything inside the frame; the finished clip is checked on sample frames, and a clip that is cut off, nearly empty or confined to a corner is redone.
+
 Pacing: a section is not one long scene. It is cut into beats of about 3.5 to 6.5 seconds, each ending at a sentence end, and every beat changes the
 picture behind the scene (a different stock clip, a punch-in with a flash, a small camera drift) while the drawn scene keeps its place. Items on screen appear
 in the order the narrator says them. The Manim animation of a mechanism is transparent and floats over the footage in a frosted panel; diagram boxes, timeline

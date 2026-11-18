@@ -57,6 +57,70 @@ def test_render_scene_asks_for_a_transparent_clip_and_returns_the_webm(tmp_path,
             open(cmd[-1], "wb").write(b"webm")
         return R()
     monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(cm, "check_clip", lambda mov, portrait=False: [])
     out = cm.render_scene(GOOD, str(tmp_path), portrait=False)
     assert out.endswith("ExplainerScene.webm")
-    assert "-t" in seen["cmds"][0] and "yuva420p" in seen["cmds"][1]
+    assert "-t" in seen["cmds"][0] and any("yuva420p" in c for c in seen["cmds"])
+
+
+def _canvas(draw, w=480, h=270):
+    import numpy as np
+    a = np.zeros((h, w), dtype="uint8")
+    for x0, y0, x1, y1 in draw:
+        a[y0:y1, x0:x1] = 255
+    return a
+
+
+def test_frame_problems_flags_cut_off_empty_and_small_drawings():
+    good = [_canvas([(60, 50, 420, 220)])]
+    assert cm.frame_problems(good) == []
+    assert "cut off at the right" in cm.frame_problems([_canvas([(60, 50, 480, 220)])])[0]
+    assert "cut off at the left" in cm.frame_problems([_canvas([(0, 50, 300, 220)])])[0]
+    assert "almost nothing" in cm.frame_problems([_canvas([(200, 120, 204, 124)])])[0]
+    assert "small part" in cm.frame_problems([_canvas([(200, 110, 280, 170)])])[0]
+    assert "thin strip" in cm.frame_problems([_canvas([(40, 120, 440, 150)])])[0]
+    assert cm.frame_problems([], False)
+    tall = [_canvas([(40, 20, 440, 140)], w=480, h=600)]
+    assert "tall frame" in cm.frame_problems(tall, portrait=True)[0]
+    # a frame early in the scene may be nearly empty as long as another one fills it
+    assert cm.frame_problems([_canvas([]), _canvas([(60, 50, 420, 220)])]) == []
+
+
+def test_the_kit_is_copied_next_to_the_scene_and_a_failed_check_raises(tmp_path, monkeypatch):
+    import os
+    import pytest
+
+    def fake_run(cmd, **kw):
+        class R:
+            returncode, stderr = 0, ""
+        if "manim" in cmd:
+            folder = tmp_path / "videos" / "scene" / "1080p30"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "ExplainerScene.mov").write_bytes(b"mov")
+        else:
+            open(cmd[-1], "wb").write(b"webm")
+        return R()
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(cm, "check_clip", lambda mov, portrait=False: ["everything sits in a small part of the frame; make it larger"])
+    with pytest.raises(RuntimeError) as e:
+        cm.render_scene(GOOD, str(tmp_path), portrait=False)
+    assert "small part" in str(e.value) and os.path.isfile(tmp_path / "manim_kit.py")
+    monkeypatch.setattr(cm, "check_clip", lambda mov, portrait=False: [])
+    assert cm.render_scene(GOOD, str(tmp_path), portrait=False).endswith(".webm")
+    assert cm.render_scene(GOOD, str(tmp_path), portrait=False, check=False).endswith(".webm")
+
+
+def test_the_prompt_lists_the_kit_blocks():
+    text = cm.manim_prompt({"title": "A", "narration": "n", "on_screen": []}, 20)
+    for name in ("chain(", "branch(", "cycle(", "before_after(", "bar(", "from manim_kit import *"):
+        assert name in text
+
+
+def test_every_kit_block_named_in_the_prompt_exists_in_the_kit():
+    from pathlib import Path
+    kit = (Path(__file__).resolve().parents[1] / "engine" / "manim_kit.py").read_text(encoding="utf-8")
+    prompt = cm.manim_prompt({"title": "A", "narration": "n", "on_screen": []}, 20)
+    for needed in ("chain", "play_chain", "branch", "play_branch", "cycle", "play_cycle", "before_after", "play_before_after", "bar", "play_bar",
+                   "box", "label", "callout", "fit", "highlight_each"):
+        assert f"def {needed}(" in kit
+        assert needed in prompt, f"the prompt does not mention {needed}"

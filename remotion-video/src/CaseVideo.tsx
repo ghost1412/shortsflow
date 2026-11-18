@@ -19,12 +19,14 @@ export const caseVideoSchema = z.object({
   introSeconds: z.number().default(2.5),
   outroSeconds: z.number().default(3),
   verified: z.boolean().default(true),
+  removedClaims: z.number().default(0),         // sentences the check removed because the sources do not hold them
   sources: z.array(z.string()).default([]),
   captionsOff: z.boolean().default(false),
   sections: z.array(z.object({
     title: z.string(),
     scene: z.enum(CASE_SCENES).default("quote"),
     labels: z.array(z.string()).default([]),
+    sourceLabels: z.array(z.string()).default([]),   // where this section's facts come from, shown as a small chip
     footage: z.array(z.object({ src: z.string(), seconds: z.number().default(10), kind: z.enum(["video", "image"]).default("video") })).default([]),   // stock clips, one per beat, shown behind the scene
     beats: z.array(z.tuple([z.number(), z.number()])).default([]),                       // seconds after the section starts: a new picture at each
     clip: z.string().optional(),                // a rendered animation (Manim) drawn for this section, shown instead of the plain scene
@@ -507,6 +509,12 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
           )}
         </div>
       </AbsoluteFill>
+      {(section.sourceLabels ?? []).length > 0 && (
+        <div style={{ position: "absolute", right: 56 * u, top: 44 * u, display: "flex", alignItems: "center", gap: 10 * u, background: p.card, backdropFilter: p.blur, border: `1px solid ${p.line}`, borderRadius: 999, padding: `${8 * u}px ${20 * u}px`, opacity: interpolate(frame, [36, 52], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) }}>
+          <span style={{ fontFamily: MONO, fontSize: 20 * u, color: accent, letterSpacing: 2 }}>SOURCE</span>
+          <span style={{ fontFamily: FONT, fontSize: 24 * u, color: p.text }}>{(section.sourceLabels ?? []).join(" · ")}</span>
+        </div>
+      )}
       {frame < 42 && (
         <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", background: `${p.bg1}${frame < 30 ? "d9" : "99"}`, opacity: interpolate(frame, [0, 6, 30, 42], [0, 1, 1, 0], { extrapolateRight: "clamp" }) }}>
           <div style={{ fontFamily: FONT, fontSize: 340 * u, fontWeight: 900, color: "transparent", WebkitTextStroke: `${4 * u}px ${accent}`, lineHeight: 1, transform: `scale(${1 + 0.08 * (frame / 42)})` }}>{String(index + 1).padStart(2, "0")}</div>
@@ -593,7 +601,9 @@ export const CaseVideo: React.FC<Props> = (props) => {
       {props.outroSeconds > 0 && (
         <Sequence from={outroStart} durationInFrames={Math.round(props.outroSeconds * fps)}>
           <Cover title={props.verified ? "Sources" : "Unverified"} p={p} accent={accent} frames={Math.round(props.outroSeconds * fps)}
-            lines={props.verified ? props.sources.slice(0, 3) : ["No sources were given. Check the facts before you rely on them."]} />
+            lines={props.verified
+              ? [...props.sources.slice(0, 3), ...(props.removedClaims > 0 ? [`${props.removedClaims} sentence${props.removedClaims === 1 ? "" : "s"} left out: the sources do not hold ${props.removedClaims === 1 ? "it" : "them"}.`] : ["Every figure and name was found in the sources."])]
+              : ["No sources were given. Check the facts before you rely on them."]} />
         </Sequence>
       )}
       {!props.captionsOff && <Captions words={props.words} accent={p.cap && !props.accent ? p.cap : accent} pill={p.light ? "rgba(10,10,14,0.86)" : "rgba(0,0,0,0.62)"} />}

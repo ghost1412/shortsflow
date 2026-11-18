@@ -162,6 +162,16 @@ def attach_clips(script, timing, session_dir, ask, scenes=("flow",), portrait=Fa
     return out
 
 
+def source_label(ref):
+    """A short name for a source to show on screen: a link's host without "www.", a file's name, or "notes"."""
+    import re
+    ref = str(ref or "").strip()
+    m = re.match(r"https?://(?:www\.)?([^/?#]+)", ref)
+    if m:
+        return m.group(1)[:40]
+    return (os.path.basename(ref) or ref or "notes")[:40]
+
+
 def build_props(script, timing, words_per_section, theme="dark", accent=None, intro=1.8, outro=2.5, audio_url=None, music_url=None,
                 music_volume=0.12, captions=True, clips=None, footage=None):
     """The CaseVideo props: sections with their times, every word shifted to where its section starts. `clips` (from attach_clips)
@@ -172,6 +182,9 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
     for sec, (start, end), ws, clip, foot in zip(script["sections"], timing, words_per_section, clips, footage):
         labels, cues = spoken_order(list(sec.get("on_screen") or []), ws, duration=end - start)
         sections.append({"title": sec["title"], "scene": sec["scene"], "labels": labels, "cues": cues, "start": start, "end": end})
+        by_id = {s["id"]: s["ref"] for s in script.get("sources", [])}
+        cited = [by_id[c] for c in sec.get("cites") or [] if c in by_id] or (list(by_id.values()) if script.get("verified") else [])
+        sections[-1]["sourceLabels"] = list(dict.fromkeys(source_label(r) for r in cited))[:2]
         if clip:
             sections[-1]["clip"] = clip["path"]
             sections[-1]["clipRate"] = clip["rate"]
@@ -180,7 +193,8 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
             sections[-1]["footage"] = [{"src": f["path"], "seconds": f.get("seconds") or 10.0, "kind": f.get("kind", "video")} for f in foot]
         words += [{"word": w["word"], "start": round(w["start"] + start, 3), "end": round(w["end"] + start, 3)} for w in ws]
     props = {"title": script["title"], "theme": theme, "introSeconds": intro, "outroSeconds": outro, "verified": bool(script.get("verified")),
-             "sources": [s["ref"] for s in script.get("sources", [])], "captionsOff": not captions, "sections": sections, "words": words,
+             "sources": [source_label(s["ref"]) for s in script.get("sources", [])], "removedClaims": len(script.get("dropped") or []),
+             "captionsOff": not captions, "sections": sections, "words": words,
              "bgMusicVolume": music_volume}
     if accent:
         props["accent"] = accent
