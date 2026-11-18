@@ -422,88 +422,8 @@ def finish_clips(args, session_dir, highlights, extracted_files, transcript_path
     return cold_infos, edit_logs
 
 
-def run(args, target_bitrate, target_preset):
-    import time
-    from engine import timing
-    from engine.social_gen import generate_viral_metadata
-    
-    print(f"--- Starting AI Extraction: {args.source_video} ---")
-    
-    session_dir = args.session_dir if args.session_dir else f"sessions/extraction_{int(time.time())}"
-    os.makedirs(session_dir, exist_ok=True)
-    
-    brand_kit = check_brand_and_tighten(args)
-    source_url = prepare_source(args, session_dir)
-
-    print("[Log] Running Transcript-based Highlight Analysis...")
-    # 🟢 EXPERT GUARD: Prevention of Mode Confusion
-    if args.extract_mode == "shorts" and args.target_duration > 60:
-        print(f"[Warning] Target duration {args.target_duration}s exceeds YouTube Shorts limit (60s).")
-        print("[Log] Capping short duration at 60s. For longer highlights, use --extract_mode long.")
-        args.target_duration = 60
-        
-    highlights, transcript_path, interest_points, silence_intervals, game_auto, game_framing = pick_moments(args, session_dir, source_url)
-    # The filler pass needs the words as spoken: a translated transcript has no "um" in it
-    spoken_transcript_path = transcript_path
-
-    # Captions in another language: translate the word-timed transcript once the moments are chosen
-    if getattr(args, "caption_lang", None):
-        from engine.caption_translate import resolve_language, translate_transcript
-        try:
-            transcript_path = translate_transcript(transcript_path, resolve_language(args.caption_lang))
-        except (ValueError, RuntimeError) as e:
-            print(f"[Error] {e}")
-            sys.exit(2)
-
-    # Chinese captions in the script the user asked for (before the clips, captions and titles are made)
-    zh_script = getattr(args, "zh_script", "auto") or "auto"
-    if zh_script != "auto":
-        from engine.zh_script import convert_highlights, convert_transcript
-        transcript_path = convert_transcript(transcript_path, zh_script)
-        convert_highlights(highlights, zh_script)
-
-    if game_auto and game_framing == "auto":
-        from engine import game_framing as _gf
-        args.layout, why = _gf.choose(args.source_video, highlights)
-        args.layout = "fit" if args.layout == "fit" else "single"
-        print(f"[Log] Game framing (auto): {'whole picture over a blurred copy (fit)' if args.layout == 'fit' else 'full-screen portrait crop'} - {why}. "
-              "Override with --game_framing fit or crop.")
-
-    # 🟢 Print the beautiful new score table
-    print_clip_score_table(highlights)
-    
-    stop_for_plan_or_preview(args, session_dir, highlights)
-
-    highlights, extracted_files, final_silence = cut_and_render(args, session_dir, highlights, transcript_path, spoken_transcript_path, interest_points,
-                                                 silence_intervals, target_bitrate, target_preset)
-
-    cold_infos, edit_logs = finish_clips(args, session_dir, highlights, extracted_files, transcript_path, spoken_transcript_path,
-                                         final_silence, brand_kit)
-
-    # Export SRT for each extracted file
-    if getattr(args, 'srt', False) and extracted_files and os.path.exists(transcript_path):
-        print(f"[Log] Exporting SRT files for {len(extracted_files)} clips...")
-        try:
-            with open(transcript_path, 'r', encoding='utf-8') as f:
-                t_data = json.load(f)
-            for i, clip_file in enumerate(extracted_files):
-                if i < len(highlights):
-                    hi = highlights[i]
-                    # Copies: one transcript serves every clip, so one clip's offsets must not leak into the next
-                    clip_segs = []
-                    for seg in t_data.get('segments', []):
-                        if seg['end'] <= hi['start'] or seg['start'] >= hi['end']:
-                            continue
-                        clip_segs.append(dict(seg, start=max(0.0, seg['start'] - hi['start']),
-                                              end=min(hi['end'] - hi['start'], seg['end'] - hi['start'])))
-                    from engine.cold_open import shift_cues
-                    clip_segs = shift_cues(clip_segs, cold_infos.get(clip_file))     # a cold open moves every cue later
-                    srt_path = clip_file.rsplit('.', 1)[0] + ".srt"
-                    from engine.pipeline import export_srt
-                    export_srt({'segments': clip_segs}, srt_path)
-        except Exception as e:
-            print(f"[Warning] Failed to export SRT files: {e}")
-
+def add_commentary(args, session_dir, highlights, extracted_files):
+    """--add_commentary: a short AI voiceover is put in front of each clip, with the original audio ducked under it."""
     # 🟢 Policy-Safety: Prepend AI Voiceover Commentary Hook if --add_commentary is set
     if getattr(args, 'add_commentary', False) and extracted_files:
         print("[Log] 🎙️ Policy Protection Active: Generating AI intro commentary hooks for clips...")
@@ -596,7 +516,92 @@ def run(args, target_bitrate, target_preset):
     if not extracted_files:
         print("[Error] No videos were generated. Check the logs for FFmpeg failures.")
         sys.exit(1)
+
+
+def run(args, target_bitrate, target_preset):
+    import time
+    from engine import timing
+    from engine.social_gen import generate_viral_metadata
     
+    print(f"--- Starting AI Extraction: {args.source_video} ---")
+    
+    session_dir = args.session_dir if args.session_dir else f"sessions/extraction_{int(time.time())}"
+    os.makedirs(session_dir, exist_ok=True)
+    
+    brand_kit = check_brand_and_tighten(args)
+    source_url = prepare_source(args, session_dir)
+
+    print("[Log] Running Transcript-based Highlight Analysis...")
+    # 🟢 EXPERT GUARD: Prevention of Mode Confusion
+    if args.extract_mode == "shorts" and args.target_duration > 60:
+        print(f"[Warning] Target duration {args.target_duration}s exceeds YouTube Shorts limit (60s).")
+        print("[Log] Capping short duration at 60s. For longer highlights, use --extract_mode long.")
+        args.target_duration = 60
+        
+    highlights, transcript_path, interest_points, silence_intervals, game_auto, game_framing = pick_moments(args, session_dir, source_url)
+    # The filler pass needs the words as spoken: a translated transcript has no "um" in it
+    spoken_transcript_path = transcript_path
+
+    # Captions in another language: translate the word-timed transcript once the moments are chosen
+    if getattr(args, "caption_lang", None):
+        from engine.caption_translate import resolve_language, translate_transcript
+        try:
+            transcript_path = translate_transcript(transcript_path, resolve_language(args.caption_lang))
+        except (ValueError, RuntimeError) as e:
+            print(f"[Error] {e}")
+            sys.exit(2)
+
+    # Chinese captions in the script the user asked for (before the clips, captions and titles are made)
+    zh_script = getattr(args, "zh_script", "auto") or "auto"
+    if zh_script != "auto":
+        from engine.zh_script import convert_highlights, convert_transcript
+        transcript_path = convert_transcript(transcript_path, zh_script)
+        convert_highlights(highlights, zh_script)
+
+    if game_auto and game_framing == "auto":
+        from engine import game_framing as _gf
+        args.layout, why = _gf.choose(args.source_video, highlights)
+        args.layout = "fit" if args.layout == "fit" else "single"
+        print(f"[Log] Game framing (auto): {'whole picture over a blurred copy (fit)' if args.layout == 'fit' else 'full-screen portrait crop'} - {why}. "
+              "Override with --game_framing fit or crop.")
+
+    # 🟢 Print the beautiful new score table
+    print_clip_score_table(highlights)
+    
+    stop_for_plan_or_preview(args, session_dir, highlights)
+
+    highlights, extracted_files, final_silence = cut_and_render(args, session_dir, highlights, transcript_path, spoken_transcript_path, interest_points,
+                                                 silence_intervals, target_bitrate, target_preset)
+
+    cold_infos, edit_logs = finish_clips(args, session_dir, highlights, extracted_files, transcript_path, spoken_transcript_path,
+                                         final_silence, brand_kit)
+
+    # Export SRT for each extracted file
+    if getattr(args, 'srt', False) and extracted_files and os.path.exists(transcript_path):
+        print(f"[Log] Exporting SRT files for {len(extracted_files)} clips...")
+        try:
+            with open(transcript_path, 'r', encoding='utf-8') as f:
+                t_data = json.load(f)
+            for i, clip_file in enumerate(extracted_files):
+                if i < len(highlights):
+                    hi = highlights[i]
+                    # Copies: one transcript serves every clip, so one clip's offsets must not leak into the next
+                    clip_segs = []
+                    for seg in t_data.get('segments', []):
+                        if seg['end'] <= hi['start'] or seg['start'] >= hi['end']:
+                            continue
+                        clip_segs.append(dict(seg, start=max(0.0, seg['start'] - hi['start']),
+                                              end=min(hi['end'] - hi['start'], seg['end'] - hi['start'])))
+                    from engine.cold_open import shift_cues
+                    clip_segs = shift_cues(clip_segs, cold_infos.get(clip_file))     # a cold open moves every cue later
+                    srt_path = clip_file.rsplit('.', 1)[0] + ".srt"
+                    from engine.pipeline import export_srt
+                    export_srt({'segments': clip_segs}, srt_path)
+        except Exception as e:
+            print(f"[Warning] Failed to export SRT files: {e}")
+
+    add_commentary(args, session_dir, highlights, extracted_files)
+
     # Generate viral metadata for Highlights
     timing.mark("brand, SRT")
     print("[Log] Generating viral metadata for extracted clips...")
