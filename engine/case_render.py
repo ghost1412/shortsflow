@@ -44,12 +44,43 @@ def read_words(path):
     return [w for w in out if w["word"]]
 
 
+def label_cues(labels, words, duration=None, min_gap=0.8):
+    """Seconds (after the section's audio starts) at which each on-screen label is spoken: the first word, searched in order,
+    that matches a content word of the label (numbers match by digits). A label with no match follows the previous one by
+    `min_gap` and a little more; cues never go backwards and stay inside `duration` when it is given."""
+    import re
+    keys = [re.sub(r"\W+", "", (w["word"] or "").lower()) for w in words]
+    digits = [re.sub(r"\D", "", w["word"] or "") for w in words]
+    cues, cursor, prev = [], 0, -min_gap
+    for label in labels:
+        tokens = [re.sub(r"\W+", "", x.lower()) for x in re.findall(r"[\w$.,]+", label)]
+        tokens = [x for x in tokens if len(x) >= 4 or x.isdigit()]
+        found = None
+        for i in range(cursor, len(words)):
+            if any(tok and ((tok.isdigit() and digits[i] == tok) or (not tok.isdigit() and keys[i] and (tok == keys[i] or tok[:5] == keys[i][:5] and len(keys[i]) >= 4)))
+                   for tok in tokens):
+                found = i
+                break
+        if found is not None:
+            at = max(words[found]["start"] - 0.15, prev + 0.3, 0.2)
+            cursor = found + 1
+        else:
+            at = prev + min_gap + 0.4
+        if duration:
+            at = min(at, max(0.2, duration - 0.5))
+        cues.append(round(at, 2))
+        prev = cues[-1]
+    return cues
+
+
 def build_props(script, timing, words_per_section, theme="dark", accent=None, intro=2.5, outro=3.0, audio_url=None, music_url=None,
                 music_volume=0.12, captions=True):
     """The CaseVideo props: sections with their times, every word shifted to where its section starts."""
     sections, words = [], []
     for sec, (start, end), ws in zip(script["sections"], timing, words_per_section):
-        sections.append({"title": sec["title"], "scene": sec["scene"], "labels": list(sec.get("on_screen") or []), "start": start, "end": end})
+        labels = list(sec.get("on_screen") or [])
+        sections.append({"title": sec["title"], "scene": sec["scene"], "labels": labels,
+                         "cues": label_cues(labels, ws, duration=end - start), "start": start, "end": end})
         words += [{"word": w["word"], "start": round(w["start"] + start, 3), "end": round(w["end"] + start, 3)} for w in ws]
     props = {"title": script["title"], "theme": theme, "introSeconds": intro, "outroSeconds": outro, "verified": bool(script.get("verified")),
              "sources": [s["ref"] for s in script.get("sources", [])], "captionsOff": not captions, "sections": sections, "words": words,

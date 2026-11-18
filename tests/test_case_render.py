@@ -40,3 +40,17 @@ def test_speak_sections_uses_the_given_generator(tmp_path):
     audios, words = cr.speak_sections(SCRIPT, str(tmp_path), provider="edgetts", generate=fake)
     assert len(audios) == 2 and words[0][0]["word"] == "x"
     assert calls[0][1]["provider"] == "edgetts" and calls[0][1]["add_cta"] is False
+
+
+def test_label_cues_follow_the_spoken_words():
+    words = [{"word": w, "start": i * 0.5, "end": i * 0.5 + 0.4} for i, w in enumerate(
+        "On July 19 CrowdStrike pushed a faulty update and roughly 8.5 million systems crashed".split())]
+    cues = cr.label_cues(["July 19, 2024", "Faulty update", "8.5 million systems"], words, duration=10)
+    assert cues == sorted(cues)
+    assert cues[0] < cues[1] < cues[2]
+    assert abs(cues[1] - (words[6]["start"] - 0.15)) < 0.01      # "faulty" is word 6
+
+
+def test_label_cues_unmatched_labels_still_move_forward_and_stay_inside_the_section():
+    cues = cr.label_cues(["zzz one", "zzz two", "zzz three"], [{"word": "hello", "start": 0.0, "end": 0.3}], duration=3)
+    assert cues == sorted(cues) and len(set(cues)) == 3 and max(cues) <= 2.5

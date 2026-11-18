@@ -2,7 +2,7 @@
 // drawn from its on-screen labels, over a themed background, with word-timed captions. No custom fonts (a font load stalled the CI
 // renderer before), no stock footage: everything is drawn, so a run needs no key and no download.
 import React from "react";
-import { AbsoluteFill, Audio, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Sequence, interpolate, random, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { z } from "zod";
 
 export const CASE_THEMES = ["dark", "clean", "warm"] as const;
@@ -24,6 +24,7 @@ export const caseVideoSchema = z.object({
     title: z.string(),
     scene: z.enum(CASE_SCENES).default("quote"),
     labels: z.array(z.string()).default([]),
+    cues: z.array(z.number()).default([]),     // seconds after the section starts at which each label is spoken
     start: z.number(),
     end: z.number(),
   })).default([]),
@@ -44,7 +45,29 @@ const useUnit = () => {
   return { u: Math.min(width, height) / 1080, w: width, h: height, portrait: height > width };
 };
 
-const Background: React.FC<{ p: (typeof PALETTES)[keyof typeof PALETTES]; dark: boolean }> = ({ p, dark }) => {
+const POINTS = 38;
+const Network: React.FC<{ accent: string }> = ({ accent }) => {
+  const frame = useCurrentFrame();
+  const { u, w, h } = useUnit();
+  const pts = Array.from({ length: POINTS }, (_, i) => {
+    const x0 = random(`x${i}`) * w, y0 = random(`y${i}`) * h, ph = random(`p${i}`) * 6.28, sp = 0.006 + random(`s${i}`) * 0.01;
+    return { x: x0 + Math.sin(frame * sp + ph) * 60 * u, y: y0 + Math.cos(frame * sp * 1.3 + ph) * 50 * u, r: (2 + random(`r${i}`) * 3) * u };
+  });
+  const links: React.ReactNode[] = [];
+  const reach = 300 * u;
+  for (let i = 0; i < POINTS; i++) for (let j = i + 1; j < POINTS; j++) {
+    const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
+    if (d < reach) links.push(<line key={`${i}-${j}`} x1={pts[i].x} y1={pts[i].y} x2={pts[j].x} y2={pts[j].y} stroke={accent} strokeOpacity={(1 - d / reach) * 0.22} strokeWidth={1.4 * u} />);
+  }
+  return (
+    <svg width={w} height={h} style={{ position: "absolute", inset: 0 }}>
+      {links}
+      {pts.map((q, i) => <circle key={i} cx={q.x} cy={q.y} r={q.r} fill={accent} fillOpacity={0.35} />)}
+    </svg>
+  );
+};
+
+const Background: React.FC<{ p: (typeof PALETTES)[keyof typeof PALETTES]; dark: boolean; accent: string }> = ({ p, dark, accent }) => {
   const frame = useCurrentFrame();
   const { u } = useUnit();
   const drift = (frame * 0.4) % (80 * u);
@@ -52,9 +75,10 @@ const Background: React.FC<{ p: (typeof PALETTES)[keyof typeof PALETTES]; dark: 
     <AbsoluteFill style={{ background: `radial-gradient(ellipse at 30% 20%, ${p.bg2}, ${p.bg1} 70%)` }}>
       <AbsoluteFill style={{
         backgroundImage: `linear-gradient(${p.line} 1px, transparent 1px), linear-gradient(90deg, ${p.line} 1px, transparent 1px)`,
-        backgroundSize: `${80 * u}px ${80 * u}px`, backgroundPosition: `${drift}px ${drift}px`, opacity: dark ? 0.35 : 0.5,
+        backgroundSize: `${80 * u}px ${80 * u}px`, backgroundPosition: `${drift}px ${drift}px`, opacity: dark ? 0.3 : 0.45,
         maskImage: "radial-gradient(ellipse at center, black 30%, transparent 85%)", WebkitMaskImage: "radial-gradient(ellipse at center, black 30%, transparent 85%)",
       }} />
+      <Network accent={accent} />
       {dark && <AbsoluteFill style={{ background: "repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 1px, transparent 2px, transparent 4px)" }} />}
     </AbsoluteFill>
   );
@@ -64,45 +88,86 @@ const enter = (frame: number, delay: number, fps: number) =>
   spring({ frame: frame - delay, fps, config: { damping: 18, stiffness: 120 } });
 
 type Pal = (typeof PALETTES)[keyof typeof PALETTES];
-type SceneProps = { labels: string[]; p: Pal; accent: string; frames: number };
+type SceneProps = { labels: string[]; cues: number[]; p: Pal; accent: string; frames: number };
 
-// the labels appear one after another across the first 70% of the section
-const stagger = (i: number, n: number, frames: number) => Math.round((i / Math.max(1, n)) * frames * 0.7) + 6;
+// the frame at which each label is spoken: the cue from the narration, else evenly across the first 70% of the section
+const cueFrames = (n: number, cues: number[], frames: number, fps: number) =>
+  Array.from({ length: n }, (_, i) => (cues[i] !== undefined ? Math.round(cues[i] * fps) : Math.round((i / Math.max(1, n)) * frames * 0.7) + 6));
+// the label being spoken now: the last one whose cue has passed
+const activeIndex = (frame: number, at: number[]) => at.reduce((a, f, i) => (frame >= f ? i : a), -1);
 
-const Timeline: React.FC<SceneProps> = ({ labels, p, accent, frames }) => {
+const glow = (on: boolean, accent: string, u: number) => (on ? `0 0 ${34 * u}px ${accent}88` : "none");
+
+const Timeline: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const { u, portrait } = useUnit();
+  const at = cueFrames(labels.length, cues, frames, fps);
+  const act = activeIndex(frame, at);
+  const aw = width - 140 * u, ah = portrait ? height * 0.6 : height * 0.5;
+  const pos = (i: number) => (portrait ? { x: 90 * u, y: (ah * (i + 0.5)) / labels.length } : { x: (aw * (i + 0.5)) / labels.length, y: ah / 2 });
+  // the line is drawn up to the node being spoken, and keeps travelling toward the next one
+  const lineEnd = act < 0 ? 0 : act + (act + 1 < labels.length ? interpolate(frame, [at[act], Math.max(at[act] + 1, at[act + 1])], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : 0);
+  const first = pos(0), last = pos(labels.length - 1);
+  const share = lineEnd / Math.max(1, labels.length - 1);
+  const head = { x: first.x + (last.x - first.x) * share, y: first.y + (last.y - first.y) * share };
   return (
-    <div style={{ display: "flex", flexDirection: portrait ? "column" : "row", gap: 36 * u, alignItems: portrait ? "flex-start" : "stretch", justifyContent: "center", width: "100%" }}>
+    <div style={{ position: "relative", width: aw, height: ah }}>
+      <svg width={aw} height={ah} style={{ position: "absolute", inset: 0 }}>
+        <line x1={first.x} y1={first.y} x2={last.x} y2={last.y} stroke={p.line} strokeWidth={6 * u} strokeLinecap="round" />
+        <line x1={first.x} y1={first.y} x2={head.x} y2={head.y} stroke={accent} strokeWidth={6 * u} strokeLinecap="round" />
+        {act >= 0 && <circle cx={head.x} cy={head.y} r={14 * u} fill={accent} style={{ filter: `drop-shadow(0 0 ${14 * u}px ${accent})` }} />}
+      </svg>
       {labels.map((l, i) => {
-        const t = enter(frame, stagger(i, labels.length, frames), fps);
+        const t = enter(frame, at[i], fps);
+        const { x, y } = pos(i);
+        const above = !portrait && i % 2 === 0;
+        const on = i === act;
         return (
-          <div key={i} style={{ display: "flex", flexDirection: portrait ? "row" : "column", alignItems: "center", gap: 22 * u, opacity: t, transform: `translate${portrait ? "X" : "Y"}(${(1 - t) * 40 * u}px)`, flex: portrait ? undefined : 1 }}>
-            <div style={{ width: 34 * u, height: 34 * u, borderRadius: "50%", background: accent, boxShadow: `0 0 ${24 * u}px ${accent}`, flexShrink: 0 }} />
-            <div style={{ fontFamily: FONT, fontSize: 46 * u, fontWeight: 700, color: p.text, lineHeight: 1.15, textAlign: portrait ? "left" : "center" }}>{l}</div>
-          </div>
+          <React.Fragment key={i}>
+            <div style={{ position: "absolute", left: x - 20 * u, top: y - 20 * u, width: 40 * u, height: 40 * u, borderRadius: "50%", background: i <= act ? accent : p.bg1, border: `${5 * u}px solid ${accent}`, transform: `scale(${0.4 + 0.6 * t})`, boxShadow: glow(on, accent, u) }} />
+            <div style={{ position: "absolute", left: portrait ? x + 50 * u : x - 230 * u, top: portrait ? y - 34 * u : above ? y - 170 * u : y + 50 * u, width: portrait ? aw - x - 70 * u : 460 * u, textAlign: portrait ? "left" : "center", fontFamily: FONT, fontSize: 44 * u, fontWeight: 700, lineHeight: 1.15, color: i <= act ? p.text : p.dim, opacity: t, transform: `translateY(${(1 - t) * (above ? 30 : -30) * u}px) scale(${on ? 1.06 : 1})` }}>{l}</div>
+          </React.Fragment>
         );
       })}
     </div>
   );
 };
 
-const Flow: React.FC<SceneProps> = ({ labels, p, accent, frames }) => {
+const Flow: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const { u, portrait } = useUnit();
+  const n = labels.length;
+  const at = cueFrames(n, cues, frames, fps);
+  const act = activeIndex(frame, at);
+  const aw = width - 140 * u, ah = portrait ? height * 0.62 : height * 0.5;
+  const nw = portrait ? Math.min(820 * u, aw) : Math.min(400 * u, aw / n - 70 * u), nh = portrait ? Math.min(140 * u, ah / n - 50 * u) : 190 * u;
+  const c = (i: number) => (portrait ? { x: aw / 2, y: (ah * (i + 0.5)) / n } : { x: (aw * (i + 0.5)) / n, y: ah / 2 });
   return (
-    <div style={{ display: "flex", flexDirection: portrait ? "column" : "row", alignItems: "center", justifyContent: "center", gap: 18 * u, width: "100%" }}>
+    <div style={{ position: "relative", width: aw, height: ah }}>
+      <svg width={aw} height={ah} style={{ position: "absolute", inset: 0 }}>
+        {labels.slice(0, -1).map((_, i) => {
+          const a = c(i), b = c(i + 1);
+          const from = portrait ? { x: a.x, y: a.y + nh / 2 } : { x: a.x + nw / 2, y: a.y };
+          const to = portrait ? { x: b.x, y: b.y - nh / 2 } : { x: b.x - nw / 2, y: b.y };
+          const prog = interpolate(frame, [at[i], Math.max(at[i] + 1, at[i + 1])], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+          const px = from.x + (to.x - from.x) * prog, py = from.y + (to.y - from.y) * prog;
+          return (
+            <g key={i}>
+              <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={p.line} strokeWidth={4 * u} strokeDasharray={`${12 * u} ${10 * u}`} />
+              <line x1={from.x} y1={from.y} x2={px} y2={py} stroke={accent} strokeWidth={5 * u} />
+              {prog > 0 && prog < 1 && <circle cx={px} cy={py} r={11 * u} fill={accent} style={{ filter: `drop-shadow(0 0 ${14 * u}px ${accent})` }} />}
+            </g>
+          );
+        })}
+      </svg>
       {labels.map((l, i) => {
-        const t = enter(frame, stagger(i, labels.length, frames), fps);
+        const t = enter(frame, at[i], fps);
+        const { x, y } = c(i);
+        const on = i === act;
         return (
-          <React.Fragment key={i}>
-            {i > 0 && <div style={{ color: accent, fontSize: 54 * u, fontFamily: FONT, opacity: t, transform: portrait ? "rotate(90deg)" : undefined }}>➜</div>}
-            <div style={{ background: p.card, border: `2px solid ${accent}`, borderRadius: 22 * u, padding: `${28 * u}px ${34 * u}px`, fontFamily: FONT, fontSize: 40 * u, fontWeight: 700, color: p.text, textAlign: "center", opacity: t, transform: `scale(${0.85 + 0.15 * t})`, boxShadow: `0 0 ${30 * u}px ${accent}33`, maxWidth: portrait ? 860 * u : 420 * u }}>
-              {l}
-            </div>
-          </React.Fragment>
+          <div key={i} style={{ position: "absolute", left: x - nw / 2, top: y - nh / 2, width: nw, height: nh, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", boxSizing: "border-box", padding: 14 * u, background: p.card, border: `${on ? 4 : 2}px solid ${i <= act ? accent : p.line}`, borderRadius: 22 * u, fontFamily: FONT, fontSize: 38 * u, fontWeight: 700, color: p.text, opacity: t, transform: `scale(${(0.85 + 0.15 * t) * (on ? 1.05 : 1)})`, boxShadow: glow(on, accent, u) }}>{l}</div>
         );
       })}
     </div>
@@ -120,28 +185,31 @@ const splitNumber = (label: string) => {
   return { raw, num, rest, prefix: raw.startsWith("$") ? "$" : "", suffix: raw.replace(/^\$?\s?[\d,.]+/, "").trim() };
 };
 
-const Counters: React.FC<SceneProps> = ({ labels, p, accent, frames }) => {
+const Counters: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { u, portrait } = useUnit();
+  const at = cueFrames(labels.length, cues, frames, fps);
+  const act = activeIndex(frame, at);
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 28 * u, justifyContent: "center", width: "100%" }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 30 * u, justifyContent: "center", width: "100%" }}>
       {labels.map((l, i) => {
-        const delay = stagger(i, labels.length, frames);
+        const delay = at[i];
         const t = enter(frame, delay, fps);
         const parts = splitNumber(l);
         const progress = interpolate(frame - delay, [0, 40], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
         const decimals = parts && /\.\d/.test(parts.raw) ? (parts.raw.split(".")[1].match(/^\d+/) || [""])[0].length : 0;
         const shown = parts ? (parts.num * progress).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : null;
+        const on = i === act;
         return (
-          <div key={i} style={{ background: p.card, border: `1px solid ${p.line}`, borderTop: `4px solid ${accent}`, borderRadius: 20 * u, padding: `${30 * u}px ${36 * u}px`, minWidth: (portrait ? 800 : 440) * u, textAlign: "center", opacity: t, transform: `translateY(${(1 - t) * 40 * u}px)` }}>
+          <div key={i} style={{ background: p.card, border: `1px solid ${p.line}`, borderTop: `5px solid ${accent}`, borderRadius: 22 * u, padding: `${34 * u}px ${40 * u}px`, minWidth: (portrait ? 800 : 500) * u, textAlign: "center", opacity: t, transform: `translateY(${(1 - t) * 50 * u}px) scale(${on ? 1.05 : 1})`, boxShadow: glow(on, accent, u) }}>
             {parts ? (
               <>
-                <div style={{ fontFamily: FONT, fontSize: 92 * u, fontWeight: 800, color: accent, lineHeight: 1 }}>{parts.prefix}{shown}{parts.suffix ? ` ${parts.suffix}` : ""}</div>
-                <div style={{ fontFamily: FONT, fontSize: 38 * u, color: p.text, marginTop: 12 * u }}>{parts.rest}</div>
+                <div style={{ fontFamily: FONT, fontSize: 110 * u, fontWeight: 800, color: accent, lineHeight: 1 }}>{parts.prefix}{shown}{parts.suffix ? ` ${parts.suffix}` : ""}</div>
+                <div style={{ fontFamily: FONT, fontSize: 42 * u, color: p.text, marginTop: 14 * u }}>{parts.rest}</div>
               </>
             ) : (
-              <div style={{ fontFamily: FONT, fontSize: 52 * u, fontWeight: 700, color: p.text }}>{l}</div>
+              <div style={{ fontFamily: FONT, fontSize: 56 * u, fontWeight: 700, color: p.text }}>{l}</div>
             )}
           </div>
         );
@@ -150,22 +218,25 @@ const Counters: React.FC<SceneProps> = ({ labels, p, accent, frames }) => {
   );
 };
 
-const Checklist: React.FC<SceneProps> = ({ labels, p, accent, frames }) => {
+const Checklist: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { u } = useUnit();
+  const at = cueFrames(labels.length, cues, frames, fps);
+  const act = activeIndex(frame, at);
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 26 * u, width: "100%", maxWidth: 1400 * u }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 28 * u, width: "100%", maxWidth: 1400 * u }}>
       {labels.map((l, i) => {
-        const delay = stagger(i, labels.length, frames);
+        const delay = at[i];
         const t = enter(frame, delay, fps);
         const tick = interpolate(frame - delay - 8, [0, 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+        const on = i === act;
         return (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 28 * u, background: p.card, border: `1px solid ${p.line}`, borderRadius: 18 * u, padding: `${24 * u}px ${30 * u}px`, opacity: t, transform: `translateX(${(1 - t) * -60 * u}px)` }}>
-            <div style={{ width: 52 * u, height: 52 * u, borderRadius: 12 * u, border: `3px solid ${accent}`, display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 40 * u, fontFamily: FONT, fontWeight: 800, flexShrink: 0 }}>
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 30 * u, background: p.card, border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 20 * u, padding: `${26 * u}px ${32 * u}px`, opacity: t, transform: `translateX(${(1 - t) * -80 * u}px) scale(${on ? 1.03 : 1})`, transformOrigin: "left center", boxShadow: glow(on, accent, u) }}>
+            <div style={{ width: 58 * u, height: 58 * u, borderRadius: 14 * u, border: `3px solid ${accent}`, background: tick > 0.5 ? `${accent}33` : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 44 * u, fontFamily: FONT, fontWeight: 800, flexShrink: 0 }}>
               <span style={{ opacity: tick, transform: `scale(${0.4 + 0.6 * tick})` }}>✓</span>
             </div>
-            <div style={{ fontFamily: FONT, fontSize: 44 * u, fontWeight: 600, color: p.text }}>{l}</div>
+            <div style={{ fontFamily: FONT, fontSize: 48 * u, fontWeight: 600, color: p.text }}>{l}</div>
           </div>
         );
       })}
@@ -173,16 +244,17 @@ const Checklist: React.FC<SceneProps> = ({ labels, p, accent, frames }) => {
   );
 };
 
-const Terminal: React.FC<SceneProps> = ({ labels, p, accent, frames }) => {
+const Terminal: React.FC<SceneProps> = ({ labels, cues, accent, frames }) => {
   const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
   const { u } = useUnit();
-  const per = Math.max(8, Math.floor((frames * 0.7) / Math.max(1, labels.length)));
+  const at = cueFrames(labels.length, cues, frames, fps);
   return (
-    <div style={{ background: "rgba(2,6,12,0.9)", border: `1px solid ${accent}55`, borderRadius: 18 * u, padding: 36 * u, width: "100%", maxWidth: 1400 * u, fontFamily: MONO, boxShadow: `0 0 ${40 * u}px ${accent}22` }}>
+    <div style={{ background: "rgba(2,6,12,0.92)", border: `1px solid ${accent}55`, borderRadius: 18 * u, padding: 40 * u, width: "100%", maxWidth: 1400 * u, fontFamily: MONO, boxShadow: `0 0 ${40 * u}px ${accent}22` }}>
       {labels.map((l, i) => {
-        const chars = Math.max(0, Math.min(l.length, Math.floor(((frame - 6 - i * per) / per) * l.length * 1.4)));
+        const chars = Math.max(0, Math.min(l.length, Math.floor((frame - at[i]) * 1.6)));
         return (
-          <div key={i} style={{ fontSize: 40 * u, color: p.text === "#101828" ? "#101828" : "#9fffd9", marginBottom: 18 * u, minHeight: 48 * u }}>
+          <div key={i} style={{ fontSize: 44 * u, color: "#9fffd9", marginBottom: 20 * u, minHeight: 54 * u }}>
             <span style={{ color: accent }}>$ </span>{l.slice(0, chars)}{chars < l.length && chars > 0 ? <span style={{ opacity: frame % 20 < 10 ? 1 : 0 }}>▌</span> : null}
           </div>
         );
@@ -191,14 +263,17 @@ const Terminal: React.FC<SceneProps> = ({ labels, p, accent, frames }) => {
   );
 };
 
-const Quote: React.FC<SceneProps> = ({ labels, p, accent }) => {
+const Quote: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { u } = useUnit();
-  const t = enter(frame, 4, fps);
+  const at = cueFrames(labels.length, cues, frames, fps);
   return (
-    <div style={{ borderLeft: `${10 * u}px solid ${accent}`, paddingLeft: 40 * u, opacity: t, transform: `translateY(${(1 - t) * 30 * u}px)`, maxWidth: 1400 * u }}>
-      {labels.map((l, i) => <div key={i} style={{ fontFamily: FONT, fontSize: (i === 0 ? 72 : 44) * u, fontWeight: i === 0 ? 800 : 500, color: i === 0 ? p.text : p.dim, lineHeight: 1.2, marginBottom: 16 * u }}>{l}</div>)}
+    <div style={{ borderLeft: `${10 * u}px solid ${accent}`, paddingLeft: 44 * u, maxWidth: 1400 * u }}>
+      {labels.map((l, i) => {
+        const t = enter(frame, Math.max(4, at[i]), fps);
+        return <div key={i} style={{ fontFamily: FONT, fontSize: (i === 0 ? 78 : 48) * u, fontWeight: i === 0 ? 800 : 500, color: i === 0 ? p.text : p.dim, lineHeight: 1.2, marginBottom: 18 * u, opacity: t, transform: `translateY(${(1 - t) * 30 * u}px)` }}>{l}</div>;
+      })}
     </div>
   );
 };
@@ -210,15 +285,24 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
   const { u, h } = useUnit();
   const View = SCENE_VIEWS[section.scene];
   const fade = Math.min(interpolate(frame, [0, 10], [0, 1], { extrapolateRight: "clamp" }), interpolate(frame, [frames - 10, frames], [1, 0], { extrapolateLeft: "clamp" }));
+  const push = 1 + 0.05 * (frame / frames);            // a slow push-in over the whole section
+  const wipe = interpolate(frame, [0, 18], [-30, 115], { extrapolateRight: "clamp" });
+  const underline = interpolate(frame, [4, 24], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
-    <AbsoluteFill style={{ opacity: fade, padding: `${90 * u}px ${70 * u}px ${Math.max(360 * u, h * 0.2)}px` }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 24 * u, marginBottom: 54 * u }}>
-        <div style={{ fontFamily: MONO, fontSize: 34 * u, color: accent, letterSpacing: 2 }}>{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div>
-        <div style={{ fontFamily: FONT, fontSize: 56 * u, fontWeight: 800, color: p.text, textTransform: "uppercase", letterSpacing: 1 }}>{section.title}</div>
-      </div>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <View labels={section.labels.length ? section.labels : [section.title]} p={p} accent={accent} frames={frames} />
-      </div>
+    <AbsoluteFill style={{ opacity: fade }}>
+      <AbsoluteFill style={{ padding: `${90 * u}px ${70 * u}px ${Math.max(360 * u, h * 0.2)}px`, transform: `scale(${push})`, transformOrigin: "50% 45%" }}>
+        <div style={{ marginBottom: 54 * u }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 24 * u }}>
+            <div style={{ fontFamily: MONO, fontSize: 34 * u, color: accent, letterSpacing: 2 }}>{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div>
+            <div style={{ fontFamily: FONT, fontSize: 60 * u, fontWeight: 800, color: p.text, textTransform: "uppercase", letterSpacing: 1 }}>{section.title}</div>
+          </div>
+          <div style={{ height: 5 * u, width: `${underline * 38}%`, background: accent, marginTop: 14 * u, borderRadius: 3, boxShadow: `0 0 ${14 * u}px ${accent}` }} />
+        </div>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <View labels={section.labels.length ? section.labels : [section.title]} cues={section.cues} p={p} accent={accent} frames={frames} />
+        </div>
+      </AbsoluteFill>
+      <div style={{ position: "absolute", top: 0, bottom: 0, left: `${wipe}%`, width: "24%", background: `linear-gradient(90deg, transparent, ${accent}40, transparent)`, transform: "skewX(-12deg)", pointerEvents: "none" }} />
     </AbsoluteFill>
   );
 };
@@ -279,7 +363,7 @@ export const CaseVideo: React.FC<Props> = (props) => {
   const outroStart = Math.round(lastEnd * fps);
   return (
     <AbsoluteFill style={{ backgroundColor: p.bg1 }}>
-      <Background p={p} dark={props.theme !== "clean"} />
+      <Background p={p} dark={props.theme !== "clean"} accent={accent} />
       {props.audioUrl && <Audio src={asset(props.audioUrl)} />}
       {props.bgMusicUrl && <Audio src={asset(props.bgMusicUrl)} volume={() => props.bgMusicVolume} loop />}
       {introF > 0 && (
