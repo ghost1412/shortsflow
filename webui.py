@@ -521,16 +521,18 @@ def photo_reel(files, reel_type, name="", texts="", music=None, duration=24, fol
     yield "❌ No reel was made." + (f" {reason}" if reason else " Open 'Technical details' for the reason."), log, None
 
 
-def case_video(topic, sources, template, theme_label, formats, no_manim, background_label, background_file):
+def case_video(topic, sources, template, theme_label, formats, no_manim, background_label, background_file, resume_label="", draft=False):
     """Case explainer tab: a topic and sources in, a sectioned explainer video out. Yields (status, log, videos)."""
     import time
-    session = os.path.join(ROOT, "sessions", time.strftime("case_%Y%m%d_%H%M%S"))
+    old = dict(web_args.list_case_sessions(ROOT, limit=50)).get(resume_label or "")
+    session = old or os.path.join(ROOT, "sessions", time.strftime("case_%Y%m%d_%H%M%S"))
     theme = next((k for k, v in web_args.CASE_THEME_LABELS.items() if v == theme_label), "dark")
     try:
         background = web_args.CASE_BACKGROUNDS.get(background_label, "footage")
         if background == "file" and not background_file:
             raise ValueError("Add an image or video file, or choose another background.")
-        args = web_args.case_args(topic, sources, template, theme, formats, no_manim, False, session, background, background_file)
+        args = web_args.case_args(topic, sources, template, theme, formats, no_manim, False, session, background, background_file,
+                                  resume=old, draft=bool(draft))
     except ValueError as e:
         raise gr.Error(str(e))
     cmd = [*_pipeline_cmd(), *args]
@@ -546,7 +548,7 @@ def case_video(topic, sources, template, theme_label, formats, no_manim, backgro
                 status = "🎬 " + line.split("]", 1)[1].strip().split(":")[0] + " is ready. " + ("Rendering the next shape..." if "16:9" in line and "9:16" in (formats or []) else "")
         seen = len(lines)
         yield status, log, None
-    videos = web_args.find_case_videos(session)
+    videos = web_args.find_case_videos(session, draft=bool(draft))
     if videos:
         yield f"✅ Done! {len(videos)} video{'s' if len(videos) != 1 else ''} ready below (also in {session}).", log, videos
         return
@@ -1967,13 +1969,18 @@ def build_ui():
                                            info="Stock video and photos are found from the topic (needs a free Pexels key in .env). Style only uses the look's own moving background.")
                         c_bgfile = gr.File(label="Your own background (used when 'My own image or video' is chosen)", file_types=["image", "video"], type="filepath")
                         c_nomanim = gr.Checkbox(False, label="No animation (faster)")
+                        c_draft = gr.Checkbox(False, label="Quick draft first (small and fast, about a minute with a finished run)",
+                                              info="Judge the look, pictures and pacing before the full render. A draft makes no new animations.")
+                        c_resume = gr.Dropdown(["(a new video)"] + [label for label, _ in web_args.list_case_sessions(ROOT)], value="(a new video)",
+                                               label="Or redo an earlier run with a new look",
+                                               info="Keeps its script, voice and animations, so there is no new voice to pay for. Pick a look, background or shape above.")
                         c_btn = gr.Button("🧾 Make my video", variant="primary")
                         c_stop = gr.Button("⏹ Stop", variant="stop")
                         c_status = gr.Markdown("Waiting for a topic...")
                         c_video = gr.Files(label="Your videos", height=110)
                 with gr.Accordion("Technical details", open=False):
                     c_log = gr.Textbox(label="Full log", lines=14, max_lines=14, autoscroll=True)
-                c_run = c_btn.click(case_video, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_bg, c_bgfile], [c_status, c_log, c_video])
+                c_run = c_btn.click(case_video, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_resume, c_draft], [c_status, c_log, c_video])
                 c_stop.click(stop_jobs, None, c_status, cancels=[c_run])
 
         gr.Markdown("API keys are read from `.env` (`GEMINI_API_KEY`, `PEXELS_API_KEY`, ...). "

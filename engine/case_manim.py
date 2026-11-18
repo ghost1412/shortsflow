@@ -119,6 +119,12 @@ def to_alpha_webm(mov, ffmpeg=None):
     return out
 
 
+def find_clip(folder):
+    """The newest rendered animation (ExplainerScene.webm) under `folder`, None when there is none."""
+    found = [os.path.join(root, name) for root, _, names in os.walk(folder) for name in names if name == "ExplainerScene.webm"]
+    return max(found, key=os.path.getmtime) if found else None
+
+
 def make_section_clip(section, seconds, out_dir, ask, render, topic="", portrait=False, accent="#00e5a8", tries=MAX_TRIES):
     """Path of a rendered Manim clip for the section, None when every try fails. `ask(prompt)` returns the model's text;
     `render(code, out_dir, portrait)` returns the mp4 path or raises. Each retry is told what went wrong."""

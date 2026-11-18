@@ -449,13 +449,13 @@ CASE_BACKGROUNDS = {"Stock video": "footage", "Stock photos": "images", "Style o
 
 
 def case_args(topic, sources_text="", template="case", theme="dark", formats=("16:9", "9:16"), no_manim=False, no_footage=False, session_dir=None,
-              background="footage", background_file=None):
+              background="footage", background_file=None, resume=None, draft=False):
     """Command-line arguments for a case explainer (--mode CASE). Raises ValueError with a plain message when the topic is empty."""
     topic = (topic or "").strip()
-    if not topic:
+    if not topic and not resume:
         raise ValueError("Type the topic of the video first.")
     shapes = [f for f in (formats or []) if f in ("16:9", "9:16", "1:1", "4:5")] or ["16:9"]
-    args = ["--mode", "CASE", "--prompt", topic, "--case_template", (template or "case").strip() or "case",
+    args = ["--mode", "CASE", *(["--prompt", topic] if topic else []), "--case_template", (template or "case").strip() or "case",
             "--case_theme", theme if theme in CASE_THEMES else "dark", "--case_formats", ",".join(shapes), "--skip_upload"]
     for source in parse_sources(sources_text):
         args += ["--sources", source]
@@ -467,15 +467,39 @@ def case_args(topic, sources_text="", template="case", theme="dark", formats=("1
         args += ["--case_background", str(background_file)]
     elif background in ("footage", "images", "none"):
         args += ["--case_background", background]
-    if session_dir:
+    if resume:
+        args += ["--case_resume", str(resume)]
+    elif session_dir:
         args += ["--session_dir", session_dir]
+    if draft:
+        args.append("--case_draft")
     return args
 
 
-def find_case_videos(session_dir):
-    """The finished case videos of a session folder, landscape first: [path]."""
-    found = [os.path.join(session_dir, n) for n in ("case_16x9.mp4", "case_9x16.mp4", "case_1x1.mp4", "case_4x5.mp4")]
+def find_case_videos(session_dir, draft=False):
+    """The case videos of a session folder, landscape first: [path]. `draft` lists the small draft renders instead of the full ones."""
+    prefix = "case_draft_" if draft else "case_"
+    found = [os.path.join(session_dir, f"{prefix}{shape}.mp4") for shape in ("16x9", "9x16", "1x1", "4x5")]
     return [p for p in found if os.path.isfile(p)]
+
+
+def list_case_sessions(root, limit=15):
+    """[(label, folder)] of earlier case runs that can be redone with a new look: they hold a script and every section's narration.
+    Newest first."""
+    import json
+    out = []
+    for folder in sorted(glob.glob(os.path.join(root, "sessions", "case_*")), reverse=True):
+        try:
+            with open(os.path.join(folder, "script.json"), encoding="utf-8") as f:
+                script = json.load(f)
+            ok = all(os.path.isfile(os.path.join(folder, f"voice_{i:02d}.mp3")) for i in range(1, len(script["sections"]) + 1))
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if ok:
+            out.append((f"{str(script.get('title', 'Untitled'))[:60]} ({os.path.basename(folder)})", folder))
+        if len(out) >= limit:
+            break
+    return out
 
 
 def find_photo_reel(session_dir):

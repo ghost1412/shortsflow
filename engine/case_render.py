@@ -131,10 +131,13 @@ def spoken_order(labels, words, duration=None, first_by=1.5, gap=0.8):
     return ordered, cues
 
 
-def attach_clips(script, timing, session_dir, ask, scenes=("flow",), portrait=False, accent="#00e5a8", make=None, probe=None):
+def attach_clips(script, timing, session_dir, ask, scenes=("flow",), portrait=False, accent="#00e5a8", make=None, probe=None,
+                 tag="", reuse=False, generate=True):
     """Manim animations for the sections whose scene kind is in `scenes`: [None | {"path", "rate"}] per section. `rate` is the
     playback speed that makes the clip last as long as its section (kept between 0.6 and 1.6). A section whose animation could not
-    be made stays None and keeps its plain scene. `make` / `probe` replace case_manim.make_section_clip and the duration probe."""
+    be made stays None and keeps its plain scene. `make` / `probe` replace case_manim.make_section_clip and the duration probe.
+    `tag` (the video shape, e.g. "16x9") gives each shape its own folder, so one shape's animation does not overwrite the other's;
+    `reuse` takes an animation already rendered in that folder; `generate=False` never asks the model for a new one."""
     from engine import case_manim
     make = make or case_manim.make_section_clip
     probe = probe or _duration
@@ -143,11 +146,14 @@ def attach_clips(script, timing, session_dir, ask, scenes=("flow",), portrait=Fa
         if sec.get("scene") not in scenes:
             out.append(None)
             continue
-        folder = os.path.join(session_dir, f"manim_{i:02d}")
-        path = make(sec, end - start, folder, ask, lambda code, d, p: case_manim.render_scene(code, d, p), topic=script.get("title", ""),
-                    portrait=portrait, accent=accent)
+        folder = os.path.join(session_dir, f"manim_{i:02d}" + (f"_{tag}" if tag else ""))
+        path = case_manim.find_clip(folder) if reuse else None
+        if not path and generate:
+            path = make(sec, end - start, folder, ask, lambda code, d, p: case_manim.render_scene(code, d, p), topic=script.get("title", ""),
+                        portrait=portrait, accent=accent)
         if not path:
-            print(f"[Warning] No animation could be made for section '{sec['title']}'; the plain scene is used.")
+            if generate:
+                print(f"[Warning] No animation could be made for section '{sec['title']}'; the plain scene is used.")
             out.append(None)
             continue
         length = float(probe(path) or 0.0)
@@ -399,8 +405,24 @@ def sfx_for(props, path):
     return case_sfx.build_track(path, total, starts, labels)
 
 
-def render_case(props, audio_path, output_path, music_path=None, aspect="16:9"):
-    """Render the CaseVideo composition to `output_path`. Returns the absolute path."""
+def cached_voice(script, session_dir):
+    """([audio paths], [word lists]) of a session whose narration was already made (voice_NN.mp3 and subs_NN.json for every section),
+    None when any piece is missing or has no words."""
+    audios, words = [], []
+    for i in range(1, len(script["sections"]) + 1):
+        audio, subs = os.path.join(session_dir, f"voice_{i:02d}.mp3"), os.path.join(session_dir, f"subs_{i:02d}.json")
+        if not (os.path.isfile(audio) and os.path.isfile(subs)):
+            return None
+        ws = read_words(subs)
+        if not ws:
+            return None
+        audios.append(audio)
+        words.append(ws)
+    return audios, words
+
+
+def render_case(props, audio_path, output_path, music_path=None, aspect="16:9", scale=1.0):
+    """Render the CaseVideo composition to `output_path`. Returns the absolute path. `scale` below 1 renders a smaller, much faster draft."""
     from engine.paths import project_root
     from engine.remotion_renderer import concurrency_flag, copy_to_public, quality_flags
     remotion_dir = os.path.join(project_root(), "remotion-video")
@@ -438,7 +460,7 @@ def render_case(props, audio_path, output_path, music_path=None, aspect="16:9"):
         width, height = SIZES.get(aspect, SIZES["16:9"])
         is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
         cmd = ["npx", "remotion", "render", "CaseVideo", render_output, f"--props={props_name}", f"--frames=0-{frames - 1}",
-               f"--width={width}", f"--height={height}", "--codec=h264", *quality_flags(), "--pixel-format=yuv420p", "--gl=angle",
+               f"--width={width}", f"--height={height}", *([f"--scale={scale}"] if scale and scale != 1 else []), "--codec=h264", *quality_flags(), "--pixel-format=yuv420p", "--gl=angle",
                "--chromium-options=--no-sandbox --disable-dev-shm-usage", "--timeout=180000", concurrency_flag(False, is_ci)]
         is_win = sys.platform == "win32"
         proc = subprocess.Popen(" ".join(cmd) if is_win else cmd, cwd=remotion_dir, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
