@@ -15,7 +15,7 @@ import { loadFont } from "./loadFont";
 const load = loadFont;
 
 load("Anton", "fonts/Anton-Regular.ttf");
-load("NotoDevanagari", "fonts/NotoSansDevanagari.ttf", "100 900");
-load("NotoCyrillic", "fonts/NotoSansCyrillic.ttf");
+// EXPERIMENT (caption-fonts branch): load("NotoDevanagari", "fonts/NotoSansDevanagari.ttf", "100 900");
+// EXPERIMENT (caption-fonts branch): load("NotoCyrillic", "fonts/NotoSansCyrillic.ttf");
 // Caveat (HANDWRITTEN style) and JetBrains Mono (TYPEWRITER style) are loaded only when that style is used, see useStyleFont in ShortFlow.tsx.
-load("NotoArabic", "fonts/NotoSansArabic.ttf"); // bold, Arabic script only (Arabic/Persian/Urdu); needs RTL handling in ShortFlow.tsx
+// EXPERIMENT (caption-fonts branch): load("NotoArabic", "fonts/NotoSansArabic.ttf"); // bold, Arabic script only (Arabic/Persian/Urdu); needs RTL handling in ShortFlow.tsx
