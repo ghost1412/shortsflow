@@ -218,7 +218,7 @@ def parse_args():
     parser.add_argument("--clone_voice", help="Path to custom audio sample file (.wav, .mp3) for zero-shot voice cloning.")
     parser.add_argument("--sources", action="append", metavar="LINK_OR_FILE", help="CASE mode: a source the script may use (a link, a text file or pasted notes); repeat up to 3 times. The script holds nothing the sources do not.")
     parser.add_argument("--case_template", default="case", help="CASE mode: the sections of the video: case, postmortem, history, explainer, or the path of a JSON file of {id, title, question, scene} sections.")
-    parser.add_argument("--case_theme", choices=["dark", "clean", "warm"], default="dark", help="CASE mode: colour theme of the drawn scenes.")
+    parser.add_argument("--case_theme", choices=["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"], default="dark", help="CASE mode: the look: dark (cyber network), clean, warm, neon (synthwave), newsroom (red and white, striped), blueprint (technical drawing), terminal (green phosphor), editorial (serif on paper), midnight (calm aurora).")
     parser.add_argument("--case_formats", default="16:9,9:16", help="CASE mode: video shapes to make, comma separated (16:9 for YouTube and LinkedIn, 9:16 for Reels and Shorts).")
     parser.add_argument("--case_no_manim", action="store_true", help="CASE mode: do not draw Manim animations for the explaining sections (faster).")
     parser.add_argument("--case_no_footage", action="store_true", help="CASE mode: no stock footage behind the scenes (it needs PEXELS_API_KEY anyway).")

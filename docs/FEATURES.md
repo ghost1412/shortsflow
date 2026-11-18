@@ -270,7 +270,7 @@ python main.py --mode CASE --prompt "The topic" --sources https://example.com/ar
 | :--- | :--- |
 | `--sources LINK_OR_FILE` | Up to three sources (link, text file or pasted notes). The script holds nothing they do not. No source: the video is marked UNVERIFIED. |
 | `--case_template` | `case` (what happened / how / impact / what could change), `postmortem`, `history`, `explainer`, or the path of a JSON file of `{id, title, question, scene}` sections |
-| `--case_theme` | `dark`, `clean` or `warm` |
+| `--case_theme` | The whole look, not only the colours: `dark` (cyber network, default), `clean`, `warm`, `neon` (synthwave grid), `newsroom` (red and white, striped), `blueprint` (technical drawing, monospace), `terminal` (green phosphor, scanlines), `editorial` (serif on paper), `midnight` (calm aurora). Each sets the colours, the animated background, the card style and the type. |
 | `--case_formats` | `16:9,9:16` by default (YouTube and LinkedIn, Reels and Shorts) |
 | `--case_no_manim` / `--case_no_footage` | Skip the Manim animation / the stock footage (faster) |
 

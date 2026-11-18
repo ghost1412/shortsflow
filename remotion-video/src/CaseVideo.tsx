@@ -6,7 +6,7 @@ import { AbsoluteFill, Audio, Loop, OffthreadVideo, Sequence, interpolate, rando
 import katex from "katex";
 import { z } from "zod";
 
-export const CASE_THEMES = ["dark", "clean", "warm"] as const;
+export const CASE_THEMES = ["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"] as const;
 export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation"] as const;
 
 export const caseVideoSchema = z.object({
@@ -37,13 +37,27 @@ export const caseVideoSchema = z.object({
 });
 type Props = z.infer<typeof caseVideoSchema>;
 
-const PALETTES = {
-  dark: { bg1: "#07101f", bg2: "#12294d", text: "#e8f1ff", dim: "#8fa0bd", accent: "#00e5a8", card: "rgba(16,30,54,0.82)", line: "rgba(0,229,168,0.32)" },
-  clean: { bg1: "#eef2fa", bg2: "#d5e0f5", text: "#101828", dim: "#5b6578", accent: "#2563eb", card: "rgba(255,255,255,0.85)", line: "rgba(37,99,235,0.2)" },
-  warm: { bg1: "#241711", bg2: "#46291a", text: "#fff3e6", dim: "#c3a58c", accent: "#ff8a3d", card: "rgba(60,38,26,0.8)", line: "rgba(255,138,61,0.25)" },
-} as const;
-const FONT = '"Segoe UI", "Helvetica Neue", Arial, "Noto Sans", sans-serif';
-const MONO = '"Cascadia Mono", Consolas, "SF Mono", "DejaVu Sans Mono", monospace';
+type BgKind = "network" | "synth" | "stripes" | "blueprint" | "scan" | "paper" | "aurora";
+type Palette = { bg1: string; bg2: string; text: string; dim: string; accent: string; card: string; line: string; bgKind: BgKind; blur: string; light: boolean; cap?: string; font: string; mono: string };
+
+const SANS = '"Segoe UI", "Helvetica Neue", Arial, "Noto Sans", sans-serif';
+const MONOSPACE = '"Cascadia Mono", Consolas, "SF Mono", "DejaVu Sans Mono", monospace';
+
+// Every style is a whole look: colours, the kind of background, how cards are drawn, and the type (system fonts only: a web font load once stalled the CI renderer).
+const PALETTES: Record<(typeof CASE_THEMES)[number], Palette> = {
+  dark: { bg1: "#07101f", bg2: "#12294d", text: "#e8f1ff", dim: "#8fa0bd", accent: "#00e5a8", card: "rgba(16,30,54,0.82)", line: "rgba(0,229,168,0.32)", bgKind: "network", blur: "blur(16px)", light: false, font: SANS, mono: MONOSPACE },
+  clean: { bg1: "#eef2fa", bg2: "#d5e0f5", text: "#101828", dim: "#5b6578", accent: "#2563eb", card: "rgba(255,255,255,0.88)", line: "rgba(37,99,235,0.25)", bgKind: "network", blur: "blur(12px)", light: true, font: SANS, mono: MONOSPACE },
+  warm: { bg1: "#241711", bg2: "#46291a", text: "#fff3e6", dim: "#c3a58c", accent: "#ff8a3d", card: "rgba(60,38,26,0.8)", line: "rgba(255,138,61,0.28)", bgKind: "network", blur: "blur(16px)", light: false, font: SANS, mono: MONOSPACE },
+  neon: { bg1: "#0a0118", bg2: "#2a0a52", text: "#fdf4ff", dim: "#c4a5e8", accent: "#ff3df2", card: "rgba(30,8,60,0.78)", line: "rgba(255,61,242,0.4)", bgKind: "synth", blur: "blur(14px)", light: false, font: SANS, mono: MONOSPACE },
+  newsroom: { bg1: "#f6f4ef", bg2: "#e8e3d6", text: "#121212", dim: "#555555", accent: "#d7263d", card: "rgba(255,255,255,0.97)", line: "rgba(0,0,0,0.16)", bgKind: "stripes", blur: "none", light: true, cap: "#ff7a8a", font: '"Franklin Gothic Medium", "Arial Narrow", Arial, sans-serif', mono: MONOSPACE },
+  blueprint: { bg1: "#0b2a4a", bg2: "#14487a", text: "#eaf6ff", dim: "#9cc4e8", accent: "#7dd3fc", card: "rgba(11,42,74,0.6)", line: "rgba(125,211,252,0.5)", bgKind: "blueprint", blur: "blur(6px)", light: false, font: MONOSPACE, mono: MONOSPACE },
+  terminal: { bg1: "#020a04", bg2: "#07230f", text: "#c8ffd4", dim: "#5fae74", accent: "#33ff66", card: "rgba(3,20,8,0.82)", line: "rgba(51,255,102,0.38)", bgKind: "scan", blur: "blur(6px)", light: false, font: MONOSPACE, mono: MONOSPACE },
+  editorial: { bg1: "#f3ede1", bg2: "#e4d9c3", text: "#1d1a16", dim: "#6b6254", accent: "#9a2f2f", card: "rgba(255,252,246,0.96)", line: "rgba(60,40,20,0.2)", bgKind: "paper", blur: "none", light: true, cap: "#ff9a9a", font: 'Georgia, Cambria, "Times New Roman", serif', mono: '"Courier New", Courier, monospace' },
+  midnight: { bg1: "#0a0f24", bg2: "#18235a", text: "#eef1ff", dim: "#9aa6d6", accent: "#8ea2ff", card: "rgba(18,26,64,0.75)", line: "rgba(142,162,255,0.32)", bgKind: "aurora", blur: "blur(18px)", light: false, font: SANS, mono: MONOSPACE },
+};
+const FONT = "var(--font)";
+const MONO = "var(--mono)";
+
 
 const asset = (url: string) => (/^(https?:|data:)/.test(url) ? url : staticFile(url));
 
@@ -74,20 +88,83 @@ const Network: React.FC<{ accent: string }> = ({ accent }) => {
   );
 };
 
-const Background: React.FC<{ p: (typeof PALETTES)[keyof typeof PALETTES]; dark: boolean; accent: string }> = ({ p, dark, accent }) => {
+const Backdrop: React.FC<{ p: Palette; accent: string }> = ({ p, accent }) => {
   const frame = useCurrentFrame();
-  const { u } = useUnit();
-  const drift = (frame * 0.4) % (80 * u);
+  const { u, w, h } = useUnit();
+  const slow = (frame * 0.4) % (80 * u);
+  const base = `radial-gradient(ellipse at 30% 20%, ${p.bg2}, ${p.bg1} 70%)`;
+  const glowBlobs = `radial-gradient(circle at ${50 + 30 * Math.sin(frame / 90)}% ${45 + 25 * Math.cos(frame / 120)}%, ${accent}30, transparent 45%), radial-gradient(circle at ${75 - 25 * Math.cos(frame / 100)}% ${70 - 20 * Math.sin(frame / 80)}%, #3b82f630, transparent 40%)`;
+  const fade = "radial-gradient(ellipse at center, black 30%, transparent 85%)";
+  if (p.bgKind === "synth") {
+    const sunY = h * 0.52;
+    return (
+      <AbsoluteFill style={{ background: `linear-gradient(180deg, ${p.bg1} 0%, ${p.bg2} 55%, ${p.bg1} 100%)` }}>
+        <div style={{ position: "absolute", left: "50%", top: sunY - 220 * u, width: 440 * u, height: 440 * u, marginLeft: -220 * u, borderRadius: "50%", background: `linear-gradient(180deg, #ffd23f 0%, ${accent} 60%, #7a1fff 100%)`, opacity: 0.55, boxShadow: `0 0 ${120 * u}px ${accent}88` }} />
+        <div style={{ position: "absolute", left: "-30%", right: "-30%", top: sunY, bottom: 0, perspective: 700 * u }}>
+          <div style={{ width: "100%", height: "180%", transformOrigin: "50% 0%", transform: "rotateX(62deg)", backgroundImage: `linear-gradient(${accent} 2px, transparent 2px), linear-gradient(90deg, ${accent} 2px, transparent 2px)`, backgroundSize: `${90 * u}px ${90 * u}px`, backgroundPosition: `0 ${(frame * 1.5) % (90 * u)}px`, opacity: 0.45, maskImage: "linear-gradient(180deg, transparent, black 30%)", WebkitMaskImage: "linear-gradient(180deg, transparent, black 30%)" }} />
+        </div>
+      </AbsoluteFill>
+    );
+  }
+  if (p.bgKind === "stripes") {
+    return (
+      <AbsoluteFill style={{ background: base }}>
+        <AbsoluteFill style={{ backgroundImage: `repeating-linear-gradient(135deg, ${p.line} 0px, ${p.line} 2px, transparent 2px, transparent ${46 * u}px)`, backgroundPosition: `${slow}px 0`, opacity: 0.55 }} />
+        <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 26 * u, background: accent }} />
+        <div style={{ position: "absolute", right: -160 * u, top: -160 * u, width: 520 * u, height: 520 * u, borderRadius: "50%", background: accent, opacity: 0.1 }} />
+      </AbsoluteFill>
+    );
+  }
+  if (p.bgKind === "blueprint") {
+    return (
+      <AbsoluteFill style={{ background: base }}>
+        <AbsoluteFill style={{ backgroundImage: `linear-gradient(${p.line} 1px, transparent 1px), linear-gradient(90deg, ${p.line} 1px, transparent 1px)`, backgroundSize: `${28 * u}px ${28 * u}px`, backgroundPosition: `${slow / 3}px ${slow / 3}px`, opacity: 0.28 }} />
+        <AbsoluteFill style={{ backgroundImage: `linear-gradient(${p.line} 2px, transparent 2px), linear-gradient(90deg, ${p.line} 2px, transparent 2px)`, backgroundSize: `${140 * u}px ${140 * u}px`, backgroundPosition: `${slow / 3}px ${slow / 3}px`, opacity: 0.5 }} />
+        <svg width={w} height={h} style={{ position: "absolute", inset: 0 }}>
+          {[[60, 60], [w - 60, 60], [60, h - 60], [w - 60, h - 60]].map(([x, y], i) => <path key={i} d={`M${x - 26 * u} ${y}H${x + 26 * u}M${x} ${y - 26 * u}V${y + 26 * u}`} stroke={accent} strokeWidth={2.5 * u} fill="none" />)}
+          <circle cx={w * 0.82} cy={h * 0.3} r={150 * u} stroke={p.line} strokeWidth={2 * u} fill="none" strokeDasharray={`${10 * u} ${14 * u}`} />
+        </svg>
+      </AbsoluteFill>
+    );
+  }
+  if (p.bgKind === "scan") {
+    const sweep = ((frame * 4) % (h + 300 * u)) - 150 * u;
+    return (
+      <AbsoluteFill style={{ background: base }}>
+        <AbsoluteFill style={{ background: "repeating-linear-gradient(0deg, rgba(0,0,0,0.38) 0px, rgba(0,0,0,0.38) 2px, transparent 3px, transparent 5px)" }} />
+        <div style={{ position: "absolute", left: 0, right: 0, top: sweep, height: 150 * u, background: `linear-gradient(180deg, transparent, ${accent}22, transparent)` }} />
+        <AbsoluteFill style={{ backgroundImage: `linear-gradient(${p.line} 1px, transparent 1px), linear-gradient(90deg, ${p.line} 1px, transparent 1px)`, backgroundSize: `${60 * u}px ${60 * u}px`, opacity: 0.22, maskImage: fade, WebkitMaskImage: fade }} />
+      </AbsoluteFill>
+    );
+  }
+  if (p.bgKind === "paper") {
+    return (
+      <AbsoluteFill style={{ background: base }}>
+        <AbsoluteFill style={{ backgroundImage: `repeating-linear-gradient(0deg, transparent 0px, transparent ${54 * u}px, ${p.line} ${54 * u}px, ${p.line} ${55 * u}px)`, opacity: 0.55 }} />
+        <AbsoluteFill style={{ background: `radial-gradient(ellipse at center, transparent 55%, ${p.bg2} 130%)` }} />
+        <div style={{ position: "absolute", left: 70 * u, top: 0, bottom: 0, width: 2 * u, background: accent, opacity: 0.35 }} />
+      </AbsoluteFill>
+    );
+  }
+  if (p.bgKind === "aurora") {
+    const blob = (cx: number, cy: number, size: number, color: string, ph: number) => (
+      <div style={{ position: "absolute", left: `${cx + 14 * Math.sin(frame / 110 + ph)}%`, top: `${cy + 12 * Math.cos(frame / 140 + ph)}%`, width: size * u, height: size * u, marginLeft: -size * u / 2, marginTop: -size * u / 2, borderRadius: "50%", background: color, filter: `blur(${110 * u}px)`, opacity: 0.55 }} />
+    );
+    return (
+      <AbsoluteFill style={{ background: `linear-gradient(160deg, ${p.bg1}, ${p.bg2})` }}>
+        {blob(25, 30, 900, accent, 0)}
+        {blob(75, 65, 800, "#7a5cff", 2)}
+        {blob(55, 90, 700, "#19c6ff", 4)}
+        <AbsoluteFill style={{ backgroundImage: `radial-gradient(${p.line} 1.5px, transparent 1.5px)`, backgroundSize: `${46 * u}px ${46 * u}px`, opacity: 0.35 }} />
+      </AbsoluteFill>
+    );
+  }
   return (
-    <AbsoluteFill style={{ background: `radial-gradient(ellipse at 30% 20%, ${p.bg2}, ${p.bg1} 70%)` }}>
-      <AbsoluteFill style={{ background: `radial-gradient(circle at ${50 + 30 * Math.sin(frame / 90)}% ${45 + 25 * Math.cos(frame / 120)}%, ${accent}30, transparent 45%), radial-gradient(circle at ${75 - 25 * Math.cos(frame / 100)}% ${70 - 20 * Math.sin(frame / 80)}%, #3b82f630, transparent 40%)` }} />
-      <AbsoluteFill style={{
-        backgroundImage: `linear-gradient(${p.line} 1px, transparent 1px), linear-gradient(90deg, ${p.line} 1px, transparent 1px)`,
-        backgroundSize: `${80 * u}px ${80 * u}px`, backgroundPosition: `${drift}px ${drift}px`, opacity: dark ? 0.6 : 0.5,
-        maskImage: "radial-gradient(ellipse at center, black 30%, transparent 85%)", WebkitMaskImage: "radial-gradient(ellipse at center, black 30%, transparent 85%)",
-      }} />
+    <AbsoluteFill style={{ background: base }}>
+      <AbsoluteFill style={{ background: glowBlobs }} />
+      <AbsoluteFill style={{ backgroundImage: `linear-gradient(${p.line} 1px, transparent 1px), linear-gradient(90deg, ${p.line} 1px, transparent 1px)`, backgroundSize: `${80 * u}px ${80 * u}px`, backgroundPosition: `${slow}px ${slow}px`, opacity: p.light ? 0.5 : 0.6, maskImage: fade, WebkitMaskImage: fade }} />
       <Network accent={accent} />
-      {dark && <AbsoluteFill style={{ background: "repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 1px, transparent 2px, transparent 4px)" }} />}
+      {!p.light && <AbsoluteFill style={{ background: "repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 1px, transparent 2px, transparent 4px)" }} />}
     </AbsoluteFill>
   );
 };
@@ -95,7 +172,7 @@ const Background: React.FC<{ p: (typeof PALETTES)[keyof typeof PALETTES]; dark: 
 const enter = (frame: number, delay: number, fps: number) =>
   spring({ frame: frame - delay, fps, config: { damping: 18, stiffness: 120 } });
 
-type Pal = (typeof PALETTES)[keyof typeof PALETTES];
+type Pal = Palette;
 type SceneProps = { labels: string[]; cues: number[]; p: Pal; accent: string; frames: number };
 
 // the frame at which each label is spoken: the cue from the narration, else evenly across the first 70% of the section
@@ -217,7 +294,7 @@ const Flow: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
         const { x, y } = c(i);
         const on = i === act;
         return (
-          <div key={i} style={{ position: "absolute", left: x - nw / 2, top: y - nh / 2, width: nw, height: nh, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", boxSizing: "border-box", padding: 14 * u, background: p.card, backdropFilter: "blur(16px)", border: `${on ? 4 : 2}px solid ${i <= act ? accent : p.line}`, borderRadius: 22 * u, fontFamily: FONT, fontSize: 38 * u, fontWeight: 700, color: p.text, opacity: t, transform: `scale(${(0.85 + 0.15 * t) * (on ? 1.05 : 1)})`, boxShadow: glow(on, accent, u), flexDirection: "column", gap: 10 * u }}>
+          <div key={i} style={{ position: "absolute", left: x - nw / 2, top: y - nh / 2, width: nw, height: nh, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", boxSizing: "border-box", padding: 14 * u, background: p.card, backdropFilter: p.blur, border: `${on ? 4 : 2}px solid ${i <= act ? accent : p.line}`, borderRadius: 22 * u, fontFamily: FONT, fontSize: 38 * u, fontWeight: 700, color: p.text, opacity: t, transform: `scale(${(0.85 + 0.15 * t) * (on ? 1.05 : 1)})`, boxShadow: glow(on, accent, u), flexDirection: "column", gap: 10 * u }}>
             <Icon name={iconFor(l)} size={54 * u} color={accent} />
             <span>{l}</span>
           </div>
@@ -255,7 +332,7 @@ const Counters: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
         const shown = parts ? (parts.num * progress).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : null;
         const on = i === act;
         return (
-          <div key={i} style={{ background: p.card, backdropFilter: "blur(16px)", border: `1px solid ${p.line}`, borderTop: `5px solid ${accent}`, borderRadius: 22 * u, padding: `${26 * u}px ${34 * u}px`, minWidth: (portrait ? 800 : 480) * u, textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center", opacity: t, transform: `translateY(${(1 - t) * 50 * u}px) scale(${on ? 1.05 : 1})`, boxShadow: glow(on, accent, u) }}>
+          <div key={i} style={{ background: p.card, backdropFilter: p.blur, border: `1px solid ${p.line}`, borderTop: `5px solid ${accent}`, borderRadius: 22 * u, padding: `${26 * u}px ${34 * u}px`, minWidth: (portrait ? 800 : 480) * u, textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center", opacity: t, transform: `translateY(${(1 - t) * 50 * u}px) scale(${on ? 1.05 : 1})`, boxShadow: glow(on, accent, u) }}>
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 * u }}><Icon name={iconFor(l)} size={56 * u} color={accent} /></div>
             {parts ? (
               <>
@@ -286,7 +363,7 @@ const Checklist: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) =>
         const tick = interpolate(frame - delay - 8, [0, 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
         const on = i === act;
         return (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 30 * u, background: p.card, backdropFilter: "blur(16px)", border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 20 * u, padding: `${26 * u}px ${32 * u}px`, opacity: t, transform: `translateX(${(1 - t) * -80 * u}px) scale(${on ? 1.03 : 1})`, transformOrigin: "left center", boxShadow: glow(on, accent, u) }}>
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 30 * u, background: p.card, backdropFilter: p.blur, border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 20 * u, padding: `${26 * u}px ${32 * u}px`, opacity: t, transform: `translateX(${(1 - t) * -80 * u}px) scale(${on ? 1.03 : 1})`, transformOrigin: "left center", boxShadow: glow(on, accent, u) }}>
             <div style={{ width: 58 * u, height: 58 * u, borderRadius: 14 * u, border: `3px solid ${accent}`, background: tick > 0.5 ? `${accent}33` : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 44 * u, fontFamily: FONT, fontWeight: 800, flexShrink: 0 }}>
               <span style={{ opacity: tick, transform: `scale(${0.4 + 0.6 * tick})` }}>✓</span>
             </div>
@@ -348,7 +425,7 @@ const Equation: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
         const on = i === act;
         const html = looksLikeTex(l) ? katex.renderToString(l, { output: "mathml", throwOnError: false, displayMode: true }) : null;
         return (
-          <div key={i} style={{ background: p.card, backdropFilter: "blur(16px)", border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 22 * u, padding: `${22 * u}px ${48 * u}px`, opacity: t, transform: `scale(${(0.9 + 0.1 * t) * (on ? 1.04 : 1)})`, boxShadow: glow(on, accent, u), color: p.text, fontFamily: FONT, fontSize: 78 * u, fontWeight: 600 }}>
+          <div key={i} style={{ background: p.card, backdropFilter: p.blur, border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 22 * u, padding: `${22 * u}px ${48 * u}px`, opacity: t, transform: `scale(${(0.9 + 0.1 * t) * (on ? 1.04 : 1)})`, boxShadow: glow(on, accent, u), color: p.text, fontFamily: FONT, fontSize: 78 * u, fontWeight: 600 }}>
             {html ? <span dangerouslySetInnerHTML={{ __html: html }} /> : l}
           </div>
         );
@@ -360,7 +437,7 @@ const Equation: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
 const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation } as const;
 
 // one beat of stock footage: it punches in with a flash, drifts to one side, and repeats when the clip is shorter than the beat
-const BeatFootage: React.FC<{ src: string; seconds: number; index: number; frames: number; start: number }> = ({ src, seconds, index, frames, start }) => {
+const BeatFootage: React.FC<{ src: string; seconds: number; index: number; frames: number; start: number; opacity: number }> = ({ src, seconds, index, frames, start, opacity }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const punch = interpolate(frame, [0, 12], [1.2, 1.04], { extrapolateRight: "clamp" });
@@ -369,7 +446,7 @@ const BeatFootage: React.FC<{ src: string; seconds: number; index: number; frame
   return (
     <AbsoluteFill>
       <Loop durationInFrames={Math.max(15, Math.round(seconds * fps))}>
-        <OffthreadVideo src={asset(src)} muted startFrom={start} style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.66, transform: `scale(${punch + frame * 0.0006}) translateX(${drift}%)` }} />
+        <OffthreadVideo src={asset(src)} muted startFrom={start} style={{ width: "100%", height: "100%", objectFit: "cover", opacity, transform: `scale(${punch + frame * 0.0006}) translateX(${drift}%)` }} />
       </Loop>
       <AbsoluteFill style={{ background: "#ffffff", opacity: flash }} />
     </AbsoluteFill>
@@ -382,7 +459,8 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
   const { u, h, portrait } = useUnit();
   const View = SCENE_VIEWS[section.scene];
   const fade = Math.min(interpolate(frame, [0, 10], [0, 1], { extrapolateRight: "clamp" }), interpolate(frame, [frames - 10, frames], [1, 0], { extrapolateLeft: "clamp" }));
-  const beats = section.beats.length ? section.beats : [[0, frames / fps] as [number, number]];
+  const footage = section.footage ?? [];                 // the renderer may hand over props without the schema defaults
+  const beats = section.beats && section.beats.length ? section.beats : [[0, frames / fps] as [number, number]];
   const beatStart = beats.reduce((a, b) => (frame >= Math.round(b[0] * fps) ? Math.round(b[0] * fps) : a), 0);
   const pulse = interpolate(frame - beatStart, [0, 9], [1.035, 1], { extrapolateRight: "clamp" });      // the scene gives a small jolt at every beat
   const push = (1 + 0.05 * (frame / frames)) * pulse;
@@ -390,15 +468,15 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
   const underline = interpolate(frame, [4, 24], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
     <AbsoluteFill style={{ opacity: fade }}>
-      {section.footage.length > 0 && (
+      {footage.length > 0 && (
         <AbsoluteFill>
           {beats.map((b, i) => {
-            const clip = section.footage[i % section.footage.length];
+            const clip = footage[i % footage.length];
             const from = Math.round(b[0] * fps);
             const len = Math.max(8, Math.round((b[1] - b[0]) * fps));
             return (
               <Sequence key={i} from={from} durationInFrames={len}>
-                <BeatFootage src={clip.src} seconds={clip.seconds} index={i} frames={len} start={Math.round((i % 3) * 1.5 * fps) % Math.max(1, Math.round(clip.seconds * fps))} />
+                <BeatFootage opacity={p.light ? 0.42 : 0.66} src={clip.src} seconds={clip.seconds} index={i} frames={len} start={Math.round((i % 3) * 1.5 * fps) % Math.max(1, Math.round(clip.seconds * fps))} />
               </Sequence>
             );
           })}
@@ -452,7 +530,7 @@ const Cover: React.FC<{ title: string; p: Pal; accent: string; frames: number; s
   );
 };
 
-const Captions: React.FC<{ words: Props["words"]; accent: string }> = ({ words, accent }) => {
+const Captions: React.FC<{ words: Props["words"]; accent: string; pill: string }> = ({ words, accent, pill }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { u, h } = useUnit();
@@ -470,7 +548,7 @@ const Captions: React.FC<{ words: Props["words"]; accent: string }> = ({ words, 
   if (!chunk) return null;
   return (
     <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "center", paddingBottom: Math.max(150 * u, h * 0.09) }}>
-      <div style={{ background: "rgba(0,0,0,0.62)", borderRadius: 22 * u, padding: `${22 * u}px ${38 * u}px`, maxWidth: "88%", textAlign: "center" }}>
+      <div style={{ background: pill, borderRadius: 22 * u, padding: `${22 * u}px ${38 * u}px`, maxWidth: "88%", textAlign: "center" }}>
         {chunk.map((w, i) => {
           const active = now >= w.start && now <= w.end + 0.05;
           return <span key={i} style={{ fontFamily: FONT, fontSize: 62 * u, fontWeight: 800, color: active ? accent : "#ffffff", marginRight: 16 * u, display: "inline-block" }}>{w.word}</span>;
@@ -490,8 +568,8 @@ export const CaseVideo: React.FC<Props> = (props) => {
   const lastEnd = sections.length ? Math.max(...sections.map((s) => s.end)) : 0;
   const outroStart = Math.round(lastEnd * fps);
   return (
-    <AbsoluteFill style={{ backgroundColor: p.bg1 }}>
-      <Background p={p} dark={props.theme !== "clean"} accent={accent} />
+    <AbsoluteFill style={{ backgroundColor: p.bg1, color: p.text, ...({ "--font": p.font, "--mono": p.mono } as React.CSSProperties) }}>
+      <Backdrop p={p} accent={accent} />
       {props.audioUrl && <Audio src={asset(props.audioUrl)} />}
       {props.bgMusicUrl && <Audio src={asset(props.bgMusicUrl)} volume={() => props.bgMusicVolume} loop />}
       {introF > 0 && (
@@ -514,7 +592,7 @@ export const CaseVideo: React.FC<Props> = (props) => {
             lines={props.verified ? props.sources.slice(0, 3) : ["No sources were given. Check the facts before you rely on them."]} />
         </Sequence>
       )}
-      {!props.captionsOff && <Captions words={props.words} accent={accent} />}
+      {!props.captionsOff && <Captions words={props.words} accent={p.cap && !props.accent ? p.cap : accent} pill={p.light ? "rgba(10,10,14,0.86)" : "rgba(0,0,0,0.62)"} />}
     </AbsoluteFill>
   );
 };
