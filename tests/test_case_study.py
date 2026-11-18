@@ -69,3 +69,10 @@ def test_write_script_rejects_bad_answers():
         cs.write_script("t", template, [], lambda p: "no json here")
     with pytest.raises(ValueError):
         cs.write_script("t", template, [{"id": "S1", "ref": "r", "text": SRC}], lambda p: reply("It cost 77 million dollars."))
+
+
+def test_gather_sources_keeps_the_paragraphs_not_the_page_furniture():
+    page = ("<html><nav>Home About Contact Login Subscribe Cookies</nav>" + "".join(f"<p>Paragraph {i} " + "word " * 30 + "</p>" for i in range(5))
+            + "<footer>Terms Privacy</footer></html>")
+    sources, _ = cs.gather_sources(["https://example.com/x"], fetch=lambda u: page)
+    assert "Paragraph 3" in sources[0]["text"] and "Subscribe" not in sources[0]["text"] and "Privacy" not in sources[0]["text"]

@@ -9,7 +9,7 @@ import json
 import os
 import re
 
-SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote")
+SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation")
 
 PRESETS = {
     "case": [
@@ -71,7 +71,18 @@ MAX_SOURCE_CHARS = 14000
 MAX_SOURCES = 3
 
 
+def _paragraphs(html):
+    """The running text of a page: the content of its <p> elements when there are enough of them (menus, footers and cookie notices
+    are not paragraphs), else None."""
+    found = re.findall(r"(?is)<p(?:\s[^>]*)?>(.*?)</p>", html)
+    text = " ".join(" ".join(re.sub(r"(?s)<[^>]+>", " ", p).split()) for p in found)
+    return text if len(found) >= 3 and len(text) > 400 else None
+
+
 def _plain(html):
+    paragraphs = _paragraphs(html)
+    if paragraphs:
+        html = paragraphs
     html = re.sub(r"(?is)<(script|style|noscript)\b.*?</\1>", " ", html)
     text = re.sub(r"(?s)<[^>]+>", " ", html)
     for a, b in (("&nbsp;", " "), ("&amp;", "&"), ("&quot;", '"'), ("&#39;", "'"), ("&lt;", "<"), ("&gt;", ">")):
@@ -127,7 +138,10 @@ def build_prompt(topic, template, sources):
         parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  Scene kind: {s['scene']}")
     parts += ["", "Return raw JSON only:",
               '{"title": "<plain title, no emoji>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, concrete: who, what, when, how many, in order>", '
-              '"on_screen": ["<3-5 short labels, steps or figures shown on screen, never empty>"], "cites": ["S1"]}]}']
+              '"on_screen": ["<3-5 short labels, steps or figures shown on screen, never empty>"], "cites": ["S1"], '
+              '"footage": "<2-4 plain words to search stock video for this section: things a camera can film, no brand, person or place names>"}]}',
+              'For a section whose scene kind is "equation", every on_screen item is one formula in LaTeX (for example "E = mc^2" or '
+              '"\\\\frac{a}{b}"), built up step by step; it must come from the sources.']
     return "\n".join(parts)
 
 
@@ -195,8 +209,9 @@ def write_script(topic, template, sources, ask):
             continue
         known = {s["id"] for s in sources}
         cites = [c for c in (row.get("cites") or []) if c in known] if isinstance(row.get("cites"), list) else []
+        footage = " ".join(re.findall(r"[A-Za-z0-9]+", str(row.get("footage") or "")))[:60]
         sections.append({"id": sec["id"], "title": sec["title"], "scene": sec["scene"], "narration": narration,
-                         "on_screen": labels, "cites": cites})
+                         "on_screen": labels, "cites": cites, "footage": footage})
     if not sections:
         raise ValueError("Nothing usable was left in the script" + (" after the unsupported claims were removed." if dropped else "."))
     return {"title": str(data.get("title") or topic).strip()[:120], "verified": bool(sources),

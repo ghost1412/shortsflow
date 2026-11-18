@@ -2,11 +2,12 @@
 // drawn from its on-screen labels, over a themed background, with word-timed captions. No custom fonts (a font load stalled the CI
 // renderer before), no stock footage: everything is drawn, so a run needs no key and no download.
 import React from "react";
-import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, random, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Loop, OffthreadVideo, Sequence, interpolate, random, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import katex from "katex";
 import { z } from "zod";
 
 export const CASE_THEMES = ["dark", "clean", "warm"] as const;
-export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote"] as const;
+export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation"] as const;
 
 export const caseVideoSchema = z.object({
   title: z.string().default("Explainer"),
@@ -24,6 +25,8 @@ export const caseVideoSchema = z.object({
     title: z.string(),
     scene: z.enum(CASE_SCENES).default("quote"),
     labels: z.array(z.string()).default([]),
+    footage: z.string().optional(),             // stock footage shown dimmed behind the section
+    footageSeconds: z.number().default(10),     // its length, so a short clip repeats for the whole section
     clip: z.string().optional(),                // a rendered animation (Manim) drawn for this section, shown instead of the plain scene
     clipRate: z.number().default(1),
     cues: z.array(z.number()).default([]),     // seconds after the section starts at which each label is spoken
@@ -35,9 +38,9 @@ export const caseVideoSchema = z.object({
 type Props = z.infer<typeof caseVideoSchema>;
 
 const PALETTES = {
-  dark: { bg1: "#05070d", bg2: "#0b1220", text: "#e8f1ff", dim: "#7d8ba3", accent: "#00e5a8", card: "rgba(14,24,42,0.78)", line: "rgba(0,229,168,0.22)" },
-  clean: { bg1: "#f4f6fb", bg2: "#e3e9f5", text: "#101828", dim: "#5b6578", accent: "#2563eb", card: "rgba(255,255,255,0.85)", line: "rgba(37,99,235,0.2)" },
-  warm: { bg1: "#1d1410", bg2: "#2b1d15", text: "#fff3e6", dim: "#c3a58c", accent: "#ff8a3d", card: "rgba(60,38,26,0.8)", line: "rgba(255,138,61,0.25)" },
+  dark: { bg1: "#07101f", bg2: "#12294d", text: "#e8f1ff", dim: "#8fa0bd", accent: "#00e5a8", card: "rgba(16,30,54,0.82)", line: "rgba(0,229,168,0.32)" },
+  clean: { bg1: "#eef2fa", bg2: "#d5e0f5", text: "#101828", dim: "#5b6578", accent: "#2563eb", card: "rgba(255,255,255,0.85)", line: "rgba(37,99,235,0.2)" },
+  warm: { bg1: "#241711", bg2: "#46291a", text: "#fff3e6", dim: "#c3a58c", accent: "#ff8a3d", card: "rgba(60,38,26,0.8)", line: "rgba(255,138,61,0.25)" },
 } as const;
 const FONT = '"Segoe UI", "Helvetica Neue", Arial, "Noto Sans", sans-serif';
 const MONO = '"Cascadia Mono", Consolas, "SF Mono", "DejaVu Sans Mono", monospace';
@@ -55,18 +58,18 @@ const Network: React.FC<{ accent: string }> = ({ accent }) => {
   const { u, w, h } = useUnit();
   const pts = Array.from({ length: POINTS }, (_, i) => {
     const x0 = random(`x${i}`) * w, y0 = random(`y${i}`) * h, ph = random(`p${i}`) * 6.28, sp = 0.006 + random(`s${i}`) * 0.01;
-    return { x: x0 + Math.sin(frame * sp + ph) * 60 * u, y: y0 + Math.cos(frame * sp * 1.3 + ph) * 50 * u, r: (2 + random(`r${i}`) * 3) * u };
+    return { x: x0 + Math.sin(frame * sp + ph) * 60 * u, y: y0 + Math.cos(frame * sp * 1.3 + ph) * 50 * u, r: (3 + random(`r${i}`) * 4) * u };
   });
   const links: React.ReactNode[] = [];
   const reach = 300 * u;
   for (let i = 0; i < POINTS; i++) for (let j = i + 1; j < POINTS; j++) {
     const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
-    if (d < reach) links.push(<line key={`${i}-${j}`} x1={pts[i].x} y1={pts[i].y} x2={pts[j].x} y2={pts[j].y} stroke={accent} strokeOpacity={(1 - d / reach) * 0.22} strokeWidth={1.4 * u} />);
+    if (d < reach) links.push(<line key={`${i}-${j}`} x1={pts[i].x} y1={pts[i].y} x2={pts[j].x} y2={pts[j].y} stroke={accent} strokeOpacity={(1 - d / reach) * 0.5} strokeWidth={1.8 * u} />);
   }
   return (
     <svg width={w} height={h} style={{ position: "absolute", inset: 0 }}>
       {links}
-      {pts.map((q, i) => <circle key={i} cx={q.x} cy={q.y} r={q.r} fill={accent} fillOpacity={0.35} />)}
+      {pts.map((q, i) => <circle key={i} cx={q.x} cy={q.y} r={q.r} fill={accent} fillOpacity={0.75} />)}
     </svg>
   );
 };
@@ -77,9 +80,10 @@ const Background: React.FC<{ p: (typeof PALETTES)[keyof typeof PALETTES]; dark: 
   const drift = (frame * 0.4) % (80 * u);
   return (
     <AbsoluteFill style={{ background: `radial-gradient(ellipse at 30% 20%, ${p.bg2}, ${p.bg1} 70%)` }}>
+      <AbsoluteFill style={{ background: `radial-gradient(circle at ${50 + 30 * Math.sin(frame / 90)}% ${45 + 25 * Math.cos(frame / 120)}%, ${accent}30, transparent 45%), radial-gradient(circle at ${75 - 25 * Math.cos(frame / 100)}% ${70 - 20 * Math.sin(frame / 80)}%, #3b82f630, transparent 40%)` }} />
       <AbsoluteFill style={{
         backgroundImage: `linear-gradient(${p.line} 1px, transparent 1px), linear-gradient(90deg, ${p.line} 1px, transparent 1px)`,
-        backgroundSize: `${80 * u}px ${80 * u}px`, backgroundPosition: `${drift}px ${drift}px`, opacity: dark ? 0.3 : 0.45,
+        backgroundSize: `${80 * u}px ${80 * u}px`, backgroundPosition: `${drift}px ${drift}px`, opacity: dark ? 0.6 : 0.5,
         maskImage: "radial-gradient(ellipse at center, black 30%, transparent 85%)", WebkitMaskImage: "radial-gradient(ellipse at center, black 30%, transparent 85%)",
       }} />
       <Network accent={accent} />
@@ -130,7 +134,7 @@ const Timeline: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
         return (
           <React.Fragment key={i}>
             <div style={{ position: "absolute", left: x - 20 * u, top: y - 20 * u, width: 40 * u, height: 40 * u, borderRadius: "50%", background: i <= act ? accent : p.bg1, border: `${5 * u}px solid ${accent}`, transform: `scale(${0.4 + 0.6 * t})`, boxShadow: glow(on, accent, u) }} />
-            <div style={{ position: "absolute", left: portrait ? x + 50 * u : x - 230 * u, top: portrait ? y - 34 * u : above ? y - 170 * u : y + 50 * u, width: portrait ? aw - x - 70 * u : 460 * u, textAlign: portrait ? "left" : "center", fontFamily: FONT, fontSize: 44 * u, fontWeight: 700, lineHeight: 1.15, color: i <= act ? p.text : p.dim, opacity: t, transform: `translateY(${(1 - t) * (above ? 30 : -30) * u}px) scale(${on ? 1.06 : 1})` }}>{l}</div>
+            <div style={{ position: "absolute", left: portrait ? x + 50 * u : x - 230 * u, top: portrait ? y - 34 * u : above ? y - 170 * u : y + 50 * u, width: portrait ? aw - x - 70 * u : 460 * u, textAlign: portrait ? "left" : "center", fontFamily: FONT, fontSize: 44 * u, fontWeight: 700, lineHeight: 1.15, color: i <= act ? p.text : p.dim, opacity: t, transformOrigin: portrait ? "left center" : "center", transform: `translateY(${(1 - t) * (above ? 30 : -30) * u}px) scale(${on ? 1.06 : 1})` }}>{l}</div>
           </React.Fragment>
         );
       })}
@@ -180,7 +184,7 @@ const Flow: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
 
 // "5,078 flights cancelled" -> count the number up, show the words under it
 const splitNumber = (label: string) => {
-  const m = label.match(/(\$?\s?\d[\d,.]*\s?(?:%|[kKmMbB]\b|million|billion|trillion)?)/);
+  const m = label.match(/(\$?\s?\d[\d,.]*\s?(?:%|[kKmMbB]\b|[Mm]illion|[Bb]illion|[Tt]rillion)?)/);
   if (!m) return null;
   const raw = m[1].trim();
   const num = parseFloat(raw.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, ""));
@@ -196,7 +200,7 @@ const Counters: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
   const at = cueFrames(labels.length, cues, frames, fps);
   const act = activeIndex(frame, at);
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 30 * u, justifyContent: "center", width: "100%" }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 24 * u, justifyContent: "center", alignContent: "center", width: "100%" }}>
       {labels.map((l, i) => {
         const delay = at[i];
         const t = enter(frame, delay, fps);
@@ -206,10 +210,10 @@ const Counters: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
         const shown = parts ? (parts.num * progress).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : null;
         const on = i === act;
         return (
-          <div key={i} style={{ background: p.card, border: `1px solid ${p.line}`, borderTop: `5px solid ${accent}`, borderRadius: 22 * u, padding: `${34 * u}px ${40 * u}px`, minWidth: (portrait ? 800 : 500) * u, textAlign: "center", opacity: t, transform: `translateY(${(1 - t) * 50 * u}px) scale(${on ? 1.05 : 1})`, boxShadow: glow(on, accent, u) }}>
+          <div key={i} style={{ background: p.card, border: `1px solid ${p.line}`, borderTop: `5px solid ${accent}`, borderRadius: 22 * u, padding: `${26 * u}px ${34 * u}px`, minWidth: (portrait ? 800 : 480) * u, textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center", opacity: t, transform: `translateY(${(1 - t) * 50 * u}px) scale(${on ? 1.05 : 1})`, boxShadow: glow(on, accent, u) }}>
             {parts ? (
               <>
-                <div style={{ fontFamily: FONT, fontSize: 110 * u, fontWeight: 800, color: accent, lineHeight: 1 }}>{parts.prefix}{shown}{parts.suffix ? ` ${parts.suffix}` : ""}</div>
+                <div style={{ fontFamily: FONT, fontSize: 96 * u, fontWeight: 800, color: accent, lineHeight: 1 }}>{parts.prefix}{shown}{parts.suffix ? ` ${parts.suffix}` : ""}</div>
                 <div style={{ fontFamily: FONT, fontSize: 42 * u, color: p.text, marginTop: 14 * u }}>{parts.rest}</div>
               </>
             ) : (
@@ -282,10 +286,36 @@ const Quote: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
   );
 };
 
-const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote } as const;
+// real typeset formulas: KaTeX writes MathML (no web fonts to load, so a render never waits for one); a label that is not
+// formula-like is shown as plain text
+const looksLikeTex = (s: string) => /[\\^_=]/.test(s);
+const Equation: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const { u } = useUnit();
+  const at = cueFrames(labels.length, cues, frames, fps);
+  const act = activeIndex(frame, at);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 34 * u, alignItems: "center", width: "100%" }}>
+      {labels.map((l, i) => {
+        const t = enter(frame, at[i], fps);
+        const on = i === act;
+        const html = looksLikeTex(l) ? katex.renderToString(l, { output: "mathml", throwOnError: false, displayMode: true }) : null;
+        return (
+          <div key={i} style={{ background: p.card, border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 22 * u, padding: `${22 * u}px ${48 * u}px`, opacity: t, transform: `scale(${(0.9 + 0.1 * t) * (on ? 1.04 : 1)})`, boxShadow: glow(on, accent, u), color: p.text, fontFamily: FONT, fontSize: 78 * u, fontWeight: 600 }}>
+            {html ? <span dangerouslySetInnerHTML={{ __html: html }} /> : l}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation } as const;
 
 const SectionScene: React.FC<{ index: number; total: number; section: Props["sections"][number]; p: Pal; accent: string; frames: number }> = ({ index, total, section, p, accent, frames }) => {
   const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
   const { u, h } = useUnit();
   const View = SCENE_VIEWS[section.scene];
   const fade = Math.min(interpolate(frame, [0, 10], [0, 1], { extrapolateRight: "clamp" }), interpolate(frame, [frames - 10, frames], [1, 0], { extrapolateLeft: "clamp" }));
@@ -294,8 +324,16 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
   const underline = interpolate(frame, [4, 24], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
     <AbsoluteFill style={{ opacity: fade }}>
-      <AbsoluteFill style={{ padding: `${90 * u}px ${70 * u}px ${Math.max(360 * u, h * 0.2)}px`, transform: `scale(${push})`, transformOrigin: "50% 45%" }}>
-        <div style={{ marginBottom: 54 * u }}>
+      {section.footage && (
+        <AbsoluteFill>
+          <Loop durationInFrames={Math.max(15, Math.round(section.footageSeconds * fps))}>
+            <OffthreadVideo src={asset(section.footage)} muted style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.38, transform: `scale(${1 + 0.06 * (frame / frames)})` }} />
+          </Loop>
+          <AbsoluteFill style={{ background: `linear-gradient(180deg, ${p.bg1}cc 0%, ${p.bg1}66 45%, ${p.bg1}dd 100%)` }} />
+        </AbsoluteFill>
+      )}
+      <AbsoluteFill style={{ padding: `${80 * u}px ${70 * u}px ${Math.max(300 * u, h * 0.16)}px`, transform: `scale(${push})`, transformOrigin: "50% 45%" }}>
+        <div style={{ marginBottom: 36 * u }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 24 * u }}>
             <div style={{ fontFamily: MONO, fontSize: 34 * u, color: accent, letterSpacing: 2 }}>{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div>
             <div style={{ fontFamily: FONT, fontSize: 60 * u, fontWeight: 800, color: p.text, textTransform: "uppercase", letterSpacing: 1 }}>{section.title}</div>

@@ -134,17 +134,21 @@ def attach_clips(script, timing, session_dir, ask, scenes=("flow",), portrait=Fa
 
 
 def build_props(script, timing, words_per_section, theme="dark", accent=None, intro=2.5, outro=3.0, audio_url=None, music_url=None,
-                music_volume=0.12, captions=True, clips=None):
+                music_volume=0.12, captions=True, clips=None, footage=None):
     """The CaseVideo props: sections with their times, every word shifted to where its section starts. `clips` (from attach_clips)
     puts a rendered animation on a section."""
     sections, words = [], []
     clips = clips or [None] * len(script["sections"])
-    for sec, (start, end), ws, clip in zip(script["sections"], timing, words_per_section, clips):
+    footage = footage or [None] * len(script["sections"])
+    for sec, (start, end), ws, clip, foot in zip(script["sections"], timing, words_per_section, clips, footage):
         labels, cues = spoken_order(list(sec.get("on_screen") or []), ws, duration=end - start)
         sections.append({"title": sec["title"], "scene": sec["scene"], "labels": labels, "cues": cues, "start": start, "end": end})
         if clip:
             sections[-1]["clip"] = clip["path"]
             sections[-1]["clipRate"] = clip["rate"]
+        if foot:
+            sections[-1]["footage"] = foot["path"]
+            sections[-1]["footageSeconds"] = foot["seconds"]
         words += [{"word": w["word"], "start": round(w["start"] + start, 3), "end": round(w["end"] + start, 3)} for w in ws]
     props = {"title": script["title"], "theme": theme, "introSeconds": intro, "outroSeconds": outro, "verified": bool(script.get("verified")),
              "sources": [s["ref"] for s in script.get("sources", [])], "captionsOff": not captions, "sections": sections, "words": words,
@@ -268,18 +272,47 @@ def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=N
     return audios, words
 
 
-def join_audio(audios, timing, out_path):
-    """One track: each section's audio placed at its start time (ffmpeg adelay + amix). Returns out_path."""
+def join_audio(audios, timing, out_path, sfx=None):
+    """One track: each section's audio placed at its start time (ffmpeg adelay + amix), level-matched; the sound-effects wav `sfx`,
+    when given, is mixed in after that so it stays under the voice. Returns out_path."""
     cmd = [_ffmpeg(), "-y"]
     for a in audios:
         cmd += ["-i", a]
+    if sfx:
+        cmd += ["-i", sfx]
     delays = [f"[{i}:a]adelay={int(start * 1000)}|{int(start * 1000)}[a{i}]" for i, (start, _) in enumerate(timing)]
-    mix = "".join(f"[a{i}]" for i in range(len(audios))) + f"amix=inputs={len(audios)}:normalize=0:duration=longest,loudnorm=I=-16:TP=-1.5:LRA=11[out]"
-    cmd += ["-filter_complex", ";".join(delays + [mix]), "-map", "[out]", "-c:a", "libmp3lame", "-b:a", "192k", out_path]
+    voices = "".join(f"[a{i}]" for i in range(len(audios))) + f"amix=inputs={len(audios)}:normalize=0:duration=longest,loudnorm=I=-16:TP=-1.5:LRA=11"
+    if sfx:
+        graph = delays + [voices + "[v]", f"[v][{len(audios)}:a]amix=inputs=2:normalize=0:duration=first[out]"]
+    else:
+        graph = delays + [voices + "[out]"]
+    cmd += ["-filter_complex", ";".join(graph), "-map", "[out]", "-c:a", "libmp3lame", "-b:a", "192k", out_path]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0 or not os.path.exists(out_path):
         raise RuntimeError("Joining the voice pieces failed: " + (res.stderr or "")[-300:])
     return out_path
+
+
+def attach_footage(script, session_dir, aspect="16:9", fetch=None, cache_dir=None):
+    """[None | {"path", "seconds"}] per section: a stock clip for the section's `footage` phrase (see engine.case_footage)."""
+    from engine import case_footage
+    fetch = fetch or case_footage.fetch
+    cache_dir = cache_dir or os.path.join(os.path.expanduser("~"), ".shortsflow", "footage")
+    orientation = "portrait" if aspect == "9:16" else "landscape"
+    out = []
+    for sec in script["sections"]:
+        got = fetch(sec.get("footage") or "", cache_dir, orientation) if sec.get("footage") else None
+        out.append({"path": got[0], "seconds": got[1]} if got else None)
+    return out
+
+
+def sfx_for(props, path):
+    """Write the sound-effects wav for a props dict: a whoosh at each section start, a pop at each label cue."""
+    from engine import case_sfx
+    starts = [s["start"] for s in props["sections"]]
+    labels = [s["start"] + c for s in props["sections"] for c in s.get("cues", [])]
+    total = max([s["end"] for s in props["sections"]] or [5.0])
+    return case_sfx.build_track(path, total, starts, labels)
 
 
 def render_case(props, audio_path, output_path, music_path=None, aspect="16:9"):
@@ -304,6 +337,10 @@ def render_case(props, audio_path, output_path, music_path=None, aspect="16:9"):
                 s["clip"] = copy_to_public(s["clip"], assets) or None
                 if not s["clip"]:
                     s.pop("clip")
+            if s.get("footage"):
+                s["footage"] = copy_to_public(s["footage"], assets) or None
+                if not s["footage"]:
+                    s.pop("footage")
         with open(props_path, "w", encoding="utf-8") as f:
             json.dump(props, f)
         end = max([s["end"] for s in props["sections"]] or [5.0]) + props["outroSeconds"]

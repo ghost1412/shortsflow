@@ -28,7 +28,7 @@ from engine.media_gen import is_url
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate either FACTS, STORY, FIND_IT, WYR, REDDIT, TRIVIA, QUOTE, JWST, RIDDLE, ODD_ONE_OUT, or FILTER shorts.")
-    parser.add_argument("--mode", choices=["FACTS", "STORY", "FIND_IT", "WYR", "REDDIT", "TRIVIA", "QUOTE", "ODD_ONE_OUT", "NEWS", "NEWS_SERIOUS", "GUESS_SOUND", "RIDDLE", "TREND", "CHALLENGE", "JWST", "TRAILER_MISSED", "MUSIC", "EXPLAINER", "FILTER", "EMOJI_GUESS", "PHOTO_REEL", "FUNNY_EXPLAINER", "TEACH", "DUB", "SPLIT_SCREEN", "PODCAST", "TOP_5", "CHAT_STORY", "HORROR", "TRUE_CRIME", "BIBLE", "ARTICLE", "UGC", "AUTO", "TRIP"], help="Force a specific mode.")
+    parser.add_argument("--mode", choices=["FACTS", "STORY", "FIND_IT", "WYR", "REDDIT", "TRIVIA", "QUOTE", "ODD_ONE_OUT", "NEWS", "NEWS_SERIOUS", "GUESS_SOUND", "RIDDLE", "TREND", "CHALLENGE", "JWST", "TRAILER_MISSED", "MUSIC", "EXPLAINER", "FILTER", "EMOJI_GUESS", "PHOTO_REEL", "FUNNY_EXPLAINER", "TEACH", "DUB", "SPLIT_SCREEN", "PODCAST", "TOP_5", "CHAT_STORY", "HORROR", "TRUE_CRIME", "BIBLE", "ARTICLE", "UGC", "AUTO", "TRIP", "CASE"], help="Force a specific mode.")
     parser.add_argument("--scene", help="Scene or scenario prompt for FUNNY_EXPLAINER mode.")
     parser.add_argument("--photos_dir", help="Directory containing photos for PHOTO_REEL mode.")
     parser.add_argument("--music", help="Path to audio/music track for PHOTO_REEL or background music.")
@@ -216,6 +216,12 @@ def parse_args():
     # Voice, Production & Aspect Ratio Flags
     parser.add_argument("--tts_provider", choices=["auto", "elevenlabs", "voicestudio", "edgetts", "local", "kokoro"], default="auto", help="Specify Text-to-Speech synthesis provider.")
     parser.add_argument("--clone_voice", help="Path to custom audio sample file (.wav, .mp3) for zero-shot voice cloning.")
+    parser.add_argument("--sources", action="append", metavar="LINK_OR_FILE", help="CASE mode: a source the script may use (a link, a text file or pasted notes); repeat up to 3 times. The script holds nothing the sources do not.")
+    parser.add_argument("--case_template", default="case", help="CASE mode: the sections of the video: case, postmortem, history, explainer, or the path of a JSON file of {id, title, question, scene} sections.")
+    parser.add_argument("--case_theme", choices=["dark", "clean", "warm"], default="dark", help="CASE mode: colour theme of the drawn scenes.")
+    parser.add_argument("--case_formats", default="16:9,9:16", help="CASE mode: video shapes to make, comma separated (16:9 for YouTube and LinkedIn, 9:16 for Reels and Shorts).")
+    parser.add_argument("--case_no_manim", action="store_true", help="CASE mode: do not draw Manim animations for the explaining sections (faster).")
+    parser.add_argument("--case_no_footage", action="store_true", help="CASE mode: no stock footage behind the scenes (it needs PEXELS_API_KEY anyway).")
     parser.add_argument("--aspect_ratio", choices=["9:16", "16:9", "1:1", "4:5"], default="9:16", help="Frame shape of clips cut from a video (--source_video): 9:16 vertical (default, 1080x1920), 1:1 square (1080x1080), 4:5 (1080x1350) or 16:9 landscape (1920x1080). The face-tracked crop, the layouts, the captions, templates and covers follow it. The highlights video (--extract_mode long) is always 16:9. Other modes make 9:16.")
     parser.add_argument("--target_lang", help="Target language for --mode DUB (translate and re-voice the video): es, hi, de, fr, ja, pt, zh, it, ru, ko, ar, en, tr, nl, pl, uk, id.")
     parser.add_argument("--dub_captions", action="store_true", help="--mode DUB: burn the translated subtitles into the dubbed video (re-encodes; the .srt is always written). Uses a font with the glyphs for the target script (Hindi, Arabic, Cyrillic, Chinese, Japanese, Korean).")
@@ -409,6 +415,11 @@ if getattr(args, "mode", None) == "DUB":
 if getattr(args, "mode", None) == "TRIP":
     from engine.trip_recap import run as run_trip
     run_trip(args, target_bitrate, target_preset)
+
+# 🟢 Standalone CASE Mode (topic + sources -> sectioned explainer video)
+if getattr(args, "mode", None) == "CASE":
+    from engine.modes.case import run as run_case
+    run_case(args, target_bitrate, target_preset)
 
 # 🟢 Standalone EXPLAINER Mode
 if getattr(args, "mode", None) == "EXPLAINER":
