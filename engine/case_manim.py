@@ -27,7 +27,7 @@ What the narrator says over it: {section.get('narration', '')}
 Key labels to show: {labels}
 
 Rules:
-- One class `ExplainerScene(Scene)`. Start the file with `from manim import *`. First line of construct: `self.camera.background_color = "{BACKGROUND}"`.
+- One class `ExplainerScene(Scene)`. Start the file with `from manim import *`. Do NOT set a background colour: the clip is transparent and is laid over a video, so draw light shapes and text that read on a dark picture.
 - NO LaTeX: never use Tex or MathTex, no backslash macros. Use Text() with short strings, font_size 28-40. Plain symbols such as ^2, =, +, x are fine.
 - Show the mechanism as a diagram with shapes: RoundedRectangle boxes, Arrow, Line, Circle, a grid of squares, a bar that fills, Dot moving along a path.
   Colours: accent "{accent}", text "#e8f1ff", failure "#ff5d73", secondary "#3b82f6", dim "#7d8ba3".
@@ -80,7 +80,7 @@ def code_problem(code):
 
 
 def render_scene(code, out_dir, portrait=False, fps=30, timeout=300):
-    """Render `code` (an ExplainerScene) with the Manim command line at 1080p and `fps`. Returns the mp4 path; raises RuntimeError
+    """Render `code` (an ExplainerScene) with the Manim command line at 1080p and `fps`. Returns the path of the transparent .mov clip; raises RuntimeError
     with Manim's message when it fails."""
     import subprocess
     import sys
@@ -92,14 +92,31 @@ def render_scene(code, out_dir, portrait=False, fps=30, timeout=300):
     with open(script, "w", encoding="utf-8") as f:
         f.write(code)
     size = "1080,1350" if portrait else "1920,1080"
-    cmd = [sys.executable, "-m", "manim", "-ql", "--fps", str(fps), "-r", size, "--media_dir", out_dir, script, "ExplainerScene"]
+    cmd = [sys.executable, "-m", "manim", "-ql", "-t", "--fps", str(fps), "-r", size, "--media_dir", out_dir, script, "ExplainerScene"]
     res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     if res.returncode != 0:
         raise RuntimeError("Manim render failed: " + (res.stderr or "")[-600:])
-    found = [os.path.join(root, name) for root, _, names in os.walk(out_dir) for name in names if name == "ExplainerScene.mp4"]
+    found = [os.path.join(root, name) for root, _, names in os.walk(out_dir) for name in names if name == "ExplainerScene.mov"]
     if not found:
-        raise RuntimeError("Manim finished but no ExplainerScene.mp4 was written.")
-    return max(found, key=os.path.getmtime)
+        raise RuntimeError("Manim finished but no ExplainerScene.mov was written.")
+    return to_alpha_webm(max(found, key=os.path.getmtime))
+
+
+def to_alpha_webm(mov, ffmpeg=None):
+    """The transparent Manim .mov as a VP9 .webm with alpha, which the Remotion renderer can decode (it has no QuickTime RLE decoder).
+    Returns the .webm path; raises RuntimeError when FFmpeg fails."""
+    import shutil
+    import subprocess
+    ffmpeg = ffmpeg or shutil.which("ffmpeg")
+    if not ffmpeg:
+        import imageio_ffmpeg
+        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    out = os.path.splitext(mov)[0] + ".webm"
+    res = subprocess.run([ffmpeg, "-y", "-i", mov, "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-b:v", "0", "-crf", "32",
+                          "-deadline", "realtime", "-cpu-used", "6", "-auto-alt-ref", "0", "-an", out], capture_output=True, text=True)
+    if res.returncode != 0 or not os.path.exists(out):
+        raise RuntimeError("Converting the animation to WebM failed: " + (res.stderr or "")[-300:])
+    return out
 
 
 def make_section_clip(section, seconds, out_dir, ask, render, topic="", portrait=False, accent="#00e5a8", tries=MAX_TRIES):

@@ -104,6 +104,48 @@ const cueFrames = (n: number, cues: number[], frames: number, fps: number) =>
 // the label being spoken now: the last one whose cue has passed
 const activeIndex = (frame: number, at: number[]) => at.reduce((a, f, i) => (frame >= f ? i : a), -1);
 
+// Simple line icons (24 x 24), picked by the words of a label, so diagram boxes and cards carry a picture instead of only text.
+type IconName = "server" | "laptop" | "lock" | "globe" | "warning" | "shield" | "file" | "money" | "clock" | "ship" | "plane" | "user" | "terminal" | "key" | "dot";
+const ICON_RULES: [RegExp, IconName][] = [
+  [/server|data ?cent|cloud|database/i, "server"],
+  [/ransom|encrypt|password|lock|credential|hostage/i, "lock"],
+  [/\bkey\b|token|certificate/i, "key"],
+  [/country|countries|world|global|internet|network|international|nation/i, "globe"],
+  [/flight|plane|airline|airport|\bair\b/i, "plane"],
+  [/ship|vessel|tug|canal|boat|cargo|container|port\b|sea\b/i, "ship"],
+  [/money|\$|cost|loss|fine|compensation|bitcoin|payment|billion|million|dollar|revenue|damage/i, "money"],
+  [/patch|protect|defen|prevent|backup|secure|security|update|test|monitor|policy|train/i, "shield"],
+  [/command|terminal|script|code|shell|exploit|execute|payload|backdoor|port \d|smb/i, "terminal"],
+  [/user|people|customer|staff|crew|employee|worker|hospital|patient|attacker|hacker|group/i, "user"],
+  [/file|record|document|data|log\b|backup/i, "file"],
+  [/computer|laptop|pc\b|machine|device|system|windows|endpoint|client|sensor|host/i, "laptop"],
+  [/attack|breach|fail|crash|error|block|outage|warning|infect|malware|virus|worm|spread|vulnerab|aground|stuck|fault/i, "warning"],
+  [/\b(19|20)\d\d\b|january|february|march|april|may\b|june|july|august|september|october|november|december|day|hour|week|month|year|time|timeline/i, "clock"],
+];
+const iconFor = (label: string): IconName => (ICON_RULES.find(([re]) => re.test(label)) || [null, "dot"])[1] as IconName;
+
+const Icon: React.FC<{ name: IconName; size: number; color: string }> = ({ name, size, color }) => {
+  const common = { fill: "none", stroke: color, strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  const shapes: Record<IconName, React.ReactNode> = {
+    server: <><rect x="3" y="3" width="18" height="7" rx="2" /><rect x="3" y="14" width="18" height="7" rx="2" /><path d="M7 6.5h.01M7 17.5h.01" /></>,
+    laptop: <><rect x="4" y="5" width="16" height="11" rx="1.5" /><path d="M2 19h20" /></>,
+    lock: <><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></>,
+    key: <><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M17 6l3 3" /></>,
+    globe: <><circle cx="12" cy="12" r="10" /><ellipse cx="12" cy="12" rx="4" ry="10" /><path d="M2 12h20" /></>,
+    plane: <path d="M2 13l20-9-7 17-3-7z" />,
+    ship: <><path d="M3 16l2 5h14l2-5z" /><rect x="7" y="9" width="10" height="7" /><path d="M12 3v6" /></>,
+    money: <><circle cx="12" cy="12" r="10" /><path d="M12 6v12M9 9.5c0-2.2 6-2.2 6 0s-6 2.2-6 4.5 6 2.2 6 0" /></>,
+    shield: <path d="M12 2l8 3v7c0 5-4 8-8 10-4-2-8-5-8-10V5z" />,
+    terminal: <><path d="M4 17l6-6-6-6" /><path d="M12 19h8" /></>,
+    user: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></>,
+    file: <><path d="M6 2h8l4 4v16H6z" /><path d="M14 2v4h4" /></>,
+    clock: <><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>,
+    warning: <><path d="M12 3L22 20H2z" /><path d="M12 9v5M12 17h.01" /></>,
+    dot: <circle cx="12" cy="12" r="4" />,
+  };
+  return <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0 }} {...common}>{shapes[name]}</svg>;
+};
+
 const glow = (on: boolean, accent: string, u: number) => (on ? `0 0 ${34 * u}px ${accent}88` : "none");
 
 const Timeline: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
@@ -133,8 +175,8 @@ const Timeline: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
         const on = i === act;
         return (
           <React.Fragment key={i}>
-            <div style={{ position: "absolute", left: x - 20 * u, top: y - 20 * u, width: 40 * u, height: 40 * u, borderRadius: "50%", background: i <= act ? accent : p.bg1, border: `${5 * u}px solid ${accent}`, transform: `scale(${0.4 + 0.6 * t})`, boxShadow: glow(on, accent, u) }} />
-            <div style={{ position: "absolute", left: portrait ? x + 50 * u : x - 230 * u, top: portrait ? y - 34 * u : above ? y - 170 * u : y + 50 * u, width: portrait ? aw - x - 70 * u : 460 * u, textAlign: portrait ? "left" : "center", fontFamily: FONT, fontSize: 44 * u, fontWeight: 700, lineHeight: 1.15, color: i <= act ? p.text : p.dim, opacity: t, transformOrigin: portrait ? "left center" : "center", transform: `translateY(${(1 - t) * (above ? 30 : -30) * u}px) scale(${on ? 1.06 : 1})` }}>{l}</div>
+            <div style={{ position: "absolute", left: x - 38 * u, top: y - 38 * u, width: 76 * u, height: 76 * u, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: i <= act ? `${accent}33` : p.bg1, border: `${4 * u}px solid ${accent}`, transform: `scale(${0.4 + 0.6 * t})`, boxShadow: glow(on, accent, u) }}><Icon name={iconFor(labels[i])} size={40 * u} color={accent} /></div>
+            <div style={{ position: "absolute", left: portrait ? x + 70 * u : x - 230 * u, top: portrait ? y - 34 * u : above ? y - 200 * u : y + 64 * u, width: portrait ? aw - x - 70 * u : 460 * u, textAlign: portrait ? "left" : "center", fontFamily: FONT, fontSize: 44 * u, fontWeight: 700, lineHeight: 1.15, color: i <= act ? p.text : p.dim, opacity: t, transformOrigin: portrait ? "left center" : "center", transform: `translateY(${(1 - t) * (above ? 30 : -30) * u}px) scale(${on ? 1.06 : 1})` }}>{l}</div>
           </React.Fragment>
         );
       })}
@@ -175,7 +217,10 @@ const Flow: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
         const { x, y } = c(i);
         const on = i === act;
         return (
-          <div key={i} style={{ position: "absolute", left: x - nw / 2, top: y - nh / 2, width: nw, height: nh, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", boxSizing: "border-box", padding: 14 * u, background: p.card, border: `${on ? 4 : 2}px solid ${i <= act ? accent : p.line}`, borderRadius: 22 * u, fontFamily: FONT, fontSize: 38 * u, fontWeight: 700, color: p.text, opacity: t, transform: `scale(${(0.85 + 0.15 * t) * (on ? 1.05 : 1)})`, boxShadow: glow(on, accent, u) }}>{l}</div>
+          <div key={i} style={{ position: "absolute", left: x - nw / 2, top: y - nh / 2, width: nw, height: nh, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", boxSizing: "border-box", padding: 14 * u, background: p.card, backdropFilter: "blur(16px)", border: `${on ? 4 : 2}px solid ${i <= act ? accent : p.line}`, borderRadius: 22 * u, fontFamily: FONT, fontSize: 38 * u, fontWeight: 700, color: p.text, opacity: t, transform: `scale(${(0.85 + 0.15 * t) * (on ? 1.05 : 1)})`, boxShadow: glow(on, accent, u), flexDirection: "column", gap: 10 * u }}>
+            <Icon name={iconFor(l)} size={54 * u} color={accent} />
+            <span>{l}</span>
+          </div>
         );
       })}
     </div>
@@ -184,7 +229,7 @@ const Flow: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
 
 // "5,078 flights cancelled" -> count the number up, show the words under it
 const splitNumber = (label: string) => {
-  const m = label.match(/(\$?\s?\d[\d,.]*\s?(?:%|[kKmMbB]\b|[Mm]illion|[Bb]illion|[Tt]rillion)?)/);
+  const m = label.match(/(\$?\s?\d[\d,.]*\+?\s?(?:%|[kKmMbB]\b|[Mm]illion|[Bb]illion|[Tt]rillion)?)/);
   if (!m) return null;
   const raw = m[1].trim();
   const num = parseFloat(raw.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, ""));
@@ -210,10 +255,11 @@ const Counters: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
         const shown = parts ? (parts.num * progress).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : null;
         const on = i === act;
         return (
-          <div key={i} style={{ background: p.card, border: `1px solid ${p.line}`, borderTop: `5px solid ${accent}`, borderRadius: 22 * u, padding: `${26 * u}px ${34 * u}px`, minWidth: (portrait ? 800 : 480) * u, textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center", opacity: t, transform: `translateY(${(1 - t) * 50 * u}px) scale(${on ? 1.05 : 1})`, boxShadow: glow(on, accent, u) }}>
+          <div key={i} style={{ background: p.card, backdropFilter: "blur(16px)", border: `1px solid ${p.line}`, borderTop: `5px solid ${accent}`, borderRadius: 22 * u, padding: `${26 * u}px ${34 * u}px`, minWidth: (portrait ? 800 : 480) * u, textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center", opacity: t, transform: `translateY(${(1 - t) * 50 * u}px) scale(${on ? 1.05 : 1})`, boxShadow: glow(on, accent, u) }}>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 * u }}><Icon name={iconFor(l)} size={56 * u} color={accent} /></div>
             {parts ? (
               <>
-                <div style={{ fontFamily: FONT, fontSize: 96 * u, fontWeight: 800, color: accent, lineHeight: 1 }}>{parts.prefix}{shown}{parts.suffix ? ` ${parts.suffix}` : ""}</div>
+                <div style={{ fontFamily: FONT, fontSize: 96 * u, fontWeight: 800, color: accent, lineHeight: 1 }}>{parts.prefix}{shown}{parts.suffix ? (/^[+%]/.test(parts.suffix) ? parts.suffix : ` ${parts.suffix}`) : ""}</div>
                 <div style={{ fontFamily: FONT, fontSize: 42 * u, color: p.text, marginTop: 14 * u }}>{parts.rest}</div>
               </>
             ) : (
@@ -240,7 +286,7 @@ const Checklist: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) =>
         const tick = interpolate(frame - delay - 8, [0, 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
         const on = i === act;
         return (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 30 * u, background: p.card, border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 20 * u, padding: `${26 * u}px ${32 * u}px`, opacity: t, transform: `translateX(${(1 - t) * -80 * u}px) scale(${on ? 1.03 : 1})`, transformOrigin: "left center", boxShadow: glow(on, accent, u) }}>
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 30 * u, background: p.card, backdropFilter: "blur(16px)", border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 20 * u, padding: `${26 * u}px ${32 * u}px`, opacity: t, transform: `translateX(${(1 - t) * -80 * u}px) scale(${on ? 1.03 : 1})`, transformOrigin: "left center", boxShadow: glow(on, accent, u) }}>
             <div style={{ width: 58 * u, height: 58 * u, borderRadius: 14 * u, border: `3px solid ${accent}`, background: tick > 0.5 ? `${accent}33` : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 44 * u, fontFamily: FONT, fontWeight: 800, flexShrink: 0 }}>
               <span style={{ opacity: tick, transform: `scale(${0.4 + 0.6 * tick})` }}>✓</span>
             </div>
@@ -302,7 +348,7 @@ const Equation: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
         const on = i === act;
         const html = looksLikeTex(l) ? katex.renderToString(l, { output: "mathml", throwOnError: false, displayMode: true }) : null;
         return (
-          <div key={i} style={{ background: p.card, border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 22 * u, padding: `${22 * u}px ${48 * u}px`, opacity: t, transform: `scale(${(0.9 + 0.1 * t) * (on ? 1.04 : 1)})`, boxShadow: glow(on, accent, u), color: p.text, fontFamily: FONT, fontSize: 78 * u, fontWeight: 600 }}>
+          <div key={i} style={{ background: p.card, backdropFilter: "blur(16px)", border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 22 * u, padding: `${22 * u}px ${48 * u}px`, opacity: t, transform: `scale(${(0.9 + 0.1 * t) * (on ? 1.04 : 1)})`, boxShadow: glow(on, accent, u), color: p.text, fontFamily: FONT, fontSize: 78 * u, fontWeight: 600 }}>
             {html ? <span dangerouslySetInnerHTML={{ __html: html }} /> : l}
           </div>
         );
@@ -327,9 +373,11 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
       {section.footage && (
         <AbsoluteFill>
           <Loop durationInFrames={Math.max(15, Math.round(section.footageSeconds * fps))}>
-            <OffthreadVideo src={asset(section.footage)} muted style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.38, transform: `scale(${1 + 0.06 * (frame / frames)})` }} />
+            <OffthreadVideo src={asset(section.footage)} muted style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.62, transform: `scale(${1 + 0.06 * (frame / frames)})` }} />
           </Loop>
-          <AbsoluteFill style={{ background: `linear-gradient(180deg, ${p.bg1}cc 0%, ${p.bg1}66 45%, ${p.bg1}dd 100%)` }} />
+          <AbsoluteFill style={{ background: `linear-gradient(180deg, ${p.bg1}b8 0%, ${p.bg1}3d 45%, ${p.bg1}d0 100%)` }} />
+          <AbsoluteFill style={{ background: `${accent}14`, mixBlendMode: "color" }} />
+          <AbsoluteFill style={{ background: "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)" }} />
         </AbsoluteFill>
       )}
       <AbsoluteFill style={{ padding: `${80 * u}px ${70 * u}px ${Math.max(300 * u, h * (portrait ? 0.22 : 0.16))}px`, transform: `scale(${push})`, transformOrigin: "50% 45%" }}>
@@ -342,14 +390,20 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
         </div>
         <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
           {section.clip ? (
-            <div style={{ height: "100%", aspectRatio: portrait ? "4 / 5" : "16 / 9", maxWidth: "100%", borderRadius: 26 * u, overflow: "hidden", border: `2px solid ${accent}55`, boxShadow: `0 0 ${50 * u}px ${accent}22`, background: "#05070d" }}>
-              <OffthreadVideo src={asset(section.clip)} muted playbackRate={section.clipRate} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <div style={{ height: "100%", aspectRatio: portrait ? "4 / 5" : "16 / 9", maxWidth: "100%", borderRadius: 26 * u, overflow: "hidden", border: `2px solid ${accent}55`, boxShadow: `0 0 ${50 * u}px ${accent}22`, background: "rgba(4,10,22,0.45)", backdropFilter: "blur(14px)" }}>
+              <OffthreadVideo src={asset(section.clip)} muted transparent playbackRate={section.clipRate} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
           ) : (
             <View labels={section.labels.length ? section.labels : [section.title]} cues={section.cues} p={p} accent={accent} frames={frames} />
           )}
         </div>
       </AbsoluteFill>
+      {frame < 42 && (
+        <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", background: `${p.bg1}${frame < 30 ? "d9" : "99"}`, opacity: interpolate(frame, [0, 6, 30, 42], [0, 1, 1, 0], { extrapolateRight: "clamp" }) }}>
+          <div style={{ fontFamily: FONT, fontSize: 340 * u, fontWeight: 900, color: "transparent", WebkitTextStroke: `${4 * u}px ${accent}`, lineHeight: 1, transform: `scale(${1 + 0.08 * (frame / 42)})` }}>{String(index + 1).padStart(2, "0")}</div>
+          <div style={{ fontFamily: FONT, fontSize: 74 * u, fontWeight: 800, color: p.text, textTransform: "uppercase", letterSpacing: 4 * u, marginTop: 8 * u }}>{section.title}</div>
+        </AbsoluteFill>
+      )}
       <div style={{ position: "absolute", top: 0, bottom: 0, left: `${wipe}%`, width: "24%", background: `linear-gradient(90deg, transparent, ${accent}40, transparent)`, transform: "skewX(-12deg)", pointerEvents: "none" }} />
     </AbsoluteFill>
   );
