@@ -2,6 +2,7 @@ import "./index.css";
 import { Composition } from "remotion";
 import { ShortFlow, shortFlowSchema } from "./ShortFlow";
 import { OverlayOnly, overlaySchema } from "./overlay";
+import { CaseVideo, caseVideoSchema } from "./CaseVideo";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -62,6 +63,32 @@ export const RemotionRoot: React.FC = () => {
         schema={overlaySchema}
         calculateMetadata={({ props }) => ({ durationInFrames: Math.max(1, Math.ceil(props.seconds * 30)) })}
         defaultProps={{ hookSeconds: 0, seconds: 3, clockOffset: 0, clockTotal: 10 }}
+      />
+      <Composition
+        id="CaseVideo"
+        component={CaseVideo}
+        fps={30}
+        width={1920}
+        height={1080}
+        schema={caseVideoSchema}
+        calculateMetadata={({ props }) => {
+          const end = props.sections.length ? Math.max(...props.sections.map((s) => s.end)) : 5;
+          return { durationInFrames: Math.max(30, Math.ceil((end + props.outroSeconds) * 30)) };
+        }}
+        defaultProps={{
+          title: "Preview",
+          theme: "dark" as const,
+          bgMusicVolume: 0.12,
+          introSeconds: 2.5,
+          outroSeconds: 3,
+          verified: true,
+          sources: [],
+          captionsOff: false,
+          sections: [
+            { title: "What happened", scene: "timeline" as const, labels: ["First", "Second", "Third"], start: 2.5, end: 8 },
+          ],
+          words: [],
+        }}
       />
     </>
   );
