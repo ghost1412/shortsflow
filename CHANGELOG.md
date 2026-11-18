@@ -4,6 +4,7 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Experimental, off by default: `SHORTSFLOW_LOCAL_RERANK=1` has a model running on this PC (Ollama, `LOCAL_LLM_MODEL`) rank the best 15 candidates in one request. It talks to the local server only: if that fails there is no cloud fallback for the text, and without a local server you get the normal ranking. On the offline benchmark it raises precision a little (0.25 to 0.30) and recall of the best 8 (0.20 to 0.25) with a 7B model, which is not enough to make it the default.
 - Review step: below the chosen moments, up to three runner-ups the tool ranked next are shown unticked; tick one to render it too. `--plan_only` writes them to `plan.json` with `"spare": true`.
 - `shortsflow doctor --report` prints a block to paste into a bug report: versions (ShortsFlow, OS, Python, FFmpeg, Node, GPU) and the doctor checks, with no keys and no folder or account names.
 - A clip run saves every moment that was in the running, best first (`candidates.json` in the session folder). With `--gold`, `scripts/clip_benchmark.py` adds recall@5 and recall@8.

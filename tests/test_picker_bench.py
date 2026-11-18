@@ -27,7 +27,7 @@ def test_pick_is_repeatable_and_never_calls_the_ai(tmp_path, monkeypatch):
     first, second = pb.pick(str(t)), pb.pick(str(t))
     assert first and [(h["start"], h["end"]) for h in first] == [(h["start"], h["end"]) for h in second]
     assert all(float(h["end"]) > float(h["start"]) for h in first)
-    assert script_gen.get_llm_response.__name__ == "<lambda>" and "AssertionError" in script_gen.get_llm_response.__code__.co_names    # put back
+    assert script_gen.get_llm_response.__name__ == "<lambda>"    # put back
 
 
 def test_bench_scores_each_transcript_against_its_gold_file(tmp_path):

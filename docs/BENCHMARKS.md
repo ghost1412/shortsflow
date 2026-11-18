@@ -64,6 +64,8 @@ python scripts/picker_bench.py --suffix _human  # against docs/gold/<name>_human
 
 Transcript-only baseline, no AI key (2026-11-17, model-labelled gold): mean recall 0.12, precision 0.25, recall@8 0.20.
 
+With the opt-in local rerank (`SHORTSFLOW_LOCAL_RERANK=1`, `qwen2.5:7b` on Ollama, 15 candidates, one request, a single run per video): recall 0.12, precision 0.30, recall@8 0.25. The 15 candidates hold 44% of the gold moments (recall@15), so most of what the picker misses it never proposes; a 7B model rates nearly every clip 7 to 9 and does not separate them well. Run to run the ranking varies (the model is not seeded), so treat these as soft.
+
 ## Reproduce
 
 ```bash

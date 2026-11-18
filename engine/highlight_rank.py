@@ -10,6 +10,7 @@ no LLM answers or the reply is unusable, so the caller keeps the older per-clip 
 also costs less.
 """
 import json
+import os
 
 from engine.highlight_quality import sentence_spans
 
@@ -78,7 +79,7 @@ def parse_ranking(raw, n):
         except Exception:
             return {}
     if isinstance(data, dict):
-        data = data.get("clips") or data.get("ranking") or data.get("results") or []
+        data = next((v for v in data.values() if isinstance(v, list)), None) or ([data] if "id" in data else [])    # {"clips": [...]} or one clip
     out = {}
     for item in data if isinstance(data, list) else []:
         if not isinstance(item, dict):
@@ -117,6 +118,42 @@ def _adjust_edges(h, spans, info, min_len=MIN_LEN):
             if cand > start and new_end - cand >= min_len:
                 new_start = cand
     return new_start, new_end
+
+
+LOCAL_POOL = 15            # candidates shown to a local model (a cloud pass sees up to 10)
+
+
+def local_rerank_enabled():
+    """True when SHORTSFLOW_LOCAL_RERANK=1: rank the candidates with a model running on this PC (Ollama), and never with a cloud one."""
+    return os.environ.get("SHORTSFLOW_LOCAL_RERANK") == "1"
+
+
+def local_available(url=None, timeout=2.0):
+    """True when the local Ollama server answers within `timeout` seconds (a quick probe, so a missing server costs two seconds)."""
+    import requests
+    from engine import script_gen
+    base = (url or script_gen.LOCAL_LLM_URL).split("/api/")[0]
+    try:
+        return requests.get(base + "/api/tags", timeout=timeout).ok
+    except requests.RequestException:
+        return False
+
+
+def local_ask(prompt, url=None, model=None, timeout=180):
+    """One reply from the local Ollama model. Talks to that server only, so unlike get_llm_response it never falls back to a cloud
+    provider: the transcript text stays on this PC. Raises when the server cannot answer (rank_with_context then keeps the old scores)."""
+    import requests
+    from engine import script_gen
+    payload = {"model": model or script_gen.LOCAL_LLM_MODEL, "stream": False, "format": "json",
+               "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt}],
+               "options": {"temperature": 0.2, "num_predict": 1500, "num_ctx": 16384}}
+    r = requests.post(url or script_gen.LOCAL_LLM_URL, json=payload, timeout=timeout)
+    r.raise_for_status()
+    msg = r.json().get("message", {})
+    text = msg.get("content") or ""
+    if not text:
+        raise RuntimeError("the local model returned nothing")
+    return text
 
 
 def rank_with_context(highlights, transcript, ask=None, max_candidates=10, weight=0.6, min_len=MIN_LEN, context=None):

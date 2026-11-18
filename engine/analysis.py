@@ -1808,6 +1808,16 @@ def process_source_video(video_path, output_dir, mode="shorts", clip_count=5, ta
     if highlights is None:
         # Ask the first pass for more candidates than needed when the context ranking can choose between them
         pool_count = min(10, clip_count * 2) if (rerank and use_llm_scoring and mode == "shorts") else clip_count
+        local_rerank = False
+        if rerank and use_llm_scoring and mode == "shorts":
+            from engine import highlight_rank
+            if highlight_rank.local_rerank_enabled():
+                local_rerank = highlight_rank.local_available()
+                if local_rerank:
+                    pool_count = max(pool_count, highlight_rank.LOCAL_POOL)
+                    print(f"[Log] Local rerank: the model on this PC will rank the best {pool_count} candidates (nothing leaves the PC).")
+                else:
+                    print("[Warning] SHORTSFLOW_LOCAL_RERANK=1 but no local model answers (is Ollama running?). Using the normal ranking.")
         _mark("before highlight selection")
         highlights = identify_highlights(
             transcript_path, video_path=video_path, clip_count=pool_count,
@@ -1847,8 +1857,16 @@ def process_source_video(video_path, output_dir, mode="shorts", clip_count=5, ta
                 ranked = None
                 if rerank and mode == "shorts":
                     from engine.highlight_rank import rank_with_context
-                    ranked = rank_with_context(highlights, transcript_data, min_len=max(8.0, min_duration - 5.0), context=user_context)   # one request, with context
-                highlights = ranked if ranked is not None else llm_score_highlights(highlights, transcript_data)
+                    if local_rerank:
+                        from engine.highlight_rank import local_ask, LOCAL_POOL
+                        ranked = rank_with_context(highlights, transcript_data, ask=local_ask, max_candidates=LOCAL_POOL,
+                                                   min_len=max(8.0, min_duration - 5.0), context=user_context)
+                    else:
+                        ranked = rank_with_context(highlights, transcript_data, min_len=max(8.0, min_duration - 5.0), context=user_context)   # one request, with context
+                if ranked is not None:
+                    highlights = ranked
+                elif not local_rerank:         # with the local rerank on, no cloud provider gets the text as a fallback
+                    highlights = llm_score_highlights(highlights, transcript_data)
             except Exception as e:
                 print(f"[Warning] LLM scoring skipped: {e}")
         _mark("context ranking / LLM scoring")

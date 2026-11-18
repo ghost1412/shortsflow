@@ -2,6 +2,7 @@ import json
 
 from engine.highlight_quality import sentence_spans
 from engine.highlight_rank import build_prompt, parse_ranking, rank_with_context
+from engine import highlight_rank as hr
 
 
 def _t(sentences, gap=0.6, wd=0.3):
@@ -99,3 +100,47 @@ def test_prompt_tells_the_model_outros_are_weak():
     tr = _t(SENT)
     cands, sp = _cands(tr)
     assert "goodbye" in build_prompt(cands, sp, sp[-1][1]).lower()
+
+
+def test_a_local_model_reply_with_a_wrapping_object_and_an_empty_extend_end_is_still_read():
+    reply = '{"list": [{"id": 1, "score": 8, "complete": true, "extend_end": "", "trim_start": 0, "reason": "ok"}, {"id": 2, "score": 3}]}'
+    info = hr.parse_ranking(reply, 2)
+    assert info[0]["score"] == 8.0 and info[0]["extend_end"] == 0 and info[1]["score"] == 3.0
+    assert hr.parse_ranking('{"id": 1, "score": 6}', 1)[0]["score"] == 6.0          # a model that rates one clip returns one object
+
+
+def test_the_local_rerank_is_opt_in_and_talks_to_the_local_server_only(monkeypatch):
+    import requests
+    monkeypatch.delenv("SHORTSFLOW_LOCAL_RERANK", raising=False)
+    assert not hr.local_rerank_enabled()
+    monkeypatch.setenv("SHORTSFLOW_LOCAL_RERANK", "1")
+    assert hr.local_rerank_enabled()
+
+    seen = {}
+
+    class Reply:
+        ok = True
+        def raise_for_status(self): pass
+        def json(self): return {"message": {"content": '[{"id": 1, "score": 7}]'}}
+
+    monkeypatch.setattr(requests, "post", lambda url, json=None, timeout=None: seen.update(url=url, payload=json, timeout=timeout) or Reply())
+    assert hr.local_ask("rate these", url="http://localhost:11434/api/chat", model="m") == '[{"id": 1, "score": 7}]'
+    assert seen["url"] == "http://localhost:11434/api/chat" and seen["payload"]["stream"] is False and seen["payload"]["model"] == "m"
+
+    class Empty(Reply):
+        def json(self): return {"message": {"content": ""}}
+    monkeypatch.setattr(requests, "post", lambda *a, **k: Empty())
+    import pytest
+    with pytest.raises(RuntimeError):
+        hr.local_ask("rate these", url="http://localhost:11434/api/chat")
+
+
+def test_the_availability_probe_is_false_when_nothing_answers(monkeypatch):
+    import requests
+
+    def down(*a, **k):
+        raise requests.ConnectionError("refused")
+    monkeypatch.setattr(requests, "get", down)
+    assert hr.local_available("http://localhost:1/api/chat") is False
+    monkeypatch.setattr(requests, "get", lambda url, timeout=None: type("R", (), {"ok": True, "url": url})())
+    assert hr.local_available("http://localhost:11434/api/chat") is True
