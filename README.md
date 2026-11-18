@@ -84,13 +84,13 @@ a standalone opening line, titles that say only what the clip says, a face found
 Everything runs locally by default. Only these leave it, and each is optional: AI text providers (Gemini, Groq, Hugging Face, Ollama is local) receive the
 transcript text when you set a key; Gemini receives small frames for `--visual_context` when a key is set; OpenStreetMap place names for trip recaps
 (`--recap_no_geocode` turns it off); Microsoft's Edge voice service or ElevenLabs receive the text to speak in the dub and idea-to-video modes;
-Google Drive upload only when you ask. A pasted YouTube link is downloaded to your PC; use your own files where the video's terms require it.
+a short stock-footage search phrase per section goes to Pexels in `--mode CASE`; Google Drive upload only when you ask. A pasted YouTube link is downloaded to your PC; use your own files where the video's terms require it.
 The transcript of each video you process is also kept on your PC in `~/.shortsflow/cache/transcripts` so it is not redone; delete that folder's files or set `SHORTSFLOW_TRANSCRIPT_CACHE=off` to stop it. If you start the browser app for other devices (`--host 0.0.0.0` or `--share`), visitors cannot use file paths or folder boxes; behind your own tunnel or reverse proxy, set `SHORTSFLOW_REMOTE=1` yourself.
 
 ## More than clips
 
 Browser app, desktop studio, CLI, Docker, REST API, an MCP server for AI agents, dubbing, trip and event recaps, photo reels, step-by-step videos,
-game moments, and 30+ idea-to-video formats. They are documented in **[docs/FEATURES.md](docs/FEATURES.md)** (the full feature reference).
+game moments, source-grounded explainers (`--mode CASE`: a topic and links in, a finished video out), and 30+ idea-to-video formats. They are documented in **[docs/FEATURES.md](docs/FEATURES.md)** (the full feature reference).
 
 <p align="center">
   <img src="demos/demo_short.gif" width="200" alt="An idea-to-video short made from one line of text" />

@@ -257,6 +257,31 @@ _Honest take: the paid tools have a nicer editor, hosted convenience and tested 
 
 ---
 
+## 🧾 Case explainers (`--mode CASE`)
+
+A topic and sources in, a sectioned explainer video out: what happened, how it worked, what it cost, what could change. It works for any
+subject that fits sections (an event, a failure, a product, a scam, a historic moment), not one field.
+
+```bash
+python main.py --mode CASE --prompt "The topic" --sources https://example.com/article --case_template case
+```
+
+| Option | What it does |
+| :--- | :--- |
+| `--sources LINK_OR_FILE` | Up to three sources (link, text file or pasted notes). The script holds nothing they do not. No source: the video is marked UNVERIFIED. |
+| `--case_template` | `case` (what happened / how / impact / what could change), `postmortem`, `history`, `explainer`, or the path of a JSON file of `{id, title, question, scene}` sections |
+| `--case_theme` | `dark`, `clean` or `warm` |
+| `--case_formats` | `16:9,9:16` by default (YouTube and LinkedIn, Reels and Shorts) |
+| `--case_no_manim` / `--case_no_footage` | Skip the Manim animation / the stock footage (faster) |
+
+What is made: a script checked against the sources (`script.json`), one narration per section (ElevenLabs when `ELEVENLABS_API_KEY` is set, else the general
+voice step), drawn scenes that light up as each item is spoken, captions, synthesised light music and sound effects (nothing downloaded, nothing licensed),
+stock footage behind the scenes when `PEXELS_API_KEY` is set, and a Manim animation for the explaining sections. Scenes: timeline, flow, counters, checklist,
+terminal, quote and formula (LaTeX, shown with KaTeX).
+
+What leaves the PC: the source text and the topic go to the AI text provider; a two to four word search phrase per section goes to Pexels; the narration text goes
+to the voice service. Nothing else. Check the facts of anything you publish: the check removes what the sources do not hold, it cannot tell you the sources are right.
+
 ## 🎛️ Engine Power Capabilities
 
 | Capability | Supported Technologies & Flags |

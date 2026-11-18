@@ -114,6 +114,7 @@ python gui_app.py
 | `engine/script_gen.py` | Multi-LLM prompt orchestration (Gemini -> Ollama -> HuggingFace fallback) |
 | `engine/pipeline.py` | Shared helpers used by `main.py` and mode pipelines (status reporting, SRT export, voice maps) |
 | `engine/modes/*.py` | Pipelines, each with `run(args, target_bitrate, target_preset)`: `generate` (idea-to-video, all content modes), `clip_extract`, `music`, `explainer`, `photo_reel`, `video_filter` |
+| `engine/modes/case.py` + `engine/case_study.py`, `case_render.py`, `case_manim.py`, `case_footage.py`, `case_sfx.py`, `light_music.py` | `--mode CASE`: sources -> script written only from them (template of sections) -> narration -> `remotion-video/src/CaseVideo.tsx` render (16:9 and 9:16); optional Manim animation and Pexels footage; synthesised music and sound effects |
 | `engine/speaker_focus.py` | Active-speaker shot planning for `--layout active` |
 | `engine/trip_recap.py` | `--mode TRIP` (own `run(args, ...)`): several travel videos -> one recap (hook, glimpses, day/stop cards, closing card, itinerary); look auto-decided from the footage; portrait + landscape versions; look-alike shot removal; sideways-clip fix |
 | `engine/enhance.py` | Auto-enhance: measures frames of a video (tones, colour cast, saturation, noise) and builds an FFmpeg correction chain (`plan`, `build_filter`, `enhance_filter`); used by the trip recap and by clip extraction (`video_gen.extract_segments`) via `--enhance auto` |
