@@ -19,6 +19,7 @@ MODES = [
     ("Photo reel", "<rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='9' cy='9' r='2'/><path d='M21 15l-5-5L5 21'/>",
      "Photos into a moving reel"),
     ("Video from an idea", "<path d='M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z'/>", "Start from a topic"),
+    ("Case explainer", "<path d='M6 2h8l4 4v16H6z'/><path d='M14 2v4h4M9 12h6M9 16h6'/>", "A topic and sources into a video"),
     ("Clip tool (all options)", "<circle cx='6' cy='6' r='3'/><circle cx='6' cy='18' r='3'/><path d='M20 4L8.12 15.88M14.47 14.48L20 20M8.12 8.12L12 12'/>",
      "Every setting, one screen"),
 ]

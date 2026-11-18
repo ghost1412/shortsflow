@@ -279,6 +279,8 @@ voice step), drawn scenes that light up as each item is spoken, captions, synthe
 stock footage behind the scenes when `PEXELS_API_KEY` is set, and a Manim animation for the explaining sections. Scenes: timeline, flow, counters, checklist,
 terminal, quote and formula (LaTeX, shown with KaTeX).
 
+In the browser app, pick **Case explainer** on the first screen: type the topic, paste up to three links or notes, choose the sections, the look and the shapes, and press **Make my video**. The finished files are listed on the page and saved in `sessions/case_...`.
+
 Pacing: a section is not one long scene. It is cut into beats of about 3.5 to 6.5 seconds, each ending at a sentence end, and every beat changes the
 picture behind the scene (a different stock clip, a punch-in with a flash, a small camera drift) while the drawn scene keeps its place. Items on screen appear
 in the order the narrator says them. The Manim animation of a mechanism is transparent and floats over the footage in a frosted panel; diagram boxes, timeline

@@ -434,6 +434,42 @@ def photo_reel_args(photos_dir, reel_type, name="", texts="", music=None, durati
     return args
 
 
+CASE_THEMES = ["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"]
+CASE_THEME_LABELS = {"dark": "Dark (cyber network)", "clean": "Clean (light)", "warm": "Warm", "neon": "Neon (synthwave)", "newsroom": "Newsroom (red and white)",
+                     "blueprint": "Blueprint (technical drawing)", "terminal": "Terminal (green phosphor)", "editorial": "Editorial (serif on paper)",
+                     "midnight": "Midnight (calm aurora)"}
+
+
+def parse_sources(text, limit=3):
+    """The sources typed in the Case tab: one per line (a link, the path of a text file, or pasted notes), at most `limit`."""
+    return [ln.strip() for ln in str(text or "").splitlines() if ln.strip()][:limit]
+
+
+def case_args(topic, sources_text="", template="case", theme="dark", formats=("16:9", "9:16"), no_manim=False, no_footage=False, session_dir=None):
+    """Command-line arguments for a case explainer (--mode CASE). Raises ValueError with a plain message when the topic is empty."""
+    topic = (topic or "").strip()
+    if not topic:
+        raise ValueError("Type the topic of the video first.")
+    shapes = [f for f in (formats or []) if f in ("16:9", "9:16", "1:1", "4:5")] or ["16:9"]
+    args = ["--mode", "CASE", "--prompt", topic, "--case_template", (template or "case").strip() or "case",
+            "--case_theme", theme if theme in CASE_THEMES else "dark", "--case_formats", ",".join(shapes), "--skip_upload"]
+    for source in parse_sources(sources_text):
+        args += ["--sources", source]
+    if no_manim:
+        args.append("--case_no_manim")
+    if no_footage:
+        args.append("--case_no_footage")
+    if session_dir:
+        args += ["--session_dir", session_dir]
+    return args
+
+
+def find_case_videos(session_dir):
+    """The finished case videos of a session folder, landscape first: [path]."""
+    found = [os.path.join(session_dir, n) for n in ("case_16x9.mp4", "case_9x16.mp4", "case_1x1.mp4", "case_4x5.mp4")]
+    return [p for p in found if os.path.isfile(p)]
+
+
 def find_photo_reel(session_dir):
     path = os.path.join(session_dir, "photo_reel.mp4")
     return path if os.path.isfile(path) else None

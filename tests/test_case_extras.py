@@ -9,7 +9,8 @@ def test_pick_link_prefers_the_width_closest_to_the_wish():
     assert case_footage.pick_link([], 1280) is None
 
 
-def test_fetch_needs_a_key_and_uses_the_cache(tmp_path):
+def test_fetch_needs_a_key_and_uses_the_cache(tmp_path, monkeypatch):
+    monkeypatch.delenv("PEXELS_API_KEY", raising=False)           # a key in the environment must not make the test call the network
     assert case_footage.fetch("ships", str(tmp_path), api_key="") is None
     calls = []
 

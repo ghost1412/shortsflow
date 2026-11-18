@@ -521,6 +521,36 @@ def photo_reel(files, reel_type, name="", texts="", music=None, duration=24, fol
     yield "❌ No reel was made." + (f" {reason}" if reason else " Open 'Technical details' for the reason."), log, None
 
 
+def case_video(topic, sources, template, theme_label, formats, no_manim, no_footage):
+    """Case explainer tab: a topic and sources in, a sectioned explainer video out. Yields (status, log, videos)."""
+    import time
+    session = os.path.join(ROOT, "sessions", time.strftime("case_%Y%m%d_%H%M%S"))
+    theme = next((k for k, v in web_args.CASE_THEME_LABELS.items() if v == theme_label), "dark")
+    try:
+        args = web_args.case_args(topic, sources, template, theme, formats, no_manim, no_footage, session)
+    except ValueError as e:
+        raise gr.Error(str(e))
+    cmd = [*_pipeline_cmd(), *args]
+    status = "📝 Reading the sources and writing the script..."
+    yield status, "", None
+    log, seen = "", 0
+    for log, _videos in _run(cmd):
+        lines = log.splitlines()
+        for line in lines[seen:]:
+            if line.startswith("[Log] Script:"):
+                status = "🎙️ " + line.split("]", 1)[1].strip() + " Making the voice, the scenes and the animation..."
+            elif "SUCCESS!" in line:
+                status = "🎬 " + line.split("]", 1)[1].strip().split(":")[0] + " is ready. " + ("Rendering the next shape..." if "16:9" in line and "9:16" in (formats or []) else "")
+        seen = len(lines)
+        yield status, log, None
+    videos = web_args.find_case_videos(session)
+    if videos:
+        yield f"✅ Done! {len(videos)} video{'s' if len(videos) != 1 else ''} ready below (also in {session}).", log, videos
+        return
+    reason = next((ln.split("]", 1)[1].strip() for ln in reversed(log.splitlines()) if ln.startswith("[Error]")), "")
+    yield "❌ No video was made." + (f" {reason}" if reason else " Open 'Technical details' for the reason."), log, None
+
+
 def generate_short(mode, category, prompt, script, vibe, voice, caption_style, aspect_ratio,
                    use_remotion, llm_provider, tts_provider):
     cmd = [*_pipeline_cmd(), "--mode", mode, "--vibe", vibe]
@@ -1175,13 +1205,13 @@ from shortsflow.ui.theme import EXTRA_CSS as _EXTRA_CSS      # the mode cards, h
 WORDS_CSS += "<style>" + _EXTRA_CSS + "</style>"
 
 
-MODE_KEYS = ["shorts", "clip", "dub", "recap", "reel", "idea"]       # the columns; "highlights" shares the first one
+MODE_KEYS = ["shorts", "clip", "dub", "recap", "reel", "idea", "case"]       # the columns; "highlights" shares the first one
 
 
 def web_args_modes():
     """[(label, key)] of the things you can make: the first screen of the app."""
     return [("Shorts", "shorts"), ("Highlights video", "highlights"), ("Dub into another language", "dub"), ("Recap (trip, wedding, event)", "recap"),
-            ("Photo reel", "reel"), ("Video from an idea", "idea"), ("Clip tool (all options)", "clip")]
+            ("Photo reel", "reel"), ("Video from an idea", "idea"), ("Case explainer", "case"), ("Clip tool (all options)", "clip")]
 
 
 def pick_mode(mode):
@@ -1915,11 +1945,38 @@ def build_ui():
                 )
                 gen_stop.click(stop_jobs, None, gen_log, cancels=[gen_run])
 
+            with gr.Column(visible=False) as mode_col_case:
+                gr.Markdown("### Make an explainer video from a topic and sources\n"
+                            "Type the topic and paste up to three links (or notes). The script is written from the sources only, so it holds nothing they do not. "
+                            "You get a landscape and a portrait video with narration, scenes, captions and music. Takes about 15 to 30 minutes.")
+                with gr.Row():
+                    with gr.Column():
+                        c_topic = gr.Textbox(label="Topic", placeholder="What the video explains, in a short title")
+                        c_sources = gr.Textbox(label="Sources (up to three, one per line: a web link, or notes)", lines=4,
+                                               placeholder="https://example.com/article\nhttps://example.com/another",
+                                               info="Without a source the video is marked UNVERIFIED. The text of the sources goes to your AI text provider.")
+                        c_template = gr.Dropdown(["case", "postmortem", "history", "explainer"], value="case", label="Sections",
+                                                 info="case: what happened, how, impact, what could change. postmortem: what broke, why, cost, what changed. history. explainer.")
+                        c_theme = gr.Dropdown(list(web_args.CASE_THEME_LABELS.values()), value=web_args.CASE_THEME_LABELS["dark"], label="Look")
+                        c_formats = gr.CheckboxGroup(["16:9", "9:16"], value=["16:9", "9:16"], label="Shapes",
+                                                     info="16:9 for YouTube and LinkedIn, 9:16 for Reels and Shorts. Each shape takes its own render time.")
+                        with gr.Row():
+                            c_nomanim = gr.Checkbox(False, label="No animation (faster)")
+                            c_nofoot = gr.Checkbox(False, label="No stock footage")
+                        c_btn = gr.Button("🧾 Make my video", variant="primary")
+                        c_stop = gr.Button("⏹ Stop", variant="stop")
+                        c_status = gr.Markdown("Waiting for a topic...")
+                        c_video = gr.Files(label="Your videos", height=110)
+                with gr.Accordion("Technical details", open=False):
+                    c_log = gr.Textbox(label="Full log", lines=14, max_lines=14, autoscroll=True)
+                c_run = c_btn.click(case_video, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_nofoot], [c_status, c_log, c_video])
+                c_stop.click(stop_jobs, None, c_status, cancels=[c_run])
+
         gr.Markdown("API keys are read from `.env` (`GEMINI_API_KEY`, `PEXELS_API_KEY`, ...). "
                     "See `env.example`. Your video files stay on this PC. Only what you switch on goes out: transcript text to an AI text provider when a key is set, "
                     "small frames to Gemini for `--visual_context` when a key is set, text to the voice service in the dub and idea-to-video modes, "
                     "stock-footage search words to Pexels, place names looked up on OpenStreetMap in trip recaps (turn it off with `--recap_no_geocode`), and any upload you ask for.")
-        mode_cols = [mode_col_shorts, mode_col_clip, mode_col_dub, mode_col_recap, mode_col_reel, mode_col_idea]
+        mode_cols = [mode_col_shorts, mode_col_clip, mode_col_dub, mode_col_recap, mode_col_reel, mode_col_idea, mode_col_case]
         mode_card.change(pick_mode, mode_card, [*mode_cols, q_mode])
     return demo
 
