@@ -85,7 +85,7 @@ export const RemotionRoot: React.FC = () => {
           sources: [],
           captionsOff: false,
           sections: [
-            { title: "What happened", scene: "timeline" as const, labels: ["First", "Second", "Third"], cues: [], clipRate: 1, footageSeconds: 10, start: 2.5, end: 8 },
+            { title: "What happened", scene: "timeline" as const, labels: ["First", "Second", "Third"], cues: [], clipRate: 1, footage: [], beats: [], start: 2.5, end: 8 },
           ],
           words: [],
         }}

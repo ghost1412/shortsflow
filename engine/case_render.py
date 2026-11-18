@@ -16,13 +16,36 @@ FPS = 30
 SIZES = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080), "4:5": (1080, 1350)}
 
 
-def plan_timing(durations, intro=2.5, pad=0.6):
+def plan_timing(durations, intro=1.8, pad=0.5):
     """[(start, end)] of every section: the first starts after the intro, each lasts its narration plus `pad` seconds of air."""
     out, t = [], float(intro)
     for d in durations:
         out.append((round(t, 3), round(t + float(d) + pad, 3)))
         t = out[-1][1]
     return out
+
+
+def beats_for(words, duration, min_len=3.5, max_len=6.5):
+    """[[start, end]] seconds (after the section's audio starts) of the short beats a section is cut into: a beat ends at a sentence end
+    once it is at least `min_len` long, or at the nearest pause or word before `max_len`; the last beat runs to `duration`. Each beat gets
+    its own picture, so nothing stays on screen for a whole section."""
+    duration = float(duration)
+    if not words:
+        count = max(1, round(duration / 6.5))
+        return [[round(i * duration / count, 2), round((i + 1) * duration / count, 2)] for i in range(count)]
+    beats, start = [], 0.0
+    for i, w in enumerate(words):
+        length = w["end"] - start
+        nxt = words[i + 1]["start"] if i + 1 < len(words) else duration
+        sentence_end = str(w["word"]).rstrip("\"')").endswith((".", "!", "?"))
+        if (length >= min_len and sentence_end) or length >= max_len or (length >= min_len + 1.5 and nxt - w["end"] > 0.35):
+            cut = round(min(w["end"] + 0.15, duration), 2)
+            if duration - cut < 2.0:
+                break                                        # too little left for a beat of its own: it joins this one
+            beats.append([round(start, 2), cut])
+            start = cut
+    beats.append([round(start, 2), round(duration, 2)])
+    return beats
 
 
 def read_words(path):
@@ -133,7 +156,7 @@ def attach_clips(script, timing, session_dir, ask, scenes=("flow",), portrait=Fa
     return out
 
 
-def build_props(script, timing, words_per_section, theme="dark", accent=None, intro=2.5, outro=3.0, audio_url=None, music_url=None,
+def build_props(script, timing, words_per_section, theme="dark", accent=None, intro=1.8, outro=2.5, audio_url=None, music_url=None,
                 music_volume=0.12, captions=True, clips=None, footage=None):
     """The CaseVideo props: sections with their times, every word shifted to where its section starts. `clips` (from attach_clips)
     puts a rendered animation on a section."""
@@ -146,9 +169,9 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
         if clip:
             sections[-1]["clip"] = clip["path"]
             sections[-1]["clipRate"] = clip["rate"]
+        sections[-1]["beats"] = beats_for(ws, end - start)
         if foot:
-            sections[-1]["footage"] = foot["path"]
-            sections[-1]["footageSeconds"] = foot["seconds"]
+            sections[-1]["footage"] = [{"src": f["path"], "seconds": f["seconds"]} for f in foot]
         words += [{"word": w["word"], "start": round(w["start"] + start, 3), "end": round(w["end"] + start, 3)} for w in ws]
     props = {"title": script["title"], "theme": theme, "introSeconds": intro, "outroSeconds": outro, "verified": bool(script.get("verified")),
              "sources": [s["ref"] for s in script.get("sources", [])], "captionsOff": not captions, "sections": sections, "words": words,
@@ -294,15 +317,22 @@ def join_audio(audios, timing, out_path, sfx=None):
 
 
 def attach_footage(script, session_dir, aspect="16:9", fetch=None, cache_dir=None):
-    """[None | {"path", "seconds"}] per section: a stock clip for the section's `footage` phrase (see engine.case_footage)."""
+    """[None | [{"path", "seconds"}]] per section: a stock clip for each of the section's `footage` phrases, one per beat
+    (see engine.case_footage); a phrase with no result is skipped."""
     from engine import case_footage
     fetch = fetch or case_footage.fetch
     cache_dir = cache_dir or os.path.join(os.path.expanduser("~"), ".shortsflow", "footage")
     orientation = "portrait" if aspect == "9:16" else "landscape"
     out = []
     for sec in script["sections"]:
-        got = fetch(sec.get("footage") or "", cache_dir, orientation) if sec.get("footage") else None
-        out.append({"path": got[0], "seconds": got[1]} if got else None)
+        phrases = sec.get("footage") or []
+        phrases = [phrases] if isinstance(phrases, str) else phrases
+        found = []
+        for phrase in phrases:
+            got = fetch(phrase, cache_dir, orientation) if phrase else None
+            if got and all(got[0] != f["path"] for f in found):
+                found.append({"path": got[0], "seconds": got[1]})
+        out.append(found or None)
     return out
 
 
@@ -338,8 +368,14 @@ def render_case(props, audio_path, output_path, music_path=None, aspect="16:9"):
                 if not s["clip"]:
                     s.pop("clip")
             if s.get("footage"):
-                s["footage"] = copy_to_public(s["footage"], assets) or None
-                if not s["footage"]:
+                kept = []
+                for f in s["footage"]:
+                    rel = copy_to_public(f["src"], assets)
+                    if rel:
+                        kept.append({"src": rel, "seconds": f["seconds"]})
+                if kept:
+                    s["footage"] = kept
+                else:
                     s.pop("footage")
         with open(props_path, "w", encoding="utf-8") as f:
             json.dump(props, f)

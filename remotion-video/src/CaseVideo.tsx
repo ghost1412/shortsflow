@@ -25,8 +25,8 @@ export const caseVideoSchema = z.object({
     title: z.string(),
     scene: z.enum(CASE_SCENES).default("quote"),
     labels: z.array(z.string()).default([]),
-    footage: z.string().optional(),             // stock footage shown dimmed behind the section
-    footageSeconds: z.number().default(10),     // its length, so a short clip repeats for the whole section
+    footage: z.array(z.object({ src: z.string(), seconds: z.number() })).default([]),   // stock clips, one per beat, shown behind the scene
+    beats: z.array(z.tuple([z.number(), z.number()])).default([]),                       // seconds after the section starts: a new picture at each
     clip: z.string().optional(),                // a rendered animation (Manim) drawn for this section, shown instead of the plain scene
     clipRate: z.number().default(1),
     cues: z.array(z.number()).default([]),     // seconds after the section starts at which each label is spoken
@@ -359,22 +359,49 @@ const Equation: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
 
 const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation } as const;
 
+// one beat of stock footage: it punches in with a flash, drifts to one side, and repeats when the clip is shorter than the beat
+const BeatFootage: React.FC<{ src: string; seconds: number; index: number; frames: number; start: number }> = ({ src, seconds, index, frames, start }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const punch = interpolate(frame, [0, 12], [1.2, 1.04], { extrapolateRight: "clamp" });
+  const drift = (frame / Math.max(1, frames)) * 3.5 * (index % 2 === 0 ? 1 : -1);
+  const flash = interpolate(frame, [0, 7], [0.5, 0], { extrapolateRight: "clamp" });
+  return (
+    <AbsoluteFill>
+      <Loop durationInFrames={Math.max(15, Math.round(seconds * fps))}>
+        <OffthreadVideo src={asset(src)} muted startFrom={start} style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.66, transform: `scale(${punch + frame * 0.0006}) translateX(${drift}%)` }} />
+      </Loop>
+      <AbsoluteFill style={{ background: "#ffffff", opacity: flash }} />
+    </AbsoluteFill>
+  );
+};
+
 const SectionScene: React.FC<{ index: number; total: number; section: Props["sections"][number]; p: Pal; accent: string; frames: number }> = ({ index, total, section, p, accent, frames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { u, h, portrait } = useUnit();
   const View = SCENE_VIEWS[section.scene];
   const fade = Math.min(interpolate(frame, [0, 10], [0, 1], { extrapolateRight: "clamp" }), interpolate(frame, [frames - 10, frames], [1, 0], { extrapolateLeft: "clamp" }));
-  const push = 1 + 0.05 * (frame / frames);            // a slow push-in over the whole section
+  const beats = section.beats.length ? section.beats : [[0, frames / fps] as [number, number]];
+  const beatStart = beats.reduce((a, b) => (frame >= Math.round(b[0] * fps) ? Math.round(b[0] * fps) : a), 0);
+  const pulse = interpolate(frame - beatStart, [0, 9], [1.035, 1], { extrapolateRight: "clamp" });      // the scene gives a small jolt at every beat
+  const push = (1 + 0.05 * (frame / frames)) * pulse;
   const wipe = interpolate(frame, [0, 18], [-30, 115], { extrapolateRight: "clamp" });
   const underline = interpolate(frame, [4, 24], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
     <AbsoluteFill style={{ opacity: fade }}>
-      {section.footage && (
+      {section.footage.length > 0 && (
         <AbsoluteFill>
-          <Loop durationInFrames={Math.max(15, Math.round(section.footageSeconds * fps))}>
-            <OffthreadVideo src={asset(section.footage)} muted style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.62, transform: `scale(${1 + 0.06 * (frame / frames)})` }} />
-          </Loop>
+          {beats.map((b, i) => {
+            const clip = section.footage[i % section.footage.length];
+            const from = Math.round(b[0] * fps);
+            const len = Math.max(8, Math.round((b[1] - b[0]) * fps));
+            return (
+              <Sequence key={i} from={from} durationInFrames={len}>
+                <BeatFootage src={clip.src} seconds={clip.seconds} index={i} frames={len} start={Math.round((i % 3) * 1.5 * fps) % Math.max(1, Math.round(clip.seconds * fps))} />
+              </Sequence>
+            );
+          })}
           <AbsoluteFill style={{ background: `linear-gradient(180deg, ${p.bg1}b8 0%, ${p.bg1}3d 45%, ${p.bg1}d0 100%)` }} />
           <AbsoluteFill style={{ background: `${accent}14`, mixBlendMode: "color" }} />
           <AbsoluteFill style={{ background: "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)" }} />

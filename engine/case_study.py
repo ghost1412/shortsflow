@@ -139,7 +139,7 @@ def build_prompt(topic, template, sources):
     parts += ["", "Return raw JSON only:",
               '{"title": "<plain title, no emoji>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, concrete: who, what, when, how many, in order>", '
               '"on_screen": ["<3-5 short labels, steps or figures shown on screen, never empty>"], "cites": ["S1"], '
-              '"footage": "<2-4 plain words to search stock video for this section: things a camera can film, no brand, person or place names>"}]}',
+              '"footage": ["<3 or 4 different searches for stock video, 2-4 plain words each, one per step of this section: things a camera can film, no brand, person or place names>"]}]}',
               'For a section whose scene kind is "equation", every on_screen item is one formula in LaTeX (for example "E = mc^2" or '
               '"\\\\frac{a}{b}"), built up step by step; it must come from the sources.']
     return "\n".join(parts)
@@ -213,7 +213,9 @@ def write_script(topic, template, sources, ask):
             continue
         known = {s["id"] for s in sources}
         cites = [c for c in (row.get("cites") or []) if c in known] if isinstance(row.get("cites"), list) else []
-        footage = " ".join(re.findall(r"[A-Za-z0-9]+", str(row.get("footage") or "")))[:60]
+        raw_footage = row.get("footage")
+        raw_footage = raw_footage if isinstance(raw_footage, list) else [raw_footage]
+        footage = [p for p in (" ".join(re.findall(r"[A-Za-z0-9]+", str(x or "")))[:60] for x in raw_footage) if p][:4]
         sections.append({"id": sec["id"], "title": sec["title"], "scene": sec["scene"], "narration": narration,
                          "on_screen": labels, "cites": cites, "footage": footage})
     if not sections:

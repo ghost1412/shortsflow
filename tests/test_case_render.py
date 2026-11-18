@@ -78,3 +78,39 @@ def test_spoken_order_sorts_labels_by_when_they_are_said_and_starts_early():
     assert labels == ["Oil prices", "Flights cancelled", "Never said here"]
     assert cues[0] == 1.5                         # the first label does not wait for the narrator to reach it
     assert cues == sorted(cues) and all(b - a >= 0.8 for a, b in zip(cues, cues[1:]))
+
+
+def _spoken(text, step=0.4, start=0.0):
+    out, t = [], start
+    for w in text.split():
+        out.append({"word": w, "start": round(t, 2), "end": round(t + step * 0.9, 2)})
+        t += step
+    return out
+
+
+def test_beats_split_at_sentence_ends_and_cover_the_whole_section():
+    words = _spoken("The first sentence is a fairly long one that goes on for a while. Second sentence follows right after it and keeps going too. "
+                    "A third one closes the section with some words here.")
+    duration = words[-1]["end"] + 0.5
+    beats = cr.beats_for(words, duration)
+    assert beats[0][0] == 0.0 and beats[-1][1] == round(duration, 2)
+    assert all(a[1] == b[0] for a, b in zip(beats, beats[1:]))                    # no gaps
+    assert all(b - a <= 9.5 for a, b in beats) and len(beats) >= 2           # nothing stays on screen for a whole section
+    assert all(b - a >= 2.0 for a, b in beats)
+
+
+def test_beats_without_words_are_even():
+    beats = cr.beats_for([], 26.0)
+    assert len(beats) == 4 and beats[-1][1] == 26.0
+
+
+def test_attach_footage_one_clip_per_phrase_and_skips_misses(tmp_path):
+    script = {"sections": [{"footage": ["ships at sea", "none", "ships at sea", "harbour cranes"]}, {"footage": "single phrase"}, {"footage": []}]}
+
+    def fetch(phrase, cache, orientation):
+        return None if phrase == "none" else (str(tmp_path / (phrase.replace(" ", "_") + ".mp4")), 10.0)
+    got = cr.attach_footage(script, str(tmp_path), "16:9", fetch=fetch, cache_dir=str(tmp_path))
+    assert [f["seconds"] for f in got[0]] == [10.0, 10.0] and len(got[0]) == 2     # the miss and the repeat are dropped
+    assert len(got[1]) == 1 and got[2] is None
+    props = cr.build_props(dict(SCRIPT, sections=SCRIPT["sections"][:1] * 1), [(2.0, 12.0)], [[]], footage=[got[0]])
+    assert props["sections"][0]["footage"][0]["src"].endswith("ships_at_sea.mp4") and props["sections"][0]["beats"]
