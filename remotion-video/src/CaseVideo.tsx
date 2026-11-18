@@ -7,7 +7,7 @@ import katex from "katex";
 import { z } from "zod";
 
 export const CASE_THEMES = ["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"] as const;
-export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation"] as const;
+export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart"] as const;
 
 export const caseVideoSchema = z.object({
   title: z.string().default("Explainer"),
@@ -436,7 +436,86 @@ const Equation: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
   );
 };
 
-const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation } as const;
+// compare: two columns side by side. Each label is "left | right"; the first label holds the two headings. A label without "|" is shown in the left column.
+const Compare: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const { u, portrait } = useUnit();
+  const at = cueFrames(labels.length, cues, frames, fps);
+  const act = activeIndex(frame, at);
+  const rows = labels.map((l) => {
+    const [a, ...rest] = l.split("|");
+    return [a.trim(), rest.join("|").trim()];
+  });
+  const side = (text: string, i: number, right: boolean, head: boolean) => {
+    const t = enter(frame, at[i] + (right ? 4 : 0), fps);
+    const color = right ? accent : p.dim;
+    return (
+      <div style={{ flex: 1, background: p.card, backdropFilter: p.blur, border: `${head ? 3 : 1}px solid ${head ? color : p.line}`, borderTop: head ? `6px solid ${color}` : undefined,
+        borderRadius: 20 * u, padding: `${(head ? 24 : 20) * u}px ${28 * u}px`, fontFamily: FONT, fontSize: (head ? 54 : portrait ? 36 : 40) * u, fontWeight: head ? 800 : 600, color: head ? p.text : p.text,
+        textAlign: "center", opacity: t, transform: `translateX(${(1 - t) * (right ? 60 : -60) * u}px) scale(${i === act && !head ? 1.03 : 1})`, boxShadow: glow(i === act && !head, accent, u),
+        display: "flex", alignItems: "center", justifyContent: "center", minHeight: (head ? 100 : 92) * u }}>
+        {text}
+      </div>
+    );
+  };
+  const vs = enter(frame, at[0], fps);
+  return (
+    <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 20 * u, width: "100%", maxWidth: 1500 * u }}>
+      {rows.map(([a, b], i) => (
+        <div key={i} style={{ display: "flex", gap: (i === 0 ? 76 : 76) * u }}>
+          {side(a, i, false, i === 0 && rows.length > 1)}
+          {side(b, i, true, i === 0 && rows.length > 1)}
+        </div>
+      ))}
+      <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 2 * u, marginLeft: -u, background: p.line, opacity: vs }} />
+      <div style={{ position: "absolute", left: "50%", top: 20 * u, marginLeft: -34 * u, width: 68 * u, height: 68 * u, borderRadius: "50%", background: accent, color: p.bg1, display: "flex", alignItems: "center", justifyContent: "center",
+        fontFamily: FONT, fontWeight: 900, fontSize: 28 * u, transform: `scale(${vs})`, boxShadow: `0 0 ${30 * u}px ${accent}88` }}>VS</div>
+    </div>
+  );
+};
+
+// chart: horizontal bars drawn to scale. Each label is "Name: number" (a unit may follow); the bars grow and the numbers count up as each is spoken.
+const Chart: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const { u, portrait } = useUnit();
+  const at = cueFrames(labels.length, cues, frames, fps);
+  const act = activeIndex(frame, at);
+  const items = labels.map((l) => {
+    const colon = l.indexOf(":");
+    const name = colon > 0 ? l.slice(0, colon).trim() : "";
+    const parts = splitNumber(colon > 0 ? l.slice(colon + 1) : l);
+    return { name: name || (parts ? parts.rest : l), parts, raw: l };
+  });
+  const max = Math.max(1, ...items.map((it) => (it.parts ? it.parts.num : 0)));
+  const track = (portrait ? 560 : 820) * u;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 26 * u, width: "100%", maxWidth: 1500 * u }}>
+      {items.map((it, i) => {
+        const t = enter(frame, at[i], fps);
+        const grow = interpolate(frame - at[i], [0, 36], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+        const value = it.parts ? it.parts.num : 0;
+        const decimals = it.parts && /\.\d/.test(it.parts.raw) ? (it.parts.raw.split(".")[1].match(/^\d+/) || [""])[0].length : 0;
+        const shown = it.parts ? (value * grow).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : "";
+        const on = i === act;
+        return (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 28 * u, opacity: t, transform: `translateX(${(1 - t) * -50 * u}px)` }}>
+            <div style={{ width: (portrait ? 240 : 330) * u, fontFamily: FONT, fontSize: (portrait ? 32 : 38) * u, fontWeight: 600, color: on ? p.text : p.dim, textAlign: "right", lineHeight: 1.15 }}>{it.name}</div>
+            <div style={{ position: "relative", width: track, height: 62 * u, borderRadius: 14 * u, background: p.card, backdropFilter: p.blur, border: `1px solid ${p.line}`, overflow: "hidden", boxShadow: glow(on, accent, u) }}>
+              <div style={{ width: `${(it.parts ? (value / max) * 100 : 0) * grow}%`, height: "100%", background: `linear-gradient(90deg, ${accent}aa, ${accent})`, borderRadius: 14 * u }} />
+            </div>
+            <div style={{ minWidth: 190 * u, fontFamily: FONT, fontSize: (portrait ? 40 : 48) * u, fontWeight: 800, color: accent }}>
+              {it.parts ? `${it.parts.prefix}${shown}${it.parts.suffix ? (/^[+%]/.test(it.parts.suffix) ? it.parts.suffix : ` ${it.parts.suffix}`) : ""}` : ""}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation, compare: Compare, chart: Chart } as const;
 
 // one beat of stock footage: it punches in with a flash, drifts to one side, and repeats when the clip is shorter than the beat
 const BeatFootage: React.FC<{ src: string; seconds: number; kind?: "video" | "image"; index: number; frames: number; start: number; opacity: number }> = ({ src, seconds, kind, index, frames, start, opacity }) => {
@@ -510,7 +589,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
         </div>
       </AbsoluteFill>
       {(section.sourceLabels ?? []).length > 0 && (
-        <div style={{ position: "absolute", right: 56 * u, top: 44 * u, display: "flex", alignItems: "center", gap: 10 * u, background: p.card, backdropFilter: p.blur, border: `1px solid ${p.line}`, borderRadius: 999, padding: `${8 * u}px ${20 * u}px`, opacity: interpolate(frame, [36, 52], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) }}>
+        <div style={{ position: "absolute", right: 56 * u, top: (portrait ? 168 : 44) * u, display: "flex", alignItems: "center", gap: 10 * u, background: p.card, backdropFilter: p.blur, border: `1px solid ${p.line}`, borderRadius: 999, padding: `${8 * u}px ${20 * u}px`, opacity: interpolate(frame, [36, 52], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) }}>
           <span style={{ fontFamily: MONO, fontSize: 20 * u, color: accent, letterSpacing: 2 }}>SOURCE</span>
           <span style={{ fontFamily: FONT, fontSize: 24 * u, color: p.text }}>{(section.sourceLabels ?? []).join(" · ")}</span>
         </div>

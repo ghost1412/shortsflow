@@ -109,6 +109,9 @@ def _first_spoken(label, words):
     return None
 
 
+ORDERED_SCENES = ("compare", "chart", "quote")      # their labels keep the order the script gave; the others follow the narration
+
+
 def spoken_order(labels, words, duration=None, first_by=1.5, gap=0.8):
     """(labels, cues): the labels in the order the narrator reaches them, each with the second it is spoken. A label the narrator
     never says follows the last one. The first cue is at most `first_by` seconds in, so a scene is never empty while the narrator
@@ -180,7 +183,13 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
     clips = clips or [None] * len(script["sections"])
     footage = footage or [None] * len(script["sections"])
     for sec, (start, end), ws, clip, foot in zip(script["sections"], timing, words_per_section, clips, footage):
-        labels, cues = spoken_order(list(sec.get("on_screen") or []), ws, duration=end - start)
+        labels, cues = list(sec.get("on_screen") or []), None
+        if sec["scene"] in ORDERED_SCENES:                 # a heading row, a ranking or a main line: the authored order is part of the meaning
+            cues = label_cues(labels, ws, duration=end - start)
+            if cues:
+                cues[0] = min(cues[0], 1.5)                # the first one does not wait for the narrator to reach it
+        else:
+            labels, cues = spoken_order(labels, ws, duration=end - start)
         sections.append({"title": sec["title"], "scene": sec["scene"], "labels": labels, "cues": cues, "start": start, "end": end})
         by_id = {s["id"]: s["ref"] for s in script.get("sources", [])}
         cited = [by_id[c] for c in sec.get("cites") or [] if c in by_id] or (list(by_id.values()) if script.get("verified") else [])

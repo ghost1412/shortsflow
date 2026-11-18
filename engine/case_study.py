@@ -9,7 +9,18 @@ import json
 import os
 import re
 
-SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation")
+SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart")
+# the layouts the model may choose from by itself (terminal and formula only when a template asks for them: they suit few topics)
+AUTO_LAYOUTS = ("timeline", "flow", "counters", "checklist", "quote", "compare", "chart")
+LAYOUT_HELP = {
+    "timeline": "events in order of time; labels are short dated events",
+    "flow": "the steps of one mechanism, one after another; labels are the steps",
+    "counters": "two to four big numbers; labels are 'number and what it counts', like '300,000 computers'",
+    "checklist": "actions or conclusions; labels are short imperative lines",
+    "compare": "two things side by side (before and after, A and B); each label is 'left | right', and the FIRST label holds the two headings like 'Before | After'",
+    "chart": "three to five quantities of the same kind compared by bar length; each label is 'Name: number' with the number exactly as the sources give it",
+    "quote": "one key line that sums the section up; the first label is the line",
+}
 
 PRESETS = {
     "case": [
@@ -151,7 +162,7 @@ def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None
     return sources, skipped
 
 
-def build_prompt(topic, template, sources):
+def build_prompt(topic, template, sources, layouts="auto"):
     parts = [f"Write an explainer video script about: {topic}", ""]
     if sources:
         parts.append("Use ONLY the facts in these sources. If a source does not say it, do not say it.")
@@ -162,9 +173,14 @@ def build_prompt(topic, template, sources):
     parts += ["", "Every section needs several specific sentences with the real names, dates and figures from the sources, not a summary of a summary. "
               "Advice in the last section may be general, but must not add facts.", "", "One section per question, in this order:"]
     for s in template:
-        parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  Scene kind: {s['scene']}")
+        parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  " + (f"Default layout: {s['scene']}" if layouts == "auto" else f"Scene kind: {s['scene']}"))
+    if layouts == "auto":
+        parts += ["", "Pick the layout of each section yourself, from this list, whichever shows THAT section best, and do not use the same layout for two sections in a row:"]
+        parts += [f"  {name}: {LAYOUT_HELP[name]}" for name in AUTO_LAYOUTS]
+        parts.append("  (a section whose default layout is terminal or equation keeps it)")
     parts += ["", "Return raw JSON only:",
               '{"title": "<plain title, no emoji>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, concrete: who, what, when, how many, in order>", '
+              '"scene": "<the layout you chose for this section>", '
               '"on_screen": ["<3-5 short labels, steps or figures shown on screen, never empty>"], "cites": ["S1"], '
               '"footage": ["<3 or 4 different searches for stock video, 2-4 plain words each, one per step of this section: things a camera can film, no brand, person or place names>"]}]}',
               'For a section whose scene kind is "equation", every on_screen item is one formula in LaTeX (for example "E = mc^2" or '
@@ -208,12 +224,23 @@ def clean_narration(text, source_text):
     return " ".join(kept), dropped
 
 
-def write_script(topic, template, sources, ask):
+def pick_layout(default, chosen, previous, layouts="auto"):
+    """The layout of a section: the template's `default`, or the model's `chosen` one when layouts are "auto", it is one the model may pick, and
+    it is not the same as the section before (then the default is used, and failing that the choice is kept). A section whose default is
+    terminal or equation keeps it."""
+    if layouts != "auto" or default in ("terminal", "equation") or chosen not in AUTO_LAYOUTS:
+        return default
+    if chosen == previous and default != previous:
+        return default
+    return chosen
+
+
+def write_script(topic, template, sources, ask, layouts="auto"):
     """The script: {"title", "verified", "sources": [{id, ref}], "sections": [{id, title, scene, narration, on_screen, cites}],
     "dropped": [{section, sentence, unsupported}]}. `ask(prompt)` returns the model's text. Raises ValueError when the answer holds no
     usable section. With sources, a sentence holding a number or name no source contains is dropped; without, nothing can be checked
     and "verified" is False."""
-    reply = ask(build_prompt(topic, template, sources))
+    reply = ask(build_prompt(topic, template, sources, layouts))
     try:
         match = re.search(r"\{.*\}", str(reply), re.S)
         data = json.loads(match.group(0)) if match else None
@@ -225,6 +252,7 @@ def write_script(topic, template, sources, ask):
     by_id = {str(r.get("id")): r for r in rows if isinstance(r, dict)}
     source_text = " ".join(s["text"] for s in sources)
     sections, dropped = [], []
+    previous = None
     for sec in template:
         row = by_id.get(sec["id"])
         if not row:
@@ -243,7 +271,9 @@ def write_script(topic, template, sources, ask):
         raw_footage = row.get("footage")
         raw_footage = raw_footage if isinstance(raw_footage, list) else [raw_footage]
         footage = [p for p in (" ".join(re.findall(r"[A-Za-z0-9]+", str(x or "")))[:60] for x in raw_footage) if p][:4]
-        sections.append({"id": sec["id"], "title": sec["title"], "scene": sec["scene"], "narration": narration,
+        scene = pick_layout(sec["scene"], row.get("scene"), previous, layouts)
+        previous = scene
+        sections.append({"id": sec["id"], "title": sec["title"], "scene": scene, "narration": narration,
                          "on_screen": labels, "cites": cites, "footage": footage})
     if not sections:
         raise ValueError("Nothing usable was left in the script" + (" after the unsupported claims were removed." if dropped else "."))

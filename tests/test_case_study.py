@@ -118,3 +118,34 @@ def test_script_text_errors_are_plain():
         cs.script_from_text("TITLE: T\n== 9. Nope [flow]\nNARRATION:\nx\nLABELS:\n", BASE)          # a number with no section
     with pytest.raises(ValueError):
         cs.script_from_text("TITLE: T\n== 1. Empty [flow]\nNARRATION:\n\nLABELS:\n- a\n", BASE)     # no narration
+
+
+def test_pick_layout_rules():
+    assert cs.pick_layout("timeline", "compare", None) == "compare"
+    assert cs.pick_layout("timeline", "compare", "compare") == "timeline"            # not the same twice in a row
+    assert cs.pick_layout("timeline", "compare", None, layouts="template") == "timeline"
+    assert cs.pick_layout("terminal", "chart", None) == "terminal" and cs.pick_layout("equation", "quote", None) == "equation"
+    assert cs.pick_layout("flow", "nonsense", None) == "flow" and cs.pick_layout("flow", None, None) == "flow"
+    assert cs.pick_layout("flow", "terminal", None) == "flow"                         # terminal and formula are never picked by the model
+    assert cs.pick_layout("chart", "chart", "chart") == "chart"                       # the default is already the same: nothing better to use
+
+
+def test_the_prompt_offers_the_layouts_and_explains_the_label_formats():
+    text = cs.build_prompt("T", cs.load_template("case"), [], "auto")
+    for name in cs.AUTO_LAYOUTS:
+        assert f"  {name}:" in text
+    assert "'left | right'" in text and "'Name: number'" in text and "do not use the same layout for two sections in a row" in text
+    assert "Default layout:" in text
+    fixed = cs.build_prompt("T", cs.load_template("case"), [], "template")
+    assert "Scene kind:" in fixed and "Pick the layout" not in fixed
+
+
+def test_write_script_takes_the_models_layouts_and_never_repeats_one():
+    template = cs.load_template("case")
+    rows = [{"id": s["id"], "narration": "A sentence about it.", "on_screen": ["One"], "scene": "compare"} for s in template]
+    reply = json.dumps({"title": "T", "sections": rows})
+    script = cs.write_script("T", template, [], lambda p: reply)
+    scenes = [s["scene"] for s in script["sections"]]
+    assert scenes[0] == "compare" and all(a != b for a, b in zip(scenes, scenes[1:]))
+    fixed = cs.write_script("T", template, [], lambda p: reply, layouts="template")
+    assert [s["scene"] for s in fixed["sections"]] == [t["scene"] for t in template]

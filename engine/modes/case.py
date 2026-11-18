@@ -52,7 +52,7 @@ def _make_script(args, session_dir, opts):
     def ask(prompt):
         return get_llm_response(prompt, system_prompt="You write explainer video scripts. Return raw JSON only.", max_tokens=16000, timeout=300)
     try:
-        script = cs.write_script(topic, template, sources, ask)
+        script = cs.write_script(topic, template, sources, ask, opts["layouts"])
     except ValueError as e:
         print(f"[Error] The script could not be written: {e}")
         sys.exit(1)

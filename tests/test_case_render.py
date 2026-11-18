@@ -127,3 +127,12 @@ def test_source_chips_and_the_removed_claims_reach_the_props():
     assert cr.source_label("pasted notes") == "pasted notes" and cr.source_label("https://a.b/c") == "a.b"
     unverified = cr.build_props(dict(script, verified=False, sources=[]), [(2.0, 8.0), (8.0, 12.0)], [[], []])
     assert unverified["sections"][0]["sourceLabels"] == []
+
+
+def test_compare_chart_and_quote_keep_the_authored_label_order_and_start_early():
+    words = [{"word": w, "start": 6 + i * 0.5, "end": 6.4 + i * 0.5} for i, w in enumerate("After the patch ports were blocked and before it they were open".split())]
+    script = dict(SCRIPT, sections=[dict(SCRIPT["sections"][0], scene="compare", on_screen=["Before | After", "Open | Blocked"]),
+                                    dict(SCRIPT["sections"][0], scene="timeline", on_screen=["Blocked ports", "After the patch"])])
+    props = cr.build_props(script, [(2.0, 20.0), (20.0, 40.0)], [words, words])
+    assert props["sections"][0]["labels"] == ["Before | After", "Open | Blocked"] and props["sections"][0]["cues"][0] <= 1.5
+    assert props["sections"][1]["labels"] == ["After the patch", "Blocked ports"]                  # a timeline follows the narration

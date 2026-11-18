@@ -56,3 +56,13 @@ def test_find_case_videos_lists_landscape_first(tmp_path):
     (tmp_path / "case_16x9.mp4").write_bytes(b"x")
     import os
     assert [os.path.basename(p) for p in web_args.find_case_videos(str(tmp_path))] == ["case_16x9.mp4", "case_9x16.mp4"]
+
+
+def test_the_video_composition_knows_every_scene_the_script_can_use():
+    from engine import case_study
+    src = (ROOT / "remotion-video" / "src" / "CaseVideo.tsx").read_text(encoding="utf-8")
+    block = re.search(r"CASE_SCENES = \[(.*?)\] as const", src, re.S).group(1)
+    assert re.findall(r'"([a-z]+)"', block) == list(case_study.SCENES)
+    views = re.search(r"const SCENE_VIEWS = \{(.*?)\} as const", src, re.S).group(1)
+    for name in case_study.SCENES:
+        assert re.search(r"\b%s:" % name, views), f"no view for the scene {name}"

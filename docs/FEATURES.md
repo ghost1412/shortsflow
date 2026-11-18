@@ -278,6 +278,7 @@ alike; `--case` values win). The options live in one place, `engine/case_options
 | `theme` | The whole look, not only the colours: `dark` (cyber network, default), `clean`, `warm`, `neon` (synthwave grid), `newsroom` (red and white, striped), `blueprint` (technical drawing, monospace), `terminal` (green phosphor, scanlines), `editorial` (serif on paper), `midnight` (calm aurora) |
 | `formats` | `16:9,9:16` by default (YouTube and LinkedIn, Reels and Shorts) |
 | `background` | What is behind the scenes: `footage` (stock video found from the topic, needs `PEXELS_API_KEY`; default), `images` (stock photos), `none` (only the look's own animated background), or the path of your own image or video, used for every section |
+| `layouts` | `auto` (default): the model picks each section's layout from timeline, flow, counters, checklist, compare, chart and quote, and never repeats one back to back; `template`: the template's own layouts. Compare labels are `left \| right` (the first holds the headings); chart labels are `Name: number`, drawn as bars to scale |
 | `manim` | `manim=off` skips the Manim animation of the explaining sections (faster) |
 | `plan_only` | Write the script (`script.json` in the session folder) and stop, so you can read and edit it. Then render it with `resume=FOLDER`; the narration is made again from your edited text |
 | `resume` | Redo the render of an earlier run's folder with its saved script, narration and animations: change `theme`, `background` or `formats` and get a new video in minutes with no new voice to pay for |

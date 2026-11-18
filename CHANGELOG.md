@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- `--mode CASE` layouts: two new scenes, **compare** (two columns, `left | right` rows under a heading row) and **chart** (bars drawn to scale from `Name: number` labels, numbers counting up), and the model now picks each section's layout itself (`--case layouts=auto`, the default; `layouts=template` keeps the template's). It chooses from timeline, flow, counters, checklist, compare, chart and quote and never repeats one back to back; terminal and formula stay with templates that ask for them. The SOURCE chip no longer sits on the title in portrait.
+
 ## 0.9.0 (2026-11-18)
 
 **New: the case explainer (`--mode CASE`).** A topic and up to three sources in, a finished sectioned explainer video out, in 16:9 and 9:16. It fits any subject that can be told in sections (an event, a failure, a product, a scam, a historic moment).
