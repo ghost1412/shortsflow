@@ -137,27 +137,10 @@ def prepare_source(args, session_dir):
     return source_url
 
 
-def run(args, target_bitrate, target_preset):
-    import time
-    from engine.video_gen import extract_segments
+def pick_moments(args, session_dir, source_url):
+    """Chapters, game framing and the transcript analysis that chooses the moments. Returns (highlights, transcript_path,
+    interest_points, silence_intervals, game_auto, game_framing)."""
     from engine.analysis import process_source_video
-    from engine.social_gen import generate_viral_metadata
-    
-    print(f"--- Starting AI Extraction: {args.source_video} ---")
-    
-    session_dir = args.session_dir if args.session_dir else f"sessions/extraction_{int(time.time())}"
-    os.makedirs(session_dir, exist_ok=True)
-    
-    brand_kit = check_brand_and_tighten(args)
-    source_url = prepare_source(args, session_dir)
-
-    print("[Log] Running Transcript-based Highlight Analysis...")
-    # 🟢 EXPERT GUARD: Prevention of Mode Confusion
-    if args.extract_mode == "shorts" and args.target_duration > 60:
-        print(f"[Warning] Target duration {args.target_duration}s exceeds YouTube Shorts limit (60s).")
-        print("[Log] Capping short duration at 60s. For longer highlights, use --extract_mode long.")
-        args.target_duration = 60
-        
     # Get chapters if requested
     chapters_path = None
     if args.use_chapters:
@@ -195,8 +178,60 @@ def run(args, target_bitrate, target_preset):
         game_mix=getattr(args, 'game_mix', 0.5),
         window=_window(getattr(args, 'only_between', None)),
     )
-    
     timing.mark("analysis done (all of process_source_video)")
+    return highlights, transcript_path, interest_points, silence_intervals, game_auto, game_framing
+
+
+def stop_for_plan_or_preview(args, session_dir, highlights):
+    """--plan_only writes plan.json and --preview renders fast proxies; each ends the run (exit code 0). Otherwise returns."""
+    if getattr(args, "plan_only", False):
+        from engine.plan import write_plan, spare_moments
+        by_tool = args.extract_mode == "shorts" and not getattr(args, "moments", None)          # a reel, or moments given by hand, has no runners-up
+        spares = spare_moments(session_dir, highlights) if by_tool else []
+        path = write_plan(session_dir, highlights, args.source_video, spares=spares)
+        print(f"[Log] 📝 Plan written to {path}: {len(highlights)} moment(s)" + (f" and {len(spares)} runner-up(s)" if spares else "")
+              + ". Nothing was rendered (--plan_only).")
+        sys.exit(0)
+
+    # 🟢 Handle Preview Mode
+    if args.preview:
+        print("\n[Log] 🔍 PREVIEW MODE ENABLED: Rendering fast 3fps proxy instead of full extraction...")
+        for i, h in enumerate(highlights):
+            out_preview = os.path.join(session_dir, f"preview_clip_{i+1}.mp4")
+            cmd = [
+                "ffmpeg", "-y", "-ss", str(h['start']), "-i", args.source_video,
+                "-t", str(h['end'] - h['start']),
+                "-vf", "scale=-2:360", "-r", "3", "-c:v", "libx264", "-preset", "ultrafast",
+                "-c:a", "aac", out_preview
+            ]
+            subprocess.run(cmd, capture_output=True)
+            print(f"  -> Generated {out_preview}")
+        print("\n[Log] Preview renders complete. Check session folder.")
+        sys.exit(0)
+
+
+def run(args, target_bitrate, target_preset):
+    import time
+    from engine.video_gen import extract_segments
+    from engine import timing
+    from engine.social_gen import generate_viral_metadata
+    
+    print(f"--- Starting AI Extraction: {args.source_video} ---")
+    
+    session_dir = args.session_dir if args.session_dir else f"sessions/extraction_{int(time.time())}"
+    os.makedirs(session_dir, exist_ok=True)
+    
+    brand_kit = check_brand_and_tighten(args)
+    source_url = prepare_source(args, session_dir)
+
+    print("[Log] Running Transcript-based Highlight Analysis...")
+    # 🟢 EXPERT GUARD: Prevention of Mode Confusion
+    if args.extract_mode == "shorts" and args.target_duration > 60:
+        print(f"[Warning] Target duration {args.target_duration}s exceeds YouTube Shorts limit (60s).")
+        print("[Log] Capping short duration at 60s. For longer highlights, use --extract_mode long.")
+        args.target_duration = 60
+        
+    highlights, transcript_path, interest_points, silence_intervals, game_auto, game_framing = pick_moments(args, session_dir, source_url)
     # The filler pass needs the words as spoken: a translated transcript has no "um" in it
     spoken_transcript_path = transcript_path
 
@@ -226,32 +261,8 @@ def run(args, target_bitrate, target_preset):
     # 🟢 Print the beautiful new score table
     print_clip_score_table(highlights)
     
-    if getattr(args, "plan_only", False):
-        from engine.plan import write_plan, spare_moments
-        by_tool = args.extract_mode == "shorts" and not getattr(args, "moments", None)          # a reel, or moments given by hand, has no runners-up
-        spares = spare_moments(session_dir, highlights) if by_tool else []
-        path = write_plan(session_dir, highlights, args.source_video, spares=spares)
-        print(f"[Log] 📝 Plan written to {path}: {len(highlights)} moment(s)" + (f" and {len(spares)} runner-up(s)" if spares else "")
-              + ". Nothing was rendered (--plan_only).")
-        sys.exit(0)
+    stop_for_plan_or_preview(args, session_dir, highlights)
 
-    # 🟢 Handle Preview Mode
-    if args.preview:
-        print("\n[Log] 🔍 PREVIEW MODE ENABLED: Rendering fast 3fps proxy instead of full extraction...")
-        for i, h in enumerate(highlights):
-            out_preview = os.path.join(session_dir, f"preview_clip_{i+1}.mp4")
-            cmd = [
-                "ffmpeg", "-y", "-ss", str(h['start']), "-i", args.source_video,
-                "-t", str(h['end'] - h['start']),
-                "-vf", "scale=-2:360", "-r", "3", "-c:v", "libx264", "-preset", "ultrafast",
-                "-c:a", "aac", out_preview
-            ]
-            subprocess.run(cmd, capture_output=True)
-            print(f"  -> Generated {out_preview}")
-        print("\n[Log] Preview renders complete. Check session folder.")
-        sys.exit(0)
-    
-    
     # Filter signals based on user flags
     final_interest = interest_points if args.smart_crop else None
     final_silence = silence_intervals if args.tighten else None
