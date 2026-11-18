@@ -54,3 +54,27 @@ def test_label_cues_follow_the_spoken_words():
 def test_label_cues_unmatched_labels_still_move_forward_and_stay_inside_the_section():
     cues = cr.label_cues(["zzz one", "zzz two", "zzz three"], [{"word": "hello", "start": 0.0, "end": 0.3}], duration=3)
     assert cues == sorted(cues) and len(set(cues)) == 3 and max(cues) <= 2.5
+
+
+def test_attach_clips_only_for_the_asked_scenes_and_sets_the_rate(tmp_path):
+    made = []
+
+    def make(sec, seconds, folder, ask, render, topic="", portrait=False, accent=""):
+        made.append((sec["id"], round(seconds, 1)))
+        return str(tmp_path / (sec["id"] + ".mp4")) if sec["id"] == "a" else None
+    script = dict(SCRIPT, sections=[dict(SCRIPT["sections"][0], scene="flow"), dict(SCRIPT["sections"][1], scene="flow"),
+                                    dict(SCRIPT["sections"][1], id="c", scene="counters")])
+    clips = cr.attach_clips(script, [(2.0, 12.0), (12.0, 20.0), (20.0, 25.0)], str(tmp_path), None, make=make, probe=lambda p: 15.0)
+    assert clips[0] == {"path": str(tmp_path / "a.mp4"), "rate": 1.5} and clips[1] is None and clips[2] is None
+    assert made == [("a", 10.0), ("b", 8.0)]
+    props = cr.build_props(script, [(2.0, 12.0), (12.0, 20.0), (20.0, 25.0)], [[], [], []], clips=clips)
+    assert props["sections"][0]["clip"].endswith("a.mp4") and props["sections"][0]["clipRate"] == 1.5
+    assert "clip" not in props["sections"][1]
+
+
+def test_spoken_order_sorts_labels_by_when_they_are_said_and_starts_early():
+    words = [{"word": w, "start": 6 + i * 0.5, "end": 6.4 + i * 0.5} for i, w in enumerate("Oil prices rose then flights were cancelled worldwide".split())]
+    labels, cues = cr.spoken_order(["Flights cancelled", "Oil prices", "Never said here"], words, duration=20)
+    assert labels == ["Oil prices", "Flights cancelled", "Never said here"]
+    assert cues[0] == 1.5                         # the first label does not wait for the narrator to reach it
+    assert cues == sorted(cues) and all(b - a >= 0.8 for a, b in zip(cues, cues[1:]))

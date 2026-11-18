@@ -73,14 +73,78 @@ def label_cues(labels, words, duration=None, min_gap=0.8):
     return cues
 
 
+def _first_spoken(label, words):
+    """Index of the first word that matches a content word of `label` (numbers match by digits), None when none does."""
+    import re
+    tokens = [re.sub(r"\W+", "", x.lower()) for x in re.findall(r"[\w$.,]+", label)]
+    tokens = [x for x in tokens if len(x) >= 4 or x.isdigit()]
+    for i, w in enumerate(words):
+        key, digits = re.sub(r"\W+", "", (w["word"] or "").lower()), re.sub(r"\D", "", w["word"] or "")
+        for tok in tokens:
+            if tok and ((tok.isdigit() and digits == tok) or (not tok.isdigit() and key and (tok == key or (tok[:5] == key[:5] and len(key) >= 4)))):
+                return i
+    return None
+
+
+def spoken_order(labels, words, duration=None, first_by=1.5, gap=0.8):
+    """(labels, cues): the labels in the order the narrator reaches them, each with the second it is spoken. A label the narrator
+    never says follows the last one. The first cue is at most `first_by` seconds in, so a scene is never empty while the narrator
+    talks about something else first; cues are `gap` apart at least and stay inside `duration`."""
+    found = [(_first_spoken(label, words), n, label) for n, label in enumerate(labels)]
+    spoken = sorted([f for f in found if f[0] is not None], key=lambda f: (f[0], f[1]))
+    silent = [f for f in found if f[0] is None]
+    cues, ordered, prev = [], [], None
+    for index, _, label in spoken + silent:
+        at = words[index]["start"] - 0.15 if index is not None else (prev if prev is not None else 0.0) + gap + 0.4
+        if prev is None:
+            at = min(max(at, 0.2), first_by)
+        else:
+            at = max(at, prev + gap)
+        if duration:
+            at = min(at, max(0.2, duration - 0.5))
+        cues.append(round(at, 2))
+        ordered.append(label)
+        prev = cues[-1]
+    return ordered, cues
+
+
+def attach_clips(script, timing, session_dir, ask, scenes=("flow",), portrait=False, accent="#00e5a8", make=None, probe=None):
+    """Manim animations for the sections whose scene kind is in `scenes`: [None | {"path", "rate"}] per section. `rate` is the
+    playback speed that makes the clip last as long as its section (kept between 0.6 and 1.6). A section whose animation could not
+    be made stays None and keeps its plain scene. `make` / `probe` replace case_manim.make_section_clip and the duration probe."""
+    from engine import case_manim
+    make = make or case_manim.make_section_clip
+    probe = probe or _duration
+    out = []
+    for i, (sec, (start, end)) in enumerate(zip(script["sections"], timing), start=1):
+        if sec.get("scene") not in scenes:
+            out.append(None)
+            continue
+        folder = os.path.join(session_dir, f"manim_{i:02d}")
+        path = make(sec, end - start, folder, ask, lambda code, d, p: case_manim.render_scene(code, d, p), topic=script.get("title", ""),
+                    portrait=portrait, accent=accent)
+        if not path:
+            print(f"[Warning] No animation could be made for section '{sec['title']}'; the plain scene is used.")
+            out.append(None)
+            continue
+        length = float(probe(path) or 0.0)
+        rate = max(0.6, min(1.6, length / (end - start))) if length > 0 else 1.0
+        out.append({"path": path, "rate": round(rate, 3)})
+    return out
+
+
 def build_props(script, timing, words_per_section, theme="dark", accent=None, intro=2.5, outro=3.0, audio_url=None, music_url=None,
-                music_volume=0.12, captions=True):
-    """The CaseVideo props: sections with their times, every word shifted to where its section starts."""
+                music_volume=0.12, captions=True, clips=None):
+    """The CaseVideo props: sections with their times, every word shifted to where its section starts. `clips` (from attach_clips)
+    puts a rendered animation on a section."""
     sections, words = [], []
-    for sec, (start, end), ws in zip(script["sections"], timing, words_per_section):
-        labels = list(sec.get("on_screen") or [])
-        sections.append({"title": sec["title"], "scene": sec["scene"], "labels": labels,
-                         "cues": label_cues(labels, ws, duration=end - start), "start": start, "end": end})
+    clips = clips or [None] * len(script["sections"])
+    for sec, (start, end), ws, clip in zip(script["sections"], timing, words_per_section, clips):
+        labels, cues = spoken_order(list(sec.get("on_screen") or []), ws, duration=end - start)
+        sections.append({"title": sec["title"], "scene": sec["scene"], "labels": labels, "cues": cues, "start": start, "end": end})
+        if clip:
+            sections[-1]["clip"] = clip["path"]
+            sections[-1]["clipRate"] = clip["rate"]
         words += [{"word": w["word"], "start": round(w["start"] + start, 3), "end": round(w["end"] + start, 3)} for w in ws]
     props = {"title": script["title"], "theme": theme, "introSeconds": intro, "outroSeconds": outro, "verified": bool(script.get("verified")),
              "sources": [s["ref"] for s in script.get("sources", [])], "captionsOff": not captions, "sections": sections, "words": words,
@@ -103,22 +167,100 @@ def _ffmpeg():
     return shutil.which("ffmpeg") or __import__("imageio_ffmpeg").get_ffmpeg_exe()
 
 
+# A calm, authoritative narrator and the more natural of the two ElevenLabs models. Both can be changed with the environment.
+DEFAULT_VOICE_ID = "onwK4e9ZLuTAKqWW03F9"      # premade "Daniel": steady British broadcaster
+DEFAULT_VOICE_MODEL = "eleven_multilingual_v2"
+VOICE_SETTINGS = {"stability": 0.42, "similarity_boost": 0.8, "style": 0.3, "use_speaker_boost": True}
+
+
+def prepare_speech(text):
+    """Narration as it should be spoken: no brackets, footnote marks or short asides in parentheses, 'e.g.' written out, one space
+    between words. Words stay as written, because the captions show the same words the voice timings come from."""
+    import re
+    text = re.sub(r"\[[^\]]*\]", "", str(text or ""))
+    text = re.sub(r"\s*\([^)]{0,40}\)", "", text)
+    for short, spoken in (("e.g.", "for example"), ("i.e.", "that is")):
+        text = text.replace(short, spoken)
+    return " ".join(text.split())
+
+
+def words_from_alignment(alignment):
+    """[{word, start, end}] from an ElevenLabs character alignment (characters + start/end seconds per character)."""
+    chars = alignment.get("characters") or []
+    starts = alignment.get("character_start_times_seconds") or []
+    ends = alignment.get("character_end_times_seconds") or []
+    words, cur, w_start, w_end = [], "", None, None
+    for ch, a, b in zip(chars, starts, ends):
+        if ch.isspace():
+            if cur:
+                words.append({"word": cur, "start": round(w_start, 3), "end": round(max(w_end, w_start + 0.05), 3)})
+            cur, w_start = "", None
+        else:
+            if w_start is None:
+                w_start = a
+            cur += ch
+            w_end = b
+    if cur:
+        words.append({"word": cur, "start": round(w_start, 3), "end": round(max(w_end, w_start + 0.05), 3)})
+    return words
+
+
+def speak_elevenlabs(text, audio, subs, voice_id=None, model=None, previous_text=None, next_text=None, api_key=None, post=None):
+    """One section's narration through ElevenLabs with word timings, tuned for a narrator (livelier settings, and the sentences
+    before and after are passed so the delivery carries over between sections). Returns (audio, subs). `post` replaces requests.post."""
+    import base64
+    if post is None:
+        import requests
+        post = requests.post
+    api_key = api_key or os.getenv("ELEVENLABS_API_KEY", "")
+    if not api_key:
+        raise ValueError("ELEVENLABS_API_KEY is not set")
+    voice_id = voice_id or os.getenv("CASE_VOICE_ID") or DEFAULT_VOICE_ID
+    payload = {"text": prepare_speech(text), "model_id": model or os.getenv("CASE_VOICE_MODEL") or DEFAULT_VOICE_MODEL,
+               "voice_settings": VOICE_SETTINGS}
+    if previous_text:
+        payload["previous_text"] = prepare_speech(previous_text)[-400:]
+    if next_text:
+        payload["next_text"] = prepare_speech(next_text)[:400]
+    r = post(f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/with-timestamps",
+             headers={"xi-api-key": api_key, "Content-Type": "application/json"}, json=payload, timeout=120)
+    r.raise_for_status()
+    data = r.json()
+    with open(audio, "wb") as f:
+        f.write(base64.b64decode(data["audio_base64"]))
+    with open(subs, "w", encoding="utf-8") as f:
+        json.dump(words_from_alignment(data.get("alignment") or {}), f)
+    return audio, subs
+
+
 def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=None, generate=None):
     """Speak every section. Returns ([audio paths], [word lists]). `generate` replaces engine.voice_gen.generate_voice (tests)."""
+    generate_is_default = generate is None
     if generate is None:
         from engine.voice_gen import generate_voice as generate
     audios, words = [], []
-    for i, sec in enumerate(script["sections"], start=1):
+    sections = script["sections"]
+    for i, sec in enumerate(sections, start=1):
         audio = os.path.join(session_dir, f"voice_{i:02d}.mp3")
         subs = os.path.join(session_dir, f"subs_{i:02d}.json")
-        kwargs = {"output_audio": audio, "output_subs": subs, "add_cta": False}
-        if provider:
-            kwargs["provider"] = provider
-        if voice:
-            kwargs["voice_name"] = voice
-        if clone_voice:
-            kwargs["clone_voice"] = clone_voice
-        result_audio, result_subs = generate(sec["narration"], **kwargs)
+        result_audio = result_subs = None
+        if provider == "elevenlabs" and generate_is_default and os.getenv("ELEVENLABS_API_KEY"):
+            try:
+                result_audio, result_subs = speak_elevenlabs(
+                    sec["narration"], audio, subs, voice_id=voice,
+                    previous_text=sections[i - 2]["narration"] if i > 1 else None,
+                    next_text=sections[i]["narration"] if i < len(sections) else None)
+            except Exception as e:
+                print(f"[Warning] ElevenLabs narration failed for '{sec['title']}' ({str(e)[:120]}); using the general voice step.")
+        if not result_audio:
+            kwargs = {"output_audio": audio, "output_subs": subs, "add_cta": False}
+            if provider:
+                kwargs["provider"] = provider
+            if voice and provider != "elevenlabs":
+                kwargs["voice_name"] = voice
+            if clone_voice:
+                kwargs["clone_voice"] = clone_voice
+            result_audio, result_subs = generate(sec["narration"], **kwargs)
         if not result_audio or not os.path.exists(result_audio):
             raise RuntimeError(f"No voice was produced for section '{sec['title']}'.")
         audios.append(result_audio)
@@ -132,7 +274,7 @@ def join_audio(audios, timing, out_path):
     for a in audios:
         cmd += ["-i", a]
     delays = [f"[{i}:a]adelay={int(start * 1000)}|{int(start * 1000)}[a{i}]" for i, (start, _) in enumerate(timing)]
-    mix = "".join(f"[a{i}]" for i in range(len(audios))) + f"amix=inputs={len(audios)}:normalize=0:duration=longest[out]"
+    mix = "".join(f"[a{i}]" for i in range(len(audios))) + f"amix=inputs={len(audios)}:normalize=0:duration=longest,loudnorm=I=-16:TP=-1.5:LRA=11[out]"
     cmd += ["-filter_complex", ";".join(delays + [mix]), "-map", "[out]", "-c:a", "libmp3lame", "-b:a", "192k", out_path]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0 or not os.path.exists(out_path):
@@ -156,6 +298,12 @@ def render_case(props, audio_path, output_path, music_path=None, aspect="16:9"):
         props["audioUrl"] = copy_to_public(audio_path, assets)
         if music_path:
             props["bgMusicUrl"] = copy_to_public(music_path, assets)
+        props["sections"] = [dict(s) for s in props["sections"]]
+        for s in props["sections"]:
+            if s.get("clip"):
+                s["clip"] = copy_to_public(s["clip"], assets) or None
+                if not s["clip"]:
+                    s.pop("clip")
         with open(props_path, "w", encoding="utf-8") as f:
             json.dump(props, f)
         end = max([s["end"] for s in props["sections"]] or [5.0]) + props["outroSeconds"]

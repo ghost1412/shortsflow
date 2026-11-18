@@ -2,7 +2,7 @@
 // drawn from its on-screen labels, over a themed background, with word-timed captions. No custom fonts (a font load stalled the CI
 // renderer before), no stock footage: everything is drawn, so a run needs no key and no download.
 import React from "react";
-import { AbsoluteFill, Audio, Sequence, interpolate, random, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, random, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { z } from "zod";
 
 export const CASE_THEMES = ["dark", "clean", "warm"] as const;
@@ -24,6 +24,8 @@ export const caseVideoSchema = z.object({
     title: z.string(),
     scene: z.enum(CASE_SCENES).default("quote"),
     labels: z.array(z.string()).default([]),
+    clip: z.string().optional(),                // a rendered animation (Manim) drawn for this section, shown instead of the plain scene
+    clipRate: z.number().default(1),
     cues: z.array(z.number()).default([]),     // seconds after the section starts at which each label is spoken
     start: z.number(),
     end: z.number(),
@@ -39,6 +41,8 @@ const PALETTES = {
 } as const;
 const FONT = '"Segoe UI", "Helvetica Neue", Arial, "Noto Sans", sans-serif';
 const MONO = '"Cascadia Mono", Consolas, "SF Mono", "DejaVu Sans Mono", monospace';
+
+const asset = (url: string) => (/^(https?:|data:)/.test(url) ? url : staticFile(url));
 
 const useUnit = () => {
   const { width, height } = useVideoConfig();
@@ -298,8 +302,14 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
           </div>
           <div style={{ height: 5 * u, width: `${underline * 38}%`, background: accent, marginTop: 14 * u, borderRadius: 3, boxShadow: `0 0 ${14 * u}px ${accent}` }} />
         </div>
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <View labels={section.labels.length ? section.labels : [section.title]} cues={section.cues} p={p} accent={accent} frames={frames} />
+        <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {section.clip ? (
+            <div style={{ height: "100%", aspectRatio: "16 / 9", maxWidth: "100%", borderRadius: 26 * u, overflow: "hidden", border: `2px solid ${accent}55`, boxShadow: `0 0 ${50 * u}px ${accent}22`, background: "#05070d" }}>
+              <OffthreadVideo src={asset(section.clip)} muted playbackRate={section.clipRate} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            </div>
+          ) : (
+            <View labels={section.labels.length ? section.labels : [section.title]} cues={section.cues} p={p} accent={accent} frames={frames} />
+          )}
         </div>
       </AbsoluteFill>
       <div style={{ position: "absolute", top: 0, bottom: 0, left: `${wipe}%`, width: "24%", background: `linear-gradient(90deg, transparent, ${accent}40, transparent)`, transform: "skewX(-12deg)", pointerEvents: "none" }} />
@@ -351,7 +361,6 @@ const Captions: React.FC<{ words: Props["words"]; accent: string }> = ({ words, 
   );
 };
 
-const asset = (url: string) => (/^(https?:|data:)/.test(url) ? url : staticFile(url));
 
 export const CaseVideo: React.FC<Props> = (props) => {
   const { fps } = useVideoConfig();
