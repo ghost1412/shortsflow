@@ -132,3 +132,40 @@ def test_case_tab_resume_and_draft_arguments(tmp_path):
     assert listed == [("A title (case_9)", str(session))]
     (session / "case_draft_16x9.mp4").write_bytes(b"x")
     assert web_args.find_case_videos(str(session)) == [] and len(web_args.find_case_videos(str(session), draft=True)) == 1
+
+
+def test_an_edited_narration_makes_the_saved_voice_stale(tmp_path):
+    import json
+    from engine import case_render as cr
+    script = {"sections": [{"narration": "one"}, {"narration": "two"}]}
+    for i in (1, 2):
+        (tmp_path / f"voice_{i:02d}.mp3").write_bytes(b"x")
+        (tmp_path / f"subs_{i:02d}.json").write_text(json.dumps([{"word": "hi", "start": 0, "end": 0.3}]), encoding="utf-8")
+    (tmp_path / "voice_cache.json").write_text(json.dumps({"narration": cr._narration_hashes(script)}), encoding="utf-8")
+    assert cr.cached_voice(script, str(tmp_path)) is not None
+    script["sections"][1]["narration"] = "two, edited"
+    assert cr.cached_voice(script, str(tmp_path)) is None
+
+
+def test_the_fallback_voice_is_used_for_the_rest_after_one_elevenlabs_failure(tmp_path, monkeypatch):
+    import json
+    from engine import case_render as cr
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "k")
+    tried = []
+
+    def boom(*a, **k):
+        tried.append(1)
+        raise RuntimeError("401 quota")
+    monkeypatch.setattr(cr, "speak_elevenlabs", boom)
+    providers = []
+
+    def fake_generate(text, **kw):
+        providers.append(kw.get("provider"))
+        open(kw["output_audio"], "wb").write(b"x")
+        json.dump([{"word": "hi", "start": 0, "end": 0.3}], open(kw["output_subs"], "w"))
+        return kw["output_audio"], kw["output_subs"]
+    import engine.voice_gen as vg
+    monkeypatch.setattr(vg, "generate_voice", fake_generate)
+    script = {"sections": [{"title": "A", "narration": "one"}, {"title": "B", "narration": "two"}, {"title": "C", "narration": "three"}]}
+    cr.speak_sections(script, str(tmp_path), provider="elevenlabs")
+    assert len(tried) == 1 and providers == ["edgetts", "edgetts", "edgetts"]

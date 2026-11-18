@@ -273,6 +273,7 @@ python main.py --mode CASE --prompt "The topic" --sources https://example.com/ar
 | `--case_theme` | The whole look, not only the colours: `dark` (cyber network, default), `clean`, `warm`, `neon` (synthwave grid), `newsroom` (red and white, striped), `blueprint` (technical drawing, monospace), `terminal` (green phosphor, scanlines), `editorial` (serif on paper), `midnight` (calm aurora). Each sets the colours, the animated background, the card style and the type. |
 | `--case_formats` | `16:9,9:16` by default (YouTube and LinkedIn, Reels and Shorts) |
 | `--case_background` | What is behind the scenes: `footage` (stock video found from the topic, needs `PEXELS_API_KEY`; default), `images` (stock photos), `none` (only the look's own animated background), or the path of your own image or video, used for every section |
+| `--case_plan_only` | Write the script (`script.json` in the session folder) and stop, so you can read and edit it. Then render it with `--case_resume FOLDER`; the narration is made again from your edited text |
 | `--case_resume FOLDER` | Redo the render of an earlier run with its saved script, narration and animations: change `--case_theme`, `--case_background` or `--case_formats` and get a new video in minutes with no new voice to pay for |
 | `--case_draft` | A small, fast render (half size, no new animations; about a minute when the narration exists) to judge the look, pictures and pacing before the full one. Combine with `--case_resume` |
 | `--case_no_manim` / `--case_no_footage` | Skip the Manim animation / the stock pictures (faster) |
@@ -282,7 +283,7 @@ voice step), drawn scenes that light up as each item is spoken, captions, synthe
 stock footage behind the scenes when `PEXELS_API_KEY` is set, and a Manim animation for the explaining sections. Scenes: timeline, flow, counters, checklist,
 terminal, quote and formula (LaTeX, shown with KaTeX).
 
-In the browser app, pick **Case explainer** on the first screen: type the topic, paste up to three links or notes, choose the sections, the look and the shapes, and press **Make my video**. The finished files are listed on the page and saved in `sessions/case_...`.
+In the browser app, pick **Case explainer** on the first screen. To check the script before anything is spoken or rendered, press **Write the script first**: you get the script as plain text (headings, stock-footage words, narration, labels), edit it or delete a section, and press **Render this script**. Or: type the topic, paste up to three links or notes, choose the sections, the look and the shapes, and press **Make my video**. The finished files are listed on the page and saved in `sessions/case_...`.
 
 Pacing: a section is not one long scene. It is cut into beats of about 3.5 to 6.5 seconds, each ending at a sentence end, and every beat changes the
 picture behind the scene (a different stock clip, a punch-in with a flash, a small camera drift) while the drawn scene keeps its place. Items on screen appear

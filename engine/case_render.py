@@ -273,22 +273,27 @@ def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=N
         from engine.voice_gen import generate_voice as generate
     audios, words = [], []
     sections = script["sections"]
+    eleven_failed = False        # after one failure (no credits left, a bad key) the rest of the run goes straight to the fallback voice
     for i, sec in enumerate(sections, start=1):
         audio = os.path.join(session_dir, f"voice_{i:02d}.mp3")
         subs = os.path.join(session_dir, f"subs_{i:02d}.json")
         result_audio = result_subs = None
-        if provider == "elevenlabs" and generate_is_default and os.getenv("ELEVENLABS_API_KEY"):
+        if provider == "elevenlabs" and generate_is_default and os.getenv("ELEVENLABS_API_KEY") and not eleven_failed:
             try:
                 result_audio, result_subs = speak_elevenlabs(
                     sec["narration"], audio, subs, voice_id=voice,
                     previous_text=sections[i - 2]["narration"] if i > 1 else None,
                     next_text=sections[i]["narration"] if i < len(sections) else None)
             except Exception as e:
-                print(f"[Warning] ElevenLabs narration failed for '{sec['title']}' ({str(e)[:120]}); using the general voice step.")
+                eleven_failed = True
+                print(f"[Warning] ElevenLabs narration failed for '{sec['title']}' ({str(e)[:120]}); the rest of this video uses the Edge voice.")
         if not result_audio:
             kwargs = {"output_audio": audio, "output_subs": subs, "add_cta": False}
-            if provider:
+            fallback = provider == "elevenlabs" and generate_is_default
+            if provider and not (fallback and eleven_failed):
                 kwargs["provider"] = provider
+            elif fallback and eleven_failed:
+                kwargs["provider"] = "edgetts"
             if voice and provider != "elevenlabs":
                 kwargs["voice_name"] = voice
             if clone_voice:
@@ -298,6 +303,11 @@ def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=N
             raise RuntimeError(f"No voice was produced for section '{sec['title']}'.")
         audios.append(result_audio)
         words.append(read_words(result_subs or subs))
+    try:
+        with open(os.path.join(session_dir, "voice_cache.json"), "w", encoding="utf-8") as f:
+            json.dump({"narration": _narration_hashes(script)}, f)
+    except OSError:
+        pass
     return audios, words
 
 
@@ -405,9 +415,20 @@ def sfx_for(props, path):
     return case_sfx.build_track(path, total, starts, labels)
 
 
+def _narration_hashes(script):
+    import hashlib
+    return [hashlib.sha1(str(s.get("narration", "")).encode("utf-8")).hexdigest()[:12] for s in script["sections"]]
+
+
 def cached_voice(script, session_dir):
     """([audio paths], [word lists]) of a session whose narration was already made (voice_NN.mp3 and subs_NN.json for every section),
-    None when any piece is missing or has no words."""
+    None when any piece is missing, has no words, or was spoken from a narration that has since been edited."""
+    try:
+        with open(os.path.join(session_dir, "voice_cache.json"), encoding="utf-8") as f:
+            if json.load(f).get("narration") != _narration_hashes(script):
+                return None
+    except (OSError, ValueError, AttributeError):
+        pass                                          # a session from before the check: the files are taken as they are
     audios, words = [], []
     for i in range(1, len(script["sections"]) + 1):
         audio, subs = os.path.join(session_dir, f"voice_{i:02d}.mp3"), os.path.join(session_dir, f"subs_{i:02d}.json")

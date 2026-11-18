@@ -521,10 +521,56 @@ def photo_reel(files, reel_type, name="", texts="", music=None, duration=24, fol
     yield "❌ No reel was made." + (f" {reason}" if reason else " Open 'Technical details' for the reason."), log, None
 
 
-def case_video(topic, sources, template, theme_label, formats, no_manim, background_label, background_file, resume_label="", draft=False):
+def case_plan(topic, sources, template):
+    """Case explainer tab, review step: write only the script, so it can be read and edited before anything is spoken or rendered.
+    Yields (status, log, script text, session folder)."""
+    import time
+    from engine import case_study
+    session = os.path.join(ROOT, "sessions", time.strftime("case_%Y%m%d_%H%M%S"))
+    try:
+        args = web_args.case_args(topic, sources, template, session_dir=session, plan_only=True)
+    except ValueError as e:
+        raise gr.Error(str(e))
+    yield "📝 Reading the sources and writing the script...", "", "", ""
+    log = ""
+    for log, _videos in _run([*_pipeline_cmd(), *args]):
+        yield "📝 Reading the sources and writing the script...", log, "", ""
+    try:
+        with open(os.path.join(session, "script.json"), encoding="utf-8") as f:
+            script = json.load(f)
+    except (OSError, ValueError):
+        reason = next((ln.split("]", 1)[1].strip() for ln in reversed(log.splitlines()) if ln.startswith("[Error]")), "")
+        yield "❌ No script was written." + (f" {reason}" if reason else " Open 'Technical details' for the reason."), log, "", ""
+        return
+    note = "" if script.get("verified") else " It is UNVERIFIED: no source was given."
+    yield ("✅ The script is ready. Read it, change what you want (any text, the labels, the stock-footage words, or delete a whole section), "
+           "then press **Render this script**." + note), log, case_study.script_to_text(script), session
+
+
+def case_render_script(script_text, session, theme_label, formats, no_manim, background_label, background_file, draft):
+    """Case explainer tab, review step: save the edited script and render it (the narration is made from the edited text)."""
+    from engine import case_study
+    if not session or not os.path.isfile(os.path.join(session, "script.json")):
+        raise gr.Error("Write the script first.")
+    with open(os.path.join(session, "script.json"), encoding="utf-8") as f:
+        base = json.load(f)
+    try:
+        script = case_study.script_from_text(script_text, base)
+    except ValueError as e:
+        raise gr.Error(str(e))
+    original = os.path.join(session, "script_original.json")
+    if not os.path.exists(original):
+        with open(original, "w", encoding="utf-8") as f:
+            json.dump(base, f, indent=1, ensure_ascii=False)
+    with open(os.path.join(session, "script.json"), "w", encoding="utf-8") as f:
+        json.dump(script, f, indent=1, ensure_ascii=False)
+    yield from case_video("", "", "case", theme_label, formats, no_manim, background_label, background_file, "", draft, resume_path=session)
+
+
+def case_video(topic, sources, template, theme_label, formats, no_manim, background_label, background_file, resume_label="", draft=False, resume_path=None):
     """Case explainer tab: a topic and sources in, a sectioned explainer video out. Yields (status, log, videos)."""
     import time
-    old = dict(web_args.list_case_sessions(ROOT, limit=50)).get(resume_label or "")
+    old = resume_path or dict(web_args.list_case_sessions(ROOT, limit=50)).get(resume_label or "")
     session = old or os.path.join(ROOT, "sessions", time.strftime("case_%Y%m%d_%H%M%S"))
     theme = next((k for k, v in web_args.CASE_THEME_LABELS.items() if v == theme_label), "dark")
     try:
@@ -1974,14 +2020,23 @@ def build_ui():
                         c_resume = gr.Dropdown(["(a new video)"] + [label for label, _ in web_args.list_case_sessions(ROOT)], value="(a new video)",
                                                label="Or redo an earlier run with a new look",
                                                info="Keeps its script, voice and animations, so there is no new voice to pay for. Pick a look, background or shape above.")
+                        c_plan = gr.Button("📝 Write the script first, so I can review it", variant="secondary")
                         c_btn = gr.Button("🧾 Make my video", variant="primary")
                         c_stop = gr.Button("⏹ Stop", variant="stop")
                         c_status = gr.Markdown("Waiting for a topic...")
                         c_video = gr.Files(label="Your videos", height=110)
+                with gr.Accordion("Review the script", open=True):
+                    c_script = gr.Textbox(label="The script (edit it, then render)", lines=18, max_lines=30,
+                                          info="One block per section: its heading and scene in [brackets], the stock-footage words (separate with ;), the narration, and the labels shown on screen. Delete a whole block to drop that section.")
+                    c_session = gr.State("")
+                    c_render = gr.Button("🎬 Render this script", variant="primary")
                 with gr.Accordion("Technical details", open=False):
                     c_log = gr.Textbox(label="Full log", lines=14, max_lines=14, autoscroll=True)
                 c_run = c_btn.click(case_video, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_resume, c_draft], [c_status, c_log, c_video])
-                c_stop.click(stop_jobs, None, c_status, cancels=[c_run])
+                c_plan_run = c_plan.click(case_plan, [c_topic, c_sources, c_template], [c_status, c_log, c_script, c_session])
+                c_render_run = c_render.click(case_render_script, [c_script, c_session, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_draft],
+                                              [c_status, c_log, c_video])
+                c_stop.click(stop_jobs, None, c_status, cancels=[c_run, c_plan_run, c_render_run])
 
         gr.Markdown("API keys are read from `.env` (`GEMINI_API_KEY`, `PEXELS_API_KEY`, ...). "
                     "See `env.example`. Your video files stay on this PC. Only what you switch on goes out: transcript text to an AI text provider when a key is set, "

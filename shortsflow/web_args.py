@@ -449,7 +449,7 @@ CASE_BACKGROUNDS = {"Stock video": "footage", "Stock photos": "images", "Style o
 
 
 def case_args(topic, sources_text="", template="case", theme="dark", formats=("16:9", "9:16"), no_manim=False, no_footage=False, session_dir=None,
-              background="footage", background_file=None, resume=None, draft=False):
+              background="footage", background_file=None, resume=None, draft=False, plan_only=False):
     """Command-line arguments for a case explainer (--mode CASE). Raises ValueError with a plain message when the topic is empty."""
     topic = (topic or "").strip()
     if not topic and not resume:
@@ -473,6 +473,8 @@ def case_args(topic, sources_text="", template="case", theme="dark", formats=("1
         args += ["--session_dir", session_dir]
     if draft:
         args.append("--case_draft")
+    if plan_only:
+        args.append("--case_plan_only")
     return args
 
 

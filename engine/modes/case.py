@@ -104,6 +104,10 @@ def run(args, target_bitrate=None, target_preset=None):
         topic = (getattr(args, "prompt", None) or getattr(args, "category", None) or "").strip()
         print(f"--- CASE explainer: '{topic}' ({getattr(args, 'case_template', None) or 'case'} template, {', '.join(formats)}{', draft' if draft else ''}) ---")
         script = _make_script(args, session_dir)
+        if getattr(args, "case_plan_only", False):
+            print(f"[Log] Script written to {os.path.join(session_dir, 'script.json')}. Nothing was spoken or rendered (--case_plan_only). "
+                  f"Edit it if you like, then: --mode CASE --case_resume {session_dir}")
+            sys.exit(0)
 
     audios, words = _narration(args, script, session_dir, bool(resume))
     timing = cr.plan_timing([cr._duration(a) for a in audios])

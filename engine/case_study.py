@@ -222,3 +222,63 @@ def write_script(topic, template, sources, ask):
         raise ValueError("Nothing usable was left in the script" + (" after the unsupported claims were removed." if dropped else "."))
     return {"title": str(data.get("title") or topic).strip()[:120], "verified": bool(sources),
             "sources": [{"id": s["id"], "ref": s["ref"]} for s in sources], "sections": sections, "dropped": dropped}
+
+
+def script_to_text(script):
+    """The script as plain text a person can edit (the review step): a TITLE line, then one block per section.
+
+        TITLE: ...
+        == 1. What happened [timeline]
+        FOOTAGE: server room; computer screen
+        NARRATION:
+        The spoken text, as many lines as needed.
+        LABELS:
+        - first thing shown on screen
+        - second thing
+    """
+    lines = [f"TITLE: {script.get('title', '')}", ""]
+    for n, sec in enumerate(script["sections"], start=1):
+        footage = sec.get("footage") or []
+        footage = [footage] if isinstance(footage, str) else footage
+        lines += [f"== {n}. {sec.get('title', '')} [{sec.get('scene', 'quote')}]", f"FOOTAGE: {'; '.join(footage)}", "NARRATION:",
+                  str(sec.get("narration", "")).strip(), "LABELS:"]
+        lines += [f"- {x}" for x in sec.get("on_screen") or []]
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def script_from_text(text, base):
+    """The script after a person's edits: `base` with the title, and each block's heading, scene, footage phrases, narration and labels taken
+    from `text`. A block is matched to its section by its number; a section whose block was deleted is dropped, and sources, citations and
+    the verified flag are kept. Raises ValueError when nothing usable is left or a block has no narration."""
+    blocks = re.split(r"(?m)^==\s*", str(text or ""))
+    head, blocks = blocks[0], blocks[1:]
+    title = re.search(r"(?m)^TITLE:\s*(.+)$", head)
+    out = dict(base)
+    out["title"] = (title.group(1).strip() if title else str(base.get("title", "")))[:120]
+    sections = []
+    for block in blocks:
+        first, _, rest = block.partition("\n")
+        m = re.match(r"(\d+)\.\s*(.*?)\s*(?:\[(\w+)\])?\s*$", first.strip())
+        if not m or not (1 <= int(m.group(1)) <= len(base["sections"])):
+            raise ValueError(f"A section heading must look like '== 2. Title [scene]' with a number from 1 to {len(base['sections'])}: '{first.strip()[:40]}'.")
+        sec = dict(base["sections"][int(m.group(1)) - 1])
+        if m.group(2):
+            sec["title"] = m.group(2)
+        if m.group(3) in SCENES:
+            sec["scene"] = m.group(3)
+        footage = re.search(r"(?m)^FOOTAGE:[ \t]*(.*)$", rest)
+        if footage:
+            sec["footage"] = [p.strip() for p in footage.group(1).split(";") if p.strip()][:4]
+        narration = re.search(r"(?ms)^NARRATION:[ \t]*\n?(.*?)(?=^LABELS:|\Z)", rest)
+        sec["narration"] = " ".join((narration.group(1) if narration else "").split())
+        if not sec["narration"]:
+            raise ValueError(f"Section {m.group(1)} ('{sec.get('title', '')}') has no narration.")
+        labels = re.search(r"(?ms)^LABELS:[ \t]*\n?(.*)\Z", rest)
+        sec["on_screen"] = [x.strip()[:80] for x in re.findall(r"(?m)^\s*-\s*(.+)$", labels.group(1) if labels else "") if x.strip()][:6]
+        sections.append(sec)
+    if not sections:
+        raise ValueError("The script has no sections left.")
+    out["sections"] = sections
+    out["edited"] = True
+    return out

@@ -82,3 +82,39 @@ def test_step_numbers_are_not_claims():
     assert cs.unsupported("Step 2: Hit by sandstorm winds", SRC) == []
     assert cs.unsupported("Phase 3: spread", SRC) == []
     assert cs.unsupported("Step 2: stole 9,000 records", SRC) == ["9,000"]      # a real figure is still checked
+
+
+BASE = {"title": "Old title", "verified": True, "sources": [{"id": "S1", "ref": "r"}],
+        "sections": [{"id": "what", "title": "What happened", "scene": "timeline", "narration": "First sentence. Second one.", "on_screen": ["A", "B"],
+                      "cites": ["S1"], "footage": ["server room", "keyboard"]},
+                     {"id": "how", "title": "How", "scene": "flow", "narration": "It worked like this.", "on_screen": ["Step 1"], "cites": [], "footage": "one phrase"}]}
+
+
+def test_script_text_round_trips_and_keeps_what_is_not_edited():
+    text = cs.script_to_text(BASE)
+    assert text.startswith("TITLE: Old title") and "== 1. What happened [timeline]" in text and "FOOTAGE: server room; keyboard" in text
+    back = cs.script_from_text(text, BASE)
+    assert back["sections"][0]["narration"] == "First sentence. Second one." and back["sections"][0]["on_screen"] == ["A", "B"]
+    assert back["sections"][0]["cites"] == ["S1"] and back["sources"] == BASE["sources"] and back["verified"] is True and back["edited"] is True
+    assert back["sections"][1]["footage"] == ["one phrase"]
+
+
+def test_script_text_edits_apply_and_a_deleted_block_drops_the_section():
+    text = cs.script_to_text(BASE).replace("Old title", "New title").replace("First sentence.", "Changed sentence.").replace("- B", "- B changed")
+    text = text.replace("[flow]", "[quote]").replace("FOOTAGE: server room; keyboard", "FOOTAGE: cables; night city; ")
+    out = cs.script_from_text(text, BASE)
+    assert out["title"] == "New title" and out["sections"][0]["narration"].startswith("Changed sentence.") and out["sections"][0]["on_screen"] == ["A", "B changed"]
+    assert out["sections"][0]["footage"] == ["cables", "night city"] and out["sections"][1]["scene"] == "quote"
+    only_second = text[text.index("== 2."):]
+    dropped = cs.script_from_text("TITLE: T\n\n" + only_second, BASE)
+    assert [s["id"] for s in dropped["sections"]] == ["how"]
+
+
+def test_script_text_errors_are_plain():
+    import pytest
+    with pytest.raises(ValueError):
+        cs.script_from_text("TITLE: T\n", BASE)                                   # nothing left
+    with pytest.raises(ValueError):
+        cs.script_from_text("TITLE: T\n== 9. Nope [flow]\nNARRATION:\nx\nLABELS:\n", BASE)          # a number with no section
+    with pytest.raises(ValueError):
+        cs.script_from_text("TITLE: T\n== 1. Empty [flow]\nNARRATION:\n\nLABELS:\n- a\n", BASE)     # no narration
