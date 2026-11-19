@@ -308,19 +308,27 @@ const Flow: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
 
 // "5,078 flights cancelled" -> count the number up, show the words under it
 const splitNumber = (label: string) => {
-  const m = label.match(/(\$?\s?\d[\d,.]*\+?\s?(?:%|[kKmMbB]\b|[Mm]illion|[Bb]illion|[Tt]rillion)?)/);
+  // "5 to 7 minutes" / "5-7 minutes": the range stays together (the first number counts up, the end is shown as is)
+  const range = label.match(/(\d[\d,.]*)\s*(?:to|-|–)\s*(\d[\d,.]*)(?=\s|$)/);
+  // a unit written right after the number stays with it: 130C, 130 °C, 20 g, 500 ml, 3 cm
+  const m = (range ? label.match(/(\d[\d,.]*)/) : null) || label.match(/(\$?\s?\d[\d,.]*\+?\s?(?:%|[kKmMbB]\b|[Mm]illion|[Bb]illion|[Tt]rillion|\s?°\s?[CF]\b|[CF](?=\s)|(?:kg|g|ml|cm|mm|km)(?=\s|$))?)/);
   if (!m) return null;
   const raw = m[1].trim();
   const num = parseFloat(raw.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, ""));
   if (!isFinite(num)) return null;
+  if (range && range.index !== undefined) {
+    const rest = (label.slice(0, range.index) + " " + label.slice(range.index + range[0].length)).replace(/\s+/g, " ").trim();
+    return { raw: range[1], num: parseFloat(range[1].replace(/[^\d.]/g, "")), rest, prefix: "", suffix: "", rangeEnd: range[2] };
+  }
   const rest = (label.slice(0, m.index) + " " + label.slice((m.index || 0) + m[1].length)).replace(/\s+/g, " ").trim();
-  return { raw, num, rest, prefix: raw.startsWith("$") ? "$" : "", suffix: raw.replace(/^\$?\s?[\d,.]+/, "").trim() };
+  return { raw, num, rest, prefix: raw.startsWith("$") ? "$" : "", suffix: raw.replace(/^\$?\s?[\d,.]+/, "").trim().replace(/^°?\s?([CF])$/, "°$1"), rangeEnd: "" };
 };
 
 const Counters: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { u, portrait } = useUnit();
+  const dense = labels.length > 3 && !portrait;      // four cards in two landscape rows: smaller, so they clear the caption bar
   const at = cueFrames(labels.length, cues, frames, fps);
   const act = activeIndex(frame, at);
   return (
@@ -334,12 +342,12 @@ const Counters: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
         const shown = parts ? (parts.num * progress).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : null;
         const on = i === act;
         return (
-          <div key={i} style={{ background: p.card, backdropFilter: p.blur, border: `1px solid ${p.line}`, borderTop: `5px solid ${accent}`, borderRadius: 22 * u, padding: `${26 * u}px ${34 * u}px`, minWidth: (portrait ? 800 : 480) * u, textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center", opacity: t, transform: `translateY(${(1 - t) * 50 * u}px) scale(${on ? 1.05 : 1})`, boxShadow: glow(on, accent, u) }}>
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 * u }}><Icon name={iconFor(l)} size={56 * u} color={accent} /></div>
+          <div key={i} style={{ background: p.card, backdropFilter: p.blur, border: `1px solid ${p.line}`, borderTop: `5px solid ${accent}`, borderRadius: 22 * u, padding: `${(dense ? 14 : 26) * u}px ${(dense ? 26 : 34) * u}px`, minWidth: (portrait ? 800 : dense ? 400 : 480) * u, textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center", opacity: t, transform: `translateY(${(1 - t) * 50 * u}px) scale(${on ? 1.05 : 1})`, boxShadow: glow(on, accent, u) }}>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: (dense ? 4 : 10) * u }}><Icon name={iconFor(l)} size={(dense ? 40 : 56) * u} color={accent} /></div>
             {parts ? (
               <>
-                <div style={{ fontFamily: FONT, fontSize: 96 * u, fontWeight: 800, color: accent, lineHeight: 1 }}>{parts.prefix}{shown}{parts.suffix ? (/^[+%]/.test(parts.suffix) ? parts.suffix : ` ${parts.suffix}`) : ""}</div>
-                <div style={{ fontFamily: FONT, fontSize: 42 * u, color: p.text, marginTop: 14 * u }}>{parts.rest}</div>
+                <div style={{ fontFamily: FONT, fontSize: (dense ? 72 : 96) * u, fontWeight: 800, color: accent, lineHeight: 1 }}>{parts.prefix}{shown}{parts.rangeEnd ? `–${parts.rangeEnd}` : ""}{parts.suffix ? (/^[+%°]/.test(parts.suffix) ? parts.suffix : ` ${parts.suffix}`) : ""}</div>
+                <div style={{ fontFamily: FONT, fontSize: (dense ? 34 : 42) * u, color: p.text, marginTop: (dense ? 8 : 14) * u }}>{parts.rest}</div>
               </>
             ) : (
               <div style={{ fontFamily: FONT, fontSize: 56 * u, fontWeight: 700, color: p.text }}>{l}</div>

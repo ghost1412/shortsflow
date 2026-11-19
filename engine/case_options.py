@@ -11,7 +11,7 @@ import os
 from engine.mode_options import Option, OptionError, OptionSet
 
 THEMES = ("dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight")
-TEMPLATES = ("case", "postmortem", "history", "explainer", "animation")
+TEMPLATES = ("case", "postmortem", "history", "explainer", "recipe", "animation")
 SHAPES = ("16:9", "9:16", "1:1", "4:5")
 BACKGROUND_KINDS = ("footage", "images", "none")
 

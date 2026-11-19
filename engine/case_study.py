@@ -9,6 +9,7 @@ import json
 import os
 import re
 
+MAX_COUNTERS = 4         # counter cards that fit a portrait frame above the caption
 MAX_CHECKLIST = 3        # checklist rows that fit above the caption bar
 SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation")
 # the layouts the model may choose from by itself (terminal and formula only when a template asks for them: they suit few topics)
@@ -52,6 +53,13 @@ PRESETS = {
         {"id": "how", "title": "How it works", "question": "How does it work, step by step?", "scene": "flow"},
         {"id": "why", "title": "Why it matters", "question": "Why does it matter, with real numbers if the sources have them?", "scene": "counters"},
         {"id": "do", "title": "What to do", "question": "What should the viewer do or remember?", "scene": "checklist"},
+    ],
+    # a recipe page: the dish, the steps in order, the quantities / temperatures / times, the tips
+    "recipe": [
+        {"id": "what", "title": "The dish", "question": "What is this dish, where is it from, and what does it taste like?", "scene": "quote"},
+        {"id": "make", "title": "How to make it", "question": "What are the steps in order, with the real quantities, temperatures and times from the source?", "scene": "flow"},
+        {"id": "numbers", "title": "The numbers", "question": "Which quantities, temperatures and times matter most (grams, degrees, minutes)? Use only figures the source gives, each with its unit.", "scene": "counters"},
+        {"id": "tips", "title": "Tips for success", "question": "What should the cook do or avoid so it turns out well?", "scene": "checklist"},
     ],
 }
 
@@ -334,6 +342,8 @@ def write_script(topic, template, sources, ask, layouts="auto"):
         if layouts == "auto":
             scene = fit_layout(scene, labels, previous)
         previous = scene
+        if scene == "counters":
+            labels = labels[:MAX_COUNTERS]
         if scene == "checklist":
             labels = labels[:MAX_CHECKLIST]       # more rows run into the caption bar
         sections.append({"id": sec["id"], "title": sec["title"], "scene": scene, "narration": narration,

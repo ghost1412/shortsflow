@@ -213,3 +213,14 @@ def test_powers_of_ten_in_labels_are_spelled_as_words():
     assert cs.spell_powers("1.5 x 10^6 users") == "1.5 million users"
     assert cs.spell_powers("2 × 10^7 cells") == "2 × 10^7 cells"
     assert cs.spell_powers("300,000 computers") == "300,000 computers"
+
+
+def test_recipe_template_and_counter_cap():
+    import json
+    from engine import case_study as cs
+    t = cs.load_template("recipe")
+    assert [s["scene"] for s in t] == ["quote", "flow", "counters", "checklist"]
+    rows = [{"id": s["id"], "narration": "A sentence about it.", "on_screen": ["1 a", "2 b", "3 c", "4 d", "5 e", "6 f"], "scene": s["scene"]} for s in t]
+    script = cs.write_script("T", t, [], lambda p: json.dumps({"title": "T", "sections": rows}))
+    counters = [s for s in script["sections"] if s["scene"] == "counters"]
+    assert counters and all(len(s["on_screen"]) <= cs.MAX_COUNTERS for s in counters)
