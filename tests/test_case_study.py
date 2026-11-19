@@ -164,3 +164,11 @@ def test_write_script_takes_the_models_layouts_and_never_repeats_one():
     assert scenes[0] == "compare" and all(a != b for a, b in zip(scenes, scenes[1:]))
     fixed = cs.write_script("T", template, [], lambda p: reply, layouts="template")
     assert [s["scene"] for s in fixed["sections"]] == [t["scene"] for t in template]
+
+
+def test_counters_without_numbers_become_a_checklist():
+    from engine import case_study as cs
+    assert cs.fit_layout("counters", ["Binary reward in {0,1}", "Max horizon H"]) == "checklist"
+    assert cs.fit_layout("counters", ["Binary reward", "Budget"], previous="checklist") == "timeline"
+    assert cs.fit_layout("counters", ["300,000 computers", "$4 billion lost", "150 countries"]) == "counters"
+    assert cs.fit_layout("flow", ["a"]) == "flow"

@@ -250,6 +250,17 @@ def pick_layout(default, chosen, previous, layouts="auto"):
     return chosen
 
 
+def fit_layout(scene, labels, previous=None):
+    """Counters show big numbers: with fewer than two labels that start with a number (or hold a short figure) the cards would be long sentences
+    crowding each other, so the section becomes a checklist (a timeline when the section before is one)."""
+    if scene != "counters":
+        return scene
+    numbered = [x for x in labels if re.match(r"\s*[$€£]?\d", x)]
+    if len(numbered) >= 2:
+        return scene
+    return "timeline" if previous == "checklist" else "checklist"
+
+
 def write_script(topic, template, sources, ask, layouts="auto"):
     """The script: {"title", "verified", "sources": [{id, ref}], "sections": [{id, title, scene, narration, on_screen, cites}],
     "dropped": [{section, sentence, unsupported}]}. `ask(prompt)` returns the model's text. Raises ValueError when the answer holds no
@@ -287,6 +298,8 @@ def write_script(topic, template, sources, ask, layouts="auto"):
         raw_footage = raw_footage if isinstance(raw_footage, list) else [raw_footage]
         footage = [p for p in (" ".join(re.findall(r"[A-Za-z0-9]+", str(x or "")))[:60] for x in raw_footage) if p][:4]
         scene = pick_layout(sec["scene"], row.get("scene"), previous, layouts)
+        if layouts == "auto":
+            scene = fit_layout(scene, labels, previous)
         previous = scene
         sections.append({"id": sec["id"], "title": sec["title"], "scene": scene, "narration": narration,
                          "on_screen": labels, "cites": cites, "footage": footage})
