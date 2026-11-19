@@ -263,17 +263,28 @@ def fit_layout(scene, labels, previous=None):
     return "timeline" if previous == "checklist" else "checklist"
 
 
+def parse_reply(reply):
+    """The JSON object in a model's answer, or None. A small model often doubles the quote marks around a quoted line
+    (`[""Like this?""]`), which is not valid JSON: such a line is repaired once before giving up."""
+    match = re.search(r"\{.*\}", str(reply), re.S)
+    if not match:
+        return None
+    text = match.group(0)
+    for candidate in (text, re.sub(r'(?m)(^\s*|\[\s*)""(.+?)""(?=\s*(?:\]|,\s*$|$))', lambda m: m.group(1) + '"' + m.group(2).replace('"', "'") + '"', text)):
+        try:
+            return json.loads(candidate)
+        except ValueError:
+            continue
+    return None
+
+
 def write_script(topic, template, sources, ask, layouts="auto"):
     """The script: {"title", "verified", "sources": [{id, ref}], "sections": [{id, title, scene, narration, on_screen, cites}],
     "dropped": [{section, sentence, unsupported}]}. `ask(prompt)` returns the model's text. Raises ValueError when the answer holds no
     usable section. With sources, a sentence holding a number or name no source contains is dropped; without, nothing can be checked
     and "verified" is False."""
     reply = ask(build_prompt(topic, template, sources, layouts))
-    try:
-        match = re.search(r"\{.*\}", str(reply), re.S)
-        data = json.loads(match.group(0)) if match else None
-    except ValueError:
-        data = None
+    data = parse_reply(reply)
     rows = data.get("sections") if isinstance(data, dict) else None
     if not isinstance(rows, list):
         raise ValueError("The model's answer had no sections.")

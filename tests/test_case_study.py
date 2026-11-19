@@ -178,3 +178,12 @@ def test_prompt_asks_for_outcomes_not_setup():
     from engine import case_study as cs
     prompt = cs.build_prompt("T", cs.load_template("case"), [{"id": "S1", "ref": "x", "text": "t"}])
     assert "the outcomes" in prompt and "not how the work was set up" in prompt
+
+
+def test_parse_reply_repairs_doubled_quotes_from_a_small_model():
+    from engine import case_study as cs
+    bad = '{"title": "T", "sections": [{"id": "a", "on_screen": [""Imagine an agent. What will it do?""], "cites": []}]}'
+    assert cs.parse_reply(bad)["sections"][0]["on_screen"] == ["Imagine an agent. What will it do?"]
+    multi = '{"sections": [{"id": "a", "on_screen": [\n  ""First line"",\n  "Second"\n]}]}'
+    assert cs.parse_reply(multi)["sections"][0]["on_screen"] == ["First line", "Second"]
+    assert cs.parse_reply("no json here") is None
