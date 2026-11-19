@@ -246,3 +246,8 @@ def test_probe_finds_a_line_through_a_label(tmp_path):
     assert any("drawn through" in s for s in mo.overlap_problems(code, str(tmp_path)))
     clear = code.replace("Line(LEFT * 2, RIGHT * 2)", "Line(DOWN + LEFT * 2, DOWN + RIGHT * 2)")
     assert mo.overlap_problems(clear, str(tmp_path)) == []
+
+
+def test_kit_has_aliases_for_invented_colour_names():
+    from engine import manim_kit as k
+    assert k.SECONDARY == k.BLUE and k.PRIMARY == k.ACCENT and k.MUTED == k.DIM and k.DANGER == k.FAIL

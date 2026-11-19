@@ -17,6 +17,10 @@ TEXT = "#e8f1ff"
 DIM = "#8fa0bd"
 FAIL = "#ff5d73"
 BLUE = "#3b82f6"
+# names a model tends to invent for the same colours: they work instead of crashing the scene
+PRIMARY, SECONDARY, SUCCESS = ACCENT, BLUE, ACCENT
+MUTED, GRAY, GREY = DIM, DIM, DIM
+WARNING, DANGER, ERROR, HIGHLIGHT = FAIL, FAIL, FAIL, ACCENT
 FONT = "Segoe UI"
 MARGIN = 0.07           # share of the frame kept free on every side
 
