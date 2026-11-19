@@ -32,8 +32,7 @@ def _options(args):
 def _make_script(args, session_dir, opts):
     """Write the script from the topic and sources. Exits with a clear message when it cannot."""
     from engine import case_study as cs
-    from engine.script_gen import get_llm_response
-    topic = (getattr(args, "prompt", None) or getattr(args, "category", None) or "").strip()
+    topic =(getattr(args, "prompt", None) or getattr(args, "category", None) or "").strip()
     if not topic:
         print("[Error] --mode CASE needs the topic: --prompt \"...\" (and, for facts you can trust, --sources LINK_OR_FILE, up to 3), "
               "or --case resume=FOLDER to redo a finished run.")
@@ -49,8 +48,8 @@ def _make_script(args, session_dir, opts):
     if not sources:
         print("[Warning] No usable source: the video will be marked UNVERIFIED. Give --sources to ground it.")
 
-    def ask(prompt):
-        return get_llm_response(prompt, system_prompt="You write explainer video scripts. Return raw JSON only.", max_tokens=16000, timeout=300)
+    from engine.case_llm import make_ask
+    ask = make_ask("You write explainer video scripts. Return raw JSON only.", opts["llm"])
     script, error = None, None
     for attempt in (1, 2):                  # a model that is busy sometimes answers with something that is not the script: one more try
         try:
@@ -99,7 +98,6 @@ def missing_animations(script, clips):
 
 def run(args, target_bitrate=None, target_preset=None):
     from engine import case_render as cr
-    from engine.script_gen import get_llm_response
 
     opts = _options(args)
     formats = opts["formats"].split(",")
@@ -136,8 +134,8 @@ def run(args, target_bitrate=None, target_preset=None):
     choice = opts["background"]
     theme = opts["theme"]
 
-    def ask_code(prompt):
-        return get_llm_response(prompt, system_prompt="You write Manim Community Edition code.", max_tokens=16000, timeout=300)
+    from engine.case_llm import make_ask
+    ask_code = make_ask("You write Manim Community Edition code.", opts["llm"])
 
     results = []
     for aspect in formats:

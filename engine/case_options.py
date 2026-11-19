@@ -37,6 +37,7 @@ OPTIONS = (
     Option("background", "text", "footage", "what is behind the scenes: footage (stock video), images (stock photos), none (the look's own background), "
            "or the path of your own image or video", check=_background),
     Option("layouts", "choice", "auto", "who picks the layout of each section: auto (the model, from timeline, flow, counters, checklist, compare, chart, quote) or template (the template's own)", ("auto", "template")),
+    Option("llm", "choice", "auto", "the text model: auto (cloud chain, then the model on this PC when the cloud is rate-limited or down), local (this PC only, nothing leaves it), cloud (no local fallback)", ("auto", "local", "cloud")),
     Option("manim", "switch", True, "draw a Manim animation for the explaining sections (manim=off to skip: faster)"),
     Option("draft", "switch", False, "a small, fast render (half size, no new animations) to judge the look and pacing"),
     Option("plan_only", "switch", False, "write the script (script.json) and stop, so it can be edited"),

@@ -54,7 +54,8 @@ Rules:
         text += ("\n\nThis animation is the WHOLE picture of the video, running under the narration from the first word to the last, so it must keep building. "
                  "If the idea is geometric or numeric (shapes, areas, angles, graphs, curves, quantities), DRAW it with real Manim shapes (Polygon, Square, Circle, "
                  "Line, Axes, plots, bars) placed and coloured to show the idea, and move them (Transform, shift, rotate, fade, change colour) as the narrator says each "
-                 "thing. Use the kit's chain, branch and box blocks only for steps and relationships, and label() / box() for short labels next to the shapes. Pass strings, "
+                 "thing. Make the main drawing BIG: it should span at least 70% of the frame's width or height, with labels beside it, not a small figure in the middle. "
+                 "Use the kit's chain, branch and box blocks only for steps and relationships, and label() / box() for short labels next to the shapes. Pass strings, "
                  "never Manim objects, to the kit's label functions.")
     if error:
         text += f"\n\nYour previous attempt failed with this error, fix it:\n{str(error)[-600:]}"
