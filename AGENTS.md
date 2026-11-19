@@ -16,6 +16,7 @@ ShortsFlow AI Studio is an open-source, local-first AI video generator and autom
 * **Animation & Rendering Engine (`remotion-video/`)**: React-based video engine rendering high-retention spring captions (Hormozi, Glow Box, Bounce, Minimal).
 * **Educational Explainer Engine (`Manim`)**: Renders programmatic 2D/3D math and computer science animations (`test_manim.py`).
 * **Case Explainer (`--mode CASE`)**: a topic plus sources (web page, PDF, YouTube, audio or video file) in, a sectioned explainer video out (16:9 and 9:16): script written only from the sources, narration, drawn scenes, Manim animation, stock footage, captions, music. See `docs/FEATURES.md` and `python main.py --mode CASE --case help`.
+* **Animated Explainer (`--mode ANIMATE`)**: the case pipeline with the `animation` template: one continuous Manim animation under the whole narration (equations, processes, diagrams). The old `--mode EXPLAINER` is separate and unchanged.
 * **Browser App (`webui.py`)**: Gradio app (`shortsflow webui`) with a card per thing you can make, including the Case explainer. **CLI / pip**: `pip install shortsflow` gives the `shortsflow` command (`shortsflow doctor`, `init`, ...).
 * **Desktop Studio GUI (`gui_app.py`)**: Single-window 3-column CustomTkinter studio interface with live 9:16 video canvas preview.
 * **Automated CI/CD Workflows (`.github/workflows/daily_generate.yml`)**: GitHub Action for scheduled autonomous short generation and social posting.
@@ -106,6 +107,12 @@ python main.py --mode CASE --case resume=sessions/case_123 --case draft         
 python main.py --mode CASE --case help                                                     # every option
 ```
 
+### Skill 5b: Animated Explainer (one continuous animation)
+```bash
+python main.py --mode ANIMATE --prompt "The Pythagorean theorem and why it works" --sources https://example.com/article
+python main.py --mode ANIMATE --prompt "How binary search halves the work" --case theme=blueprint --case formats=16:9
+```
+
 ### Skill 6: Launch Single-Window Interactive Studio GUI
 ```bash
 # Launch visual CustomTkinter 3-column studio layout
@@ -128,6 +135,7 @@ python gui_app.py
 | `engine/pipeline.py` | Shared helpers used by `main.py` and mode pipelines (status reporting, SRT export, voice maps) |
 | `engine/modes/*.py` | Pipelines, each with `run(args, target_bitrate, target_preset)`: `generate` (idea-to-video, all content modes), `clip_extract`, `music`, `explainer`, `photo_reel`, `video_filter` |
 | `engine/modes/case.py`, `engine/case_study.py`, `engine/case_render.py`, `engine/case_options.py`, `engine/case_manim.py`, `engine/manim_kit.py`, `engine/manim_overlap.py`, `engine/case_footage.py`, `engine/case_sources.py`, `engine/case_sfx.py`, `engine/light_music.py` | `--mode CASE`: sources (web page, PDF, YouTube, audio or video file) -> a script written only from them (a template of sections; the model picks each layout) -> narration -> `remotion-video/src/CaseVideo.tsx` render (16:9 and 9:16); optional Manim animation built from a tested kit and checked for overlaps, Pexels footage or photos, synthesised music and sound effects. Options live in one schema (`engine/case_options.py`): `--case KEY=VALUE`, `--case help` |
+| `engine/modes/animate.py` | `--mode ANIMATE`: hands the case pipeline the `animation` template (one section, one Manim animation over the whole narration) and `background=none` unless the user chose otherwise |
 | `engine/mode_options.py` | Reusable option schema for a mode (`OptionSet`, `Option`): one `--<mode> KEY=VALUE` flag instead of a flag per option (house rule, section 5) |
 | Also worth knowing | `engine/analysis.py` (transcription, highlight picking), `engine/highlight_rank.py` (LLM / local rerank), `engine/rerender.py` (redo one finished short), `engine/dubbing.py` (`--mode DUB`), `engine/transcript_edit.py` (`--cut`), `engine/clip_quality.py` + `scripts/picker_bench.py` (benchmarks), `shortsflow/workspace.py` (pip-install workspace, `doctor`), `shortsflow/review.py`, `shortsflow/brand.py`, `shortsflow/batch.py` |
 | `engine/speaker_focus.py` | Active-speaker shot planning for `--layout active` |

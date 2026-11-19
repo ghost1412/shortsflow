@@ -9,7 +9,7 @@ import json
 import os
 import re
 
-SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart")
+SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation")
 # the layouts the model may choose from by itself (terminal and formula only when a template asks for them: they suit few topics)
 AUTO_LAYOUTS = ("timeline", "flow", "counters", "checklist", "quote", "compare", "chart")
 LAYOUT_HELP = {
@@ -23,6 +23,11 @@ LAYOUT_HELP = {
 }
 
 PRESETS = {
+    # one section that is a single continuous Manim animation over the whole narration (`--mode ANIMATE`)
+    "animation": [
+        {"id": "story", "title": "The idea, animated", "scene": "animation", "sentences": "10-14",
+         "question": "Explain the idea as one continuous visual story, from the first step to the conclusion, building it up piece by piece; each sentence matches one thing that appears on screen."},
+    ],
     "case": [
         {"id": "what", "title": "What happened", "question": "What happened, when, to whom, in plain words?", "scene": "timeline"},
         {"id": "how", "title": "How it happened", "question": "How did it work, step by step, explained simply for a non-expert?", "scene": "flow"},
@@ -71,7 +76,10 @@ def load_template(spec="case"):
                 raise ValueError(f"Template section id '{sid}' is used twice.")
             seen.add(sid)
             scene = row.get("scene") if row.get("scene") in SCENES else "quote"
-            out.append({"id": sid, "title": str(row.get("title") or sid), "question": str(row["question"]), "scene": scene})
+            entry = {"id": sid, "title": str(row.get("title") or sid), "question": str(row["question"]), "scene": scene}
+            if re.fullmatch(r"\d{1,2}(-\d{1,2})?", str(row.get("sentences") or "")):
+                entry["sentences"] = str(row["sentences"])
+            out.append(entry)
         if not out:
             raise ValueError("The template has no sections.")
         return out
@@ -173,18 +181,21 @@ def build_prompt(topic, template, sources, layouts="auto"):
     parts += ["", "Every section needs several specific sentences with the real names, dates and figures from the sources, not a summary of a summary. "
               "Advice in the last section may be general, but must not add facts.", "", "One section per question, in this order:"]
     for s in template:
-        parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  " + (f"Default layout: {s['scene']}" if layouts == "auto" else f"Scene kind: {s['scene']}"))
+        parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  " + (f"Default layout: {s['scene']}" if layouts == "auto" else f"Scene kind: {s['scene']}")
+                     + (f"  Narration length: {s['sentences']} short sentences." if s.get("sentences") else ""))
     if layouts == "auto":
         parts += ["", "Pick the layout of each section yourself, from this list, whichever shows THAT section best, and do not use the same layout for two sections in a row:"]
         parts += [f"  {name}: {LAYOUT_HELP[name]}" for name in AUTO_LAYOUTS]
-        parts.append("  (a section whose default layout is terminal or equation keeps it)")
+        parts.append("  (a section whose default layout is terminal, equation or animation keeps it)")
     parts += ["", "Return raw JSON only:",
               '{"title": "<plain title, no emoji>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, concrete: who, what, when, how many, in order>", '
               '"scene": "<the layout you chose for this section>", '
               '"on_screen": ["<3-5 short labels, steps or figures shown on screen, never empty>"], "cites": ["S1"], '
               '"footage": ["<3 or 4 different searches for stock video, 2-4 plain words each, one per step of this section: things a camera can film, no brand, person or place names>"]}]}',
               'For a section whose scene kind is "equation", every on_screen item is one formula in LaTeX (for example "E = mc^2" or '
-              '"\\\\frac{a}{b}"), built up step by step; it must come from the sources.']
+              '"\\\\frac{a}{b}"), built up step by step; it must come from the sources.',
+              'For a section whose layout is animation, on_screen may be an empty list: the whole section is one animated picture, so write the narration '
+              'as a walk through the idea in order, each sentence matching one thing that appears on screen.']
     return "\n".join(parts)
 
 
@@ -228,7 +239,7 @@ def pick_layout(default, chosen, previous, layouts="auto"):
     """The layout of a section: the template's `default`, or the model's `chosen` one when layouts are "auto", it is one the model may pick, and
     it is not the same as the section before (then the default is used, and failing that the choice is kept). A section whose default is
     terminal or equation keeps it."""
-    if layouts != "auto" or default in ("terminal", "equation") or chosen not in AUTO_LAYOUTS:
+    if layouts != "auto" or default in ("terminal", "equation", "animation") or chosen not in AUTO_LAYOUTS:
         return default
     if chosen == previous and default != previous:
         return default

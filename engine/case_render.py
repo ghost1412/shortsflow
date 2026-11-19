@@ -152,8 +152,9 @@ def attach_clips(script, timing, session_dir, ask, scenes=("flow",), portrait=Fa
         folder = os.path.join(session_dir, f"manim_{i:02d}" + (f"_{tag}" if tag else ""))
         path = case_manim.find_clip(folder) if reuse else None
         if not path and generate:
-            path = make(sec, end - start, folder, ask, lambda code, d, p: case_manim.render_scene(code, d, p), topic=script.get("title", ""),
-                        portrait=portrait, accent=accent)
+            whole = sec.get("scene") == "animation"        # the animation IS the picture: a full frame, not a panel
+            path = make(sec, end - start, folder, ask, lambda code, d, p, check=True, whole=whole: case_manim.render_scene(code, d, p, full=whole, check=check),
+                        topic=script.get("title", ""), portrait=portrait, accent=accent, **({"full": True} if whole else {}))
         if not path:
             if generate:
                 print(f"[Warning] No animation could be made for section '{sec['title']}'; the plain scene is used.")

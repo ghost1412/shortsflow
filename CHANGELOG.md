@@ -4,6 +4,11 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- New mode `--mode ANIMATE`: a topic (and optional `--sources`) in, ONE continuous Manim animation under the whole narration out, in 16:9 and 9:16, for equations, processes and diagrams. It is the case pipeline with the new `animation` template (one section, a 10 to 14 sentence narration, the animation fills the frame with no heading), so the narrator, captions, music, nine looks, `--case` options, plan_only, resume and draft all work; `--mode EXPLAINER` is unchanged. The animation is built from the Manim kit and checked for overlaps before it is rendered.
+- Animations: each failed try is logged with its reason; a scene that fails only the picture checks (overlap, cut off) on the last try is rendered anyway with a warning, a crash never is; a run whose animation section ends with no animation stops with a clear message (the script and narration are kept: `--case resume=FOLDER`) instead of making a title card; the kit helpers also work as scene methods (`self.play_chain(group)`); the kit refuses a Manim object as a label; the prompt for a whole-frame animation asks for real Manim shapes for geometric or numeric ideas; the script step asks the model once more when its answer is not a usable script.
+- Browser app: a Layouts control (auto or template) and the `animation` choice in the Case tab.
+- A test keeps `AGENTS.md` true: every file it names exists, its Python version matches `pyproject.toml`, its LLM fallback order matches the code, and a new CLI mode cannot ship undocumented (24 older modes are pinned as known documentation debt that can only shrink).
+
 - `--mode CASE` layouts: two new scenes, **compare** (two columns, `left | right` rows under a heading row) and **chart** (bars drawn to scale from `Name: number` labels, numbers counting up), and the model now picks each section's layout itself (`--case layouts=auto`, the default; `layouts=template` keeps the template's). It chooses from timeline, flow, counters, checklist, compare, chart and quote and never repeats one back to back; terminal and formula stay with templates that ask for them. The SOURCE chip no longer sits on the title in portrait.
 
 ## 0.9.0 (2026-11-18)

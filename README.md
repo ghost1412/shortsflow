@@ -90,7 +90,7 @@ The transcript of each video you process is also kept on your PC in `~/.shortsfl
 ## More than clips
 
 Browser app, desktop studio, CLI, Docker, REST API, an MCP server for AI agents, dubbing, trip and event recaps, photo reels, step-by-step videos,
-game moments, source-grounded explainers (`--mode CASE`: a topic and links in, a finished video out), and 30+ idea-to-video formats. They are documented in **[docs/FEATURES.md](docs/FEATURES.md)** (the full feature reference).
+game moments, source-grounded explainers (`--mode CASE`: a topic and links in, a finished video out; `--mode ANIMATE`: one continuous animated explanation), and 30+ idea-to-video formats. They are documented in **[docs/FEATURES.md](docs/FEATURES.md)** (the full feature reference).
 
 <p align="center">
   <img src="demos/demo_short.gif" width="200" alt="An idea-to-video short made from one line of text" />

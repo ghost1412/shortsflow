@@ -51,10 +51,17 @@ def _make_script(args, session_dir, opts):
 
     def ask(prompt):
         return get_llm_response(prompt, system_prompt="You write explainer video scripts. Return raw JSON only.", max_tokens=16000, timeout=300)
-    try:
-        script = cs.write_script(topic, template, sources, ask, opts["layouts"])
-    except ValueError as e:
-        print(f"[Error] The script could not be written: {e}")
+    script, error = None, None
+    for attempt in (1, 2):                  # a model that is busy sometimes answers with something that is not the script: one more try
+        try:
+            script = cs.write_script(topic, template, sources, ask, opts["layouts"])
+            break
+        except ValueError as e:
+            error = e
+            if attempt == 1:
+                print(f"[Warning] The model's answer was not a usable script ({e}); asking once more.")
+    if script is None:
+        print(f"[Error] The script could not be written: {error}")
         sys.exit(1)
     for d in script["dropped"]:
         print(f"[Log] Dropped (not in the sources: {', '.join(d['unsupported'])}): {d['sentence'][:100]}")
@@ -81,6 +88,13 @@ def _narration(args, script, session_dir, resumed):
         provider = None
     return cr.speak_sections(script, session_dir, provider=provider, voice=getattr(args, "voice", None),
                              clone_voice=os.getenv("VOICE_CLONE_SAMPLE") or None)
+
+
+def missing_animations(script, clips):
+    """Titles of the sections that are one animation (scene "animation") but have no clip: without it such a section would be a bare title card."""
+    if not clips:
+        return []
+    return [str(s.get("title", "")) for s, c in zip(script["sections"], clips) if s.get("scene") == "animation" and not c]
 
 
 def run(args, target_bitrate=None, target_preset=None):
@@ -130,8 +144,13 @@ def run(args, target_bitrate=None, target_preset=None):
         tag = aspect.replace(":", "x")
         portrait = aspect == "9:16"
         # a draft never spends model calls on animations: it shows the ones a full run already made, and the plain scene otherwise
-        clips = (cr.attach_clips(script, timing, session_dir, ask_code, portrait=portrait, scenes=("flow",), tag=tag, reuse=bool(resume) or draft,
+        clips = (cr.attach_clips(script, timing, session_dir, ask_code, portrait=portrait, scenes=("flow", "animation"), tag=tag, reuse=bool(resume) or draft,
                                  generate=not draft) if want_manim else None)
+        lost = [] if draft else missing_animations(script, clips)
+        if lost or (not clips and not draft and any(s.get("scene") == "animation" for s in script["sections"])):
+            print(f"[Error] The animation could not be made for: {', '.join(lost) or 'this video'} (the model was busy or its scenes kept failing the checks; "
+                  f"see the lines above). The script and the narration are saved: run again with --case resume={session_dir}")
+            sys.exit(1)
         footage = cr.backgrounds_for(script, session_dir, aspect, choice, has_pexels=bool(os.getenv("PEXELS_API_KEY")))
         props = cr.build_props(script, timing, words, theme=theme, music_volume=0.2, clips=clips, footage=footage)
         voice_track = cr.join_audio(audios, timing, os.path.join(session_dir, f"voice_all_{tag}.mp3"),

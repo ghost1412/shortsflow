@@ -28,7 +28,7 @@ from engine.media_gen import is_url
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate either FACTS, STORY, FIND_IT, WYR, REDDIT, TRIVIA, QUOTE, JWST, RIDDLE, ODD_ONE_OUT, or FILTER shorts.")
-    parser.add_argument("--mode", choices=["FACTS", "STORY", "FIND_IT", "WYR", "REDDIT", "TRIVIA", "QUOTE", "ODD_ONE_OUT", "NEWS", "NEWS_SERIOUS", "GUESS_SOUND", "RIDDLE", "TREND", "CHALLENGE", "JWST", "TRAILER_MISSED", "MUSIC", "EXPLAINER", "FILTER", "EMOJI_GUESS", "PHOTO_REEL", "FUNNY_EXPLAINER", "TEACH", "DUB", "SPLIT_SCREEN", "PODCAST", "TOP_5", "CHAT_STORY", "HORROR", "TRUE_CRIME", "BIBLE", "ARTICLE", "UGC", "AUTO", "TRIP", "CASE"], help="Force a specific mode.")
+    parser.add_argument("--mode", choices=["FACTS", "STORY", "FIND_IT", "WYR", "REDDIT", "TRIVIA", "QUOTE", "ODD_ONE_OUT", "NEWS", "NEWS_SERIOUS", "GUESS_SOUND", "RIDDLE", "TREND", "CHALLENGE", "JWST", "TRAILER_MISSED", "MUSIC", "EXPLAINER", "FILTER", "EMOJI_GUESS", "PHOTO_REEL", "FUNNY_EXPLAINER", "TEACH", "DUB", "SPLIT_SCREEN", "PODCAST", "TOP_5", "CHAT_STORY", "HORROR", "TRUE_CRIME", "BIBLE", "ARTICLE", "UGC", "AUTO", "TRIP", "CASE", "ANIMATE"], help="Force a specific mode.")
     parser.add_argument("--scene", help="Scene or scenario prompt for FUNNY_EXPLAINER mode.")
     parser.add_argument("--photos_dir", help="Directory containing photos for PHOTO_REEL mode.")
     parser.add_argument("--music", help="Path to audio/music track for PHOTO_REEL or background music.")
@@ -417,6 +417,11 @@ if getattr(args, "mode", None) == "TRIP":
 if getattr(args, "mode", None) == "CASE":
     from engine.modes.case import run as run_case
     run_case(args, target_bitrate, target_preset)
+
+# 🟢 Standalone ANIMATE Mode (topic -> one continuous animated explanation; the case pipeline with the animation template)
+if getattr(args, "mode", None) == "ANIMATE":
+    from engine.modes.animate import run as run_animate
+    run_animate(args, target_bitrate, target_preset)
 
 # 🟢 Standalone EXPLAINER Mode
 if getattr(args, "mode", None) == "EXPLAINER":

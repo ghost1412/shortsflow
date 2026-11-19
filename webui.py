@@ -567,7 +567,8 @@ def case_render_script(script_text, session, theme_label, formats, no_manim, bac
     yield from case_video("", "", "case", theme_label, formats, no_manim, background_label, background_file, "", draft, resume_path=session)
 
 
-def case_video(topic, sources, template, theme_label, formats, no_manim, background_label, background_file, resume_label="", draft=False, resume_path=None):
+def case_video(topic, sources, template, theme_label, formats, no_manim, background_label, background_file, resume_label="", draft=False, layouts="auto",
+               resume_path=None):
     """Case explainer tab: a topic and sources in, a sectioned explainer video out. Yields (status, log, videos)."""
     import time
     old = resume_path or dict(web_args.list_case_sessions(ROOT, limit=50)).get(resume_label or "")
@@ -578,7 +579,7 @@ def case_video(topic, sources, template, theme_label, formats, no_manim, backgro
         if background == "file" and not background_file:
             raise ValueError("Add an image or video file, or choose another background.")
         args = web_args.case_args(topic, sources, template, theme, formats, no_manim, False, session, background, background_file,
-                                  resume=old, draft=bool(draft))
+                                  resume=old, draft=bool(draft), layouts=layouts)
     except ValueError as e:
         raise gr.Error(str(e))
     cmd = [*_pipeline_cmd(), *args]
@@ -2006,8 +2007,10 @@ def build_ui():
                         c_sources = gr.Textbox(label="Sources (up to three, one per line: a web link, a PDF or YouTube link, a document, audio or video file path, or notes)", lines=4,
                                                placeholder="https://example.com/article\nhttps://example.com/another",
                                                info="Without a source the video is marked UNVERIFIED. The text of the sources goes to your AI text provider.")
-                        c_template = gr.Dropdown(["case", "postmortem", "history", "explainer"], value="case", label="Sections",
-                                                 info="case: what happened, how, impact, what could change. postmortem: what broke, why, cost, what changed. history. explainer.")
+                        c_template = gr.Dropdown(["case", "postmortem", "history", "explainer", "animation"], value="case", label="Sections",
+                                                 info="case: what happened, how, impact, what could change. postmortem: what broke, why, cost, what changed. history. explainer. animation: one continuous animated explanation instead of sections.")
+                        c_layouts = gr.Dropdown(["auto", "template"], value="auto", label="Layouts",
+                                                info="auto: the model picks the best layout for each section (timeline, flow, counters, checklist, compare, chart, quote). template: the sections' own.")
                         c_theme = gr.Dropdown(list(web_args.CASE_THEME_LABELS.values()), value=web_args.CASE_THEME_LABELS["dark"], label="Look")
                         c_formats = gr.CheckboxGroup(["16:9", "9:16"], value=["16:9", "9:16"], label="Shapes",
                                                      info="16:9 for YouTube and LinkedIn, 9:16 for Reels and Shorts. Each shape takes its own render time.")
@@ -2032,7 +2035,7 @@ def build_ui():
                     c_render = gr.Button("🎬 Render this script", variant="primary")
                 with gr.Accordion("Technical details", open=False):
                     c_log = gr.Textbox(label="Full log", lines=14, max_lines=14, autoscroll=True)
-                c_run = c_btn.click(case_video, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_resume, c_draft], [c_status, c_log, c_video])
+                c_run = c_btn.click(case_video, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_resume, c_draft, c_layouts], [c_status, c_log, c_video])
                 c_plan_run = c_plan.click(case_plan, [c_topic, c_sources, c_template], [c_status, c_log, c_script, c_session])
                 c_render_run = c_render.click(case_render_script, [c_script, c_session, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_draft],
                                               [c_status, c_log, c_video])

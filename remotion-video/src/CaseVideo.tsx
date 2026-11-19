@@ -7,7 +7,7 @@ import katex from "katex";
 import { z } from "zod";
 
 export const CASE_THEMES = ["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"] as const;
-export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart"] as const;
+export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation"] as const;
 
 export const caseVideoSchema = z.object({
   title: z.string().default("Explainer"),
@@ -515,7 +515,7 @@ const Chart: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
   );
 };
 
-const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation, compare: Compare, chart: Chart } as const;
+const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation, compare: Compare, chart: Chart, animation: Quote } as const;
 
 // one beat of stock footage: it punches in with a flash, drifts to one side, and repeats when the clip is shorter than the beat
 const BeatFootage: React.FC<{ src: string; seconds: number; kind?: "video" | "image"; index: number; frames: number; start: number; opacity: number }> = ({ src, seconds, kind, index, frames, start, opacity }) => {
@@ -545,6 +545,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
   const View = SCENE_VIEWS[section.scene];
   const fade = Math.min(interpolate(frame, [0, 10], [0, 1], { extrapolateRight: "clamp" }), interpolate(frame, [frames - 10, frames], [1, 0], { extrapolateLeft: "clamp" }));
   const footage = section.footage ?? [];                 // the renderer may hand over props without the schema defaults
+  const whole = section.scene === "animation";          // one animation over the whole narration: no heading, no opener, the picture fills the frame
   const beats = section.beats && section.beats.length ? section.beats : [[0, frames / fps] as [number, number]];
   const beatStart = beats.reduce((a, b) => (frame >= Math.round(b[0] * fps) ? Math.round(b[0] * fps) : a), 0);
   const pulse = interpolate(frame - beatStart, [0, 9], [1.035, 1], { extrapolateRight: "clamp" });      // the scene gives a small jolt at every beat
@@ -570,16 +571,18 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
           <AbsoluteFill style={{ background: "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)" }} />
         </AbsoluteFill>
       )}
-      <AbsoluteFill style={{ padding: `${80 * u}px ${70 * u}px ${Math.max(300 * u, h * (portrait ? 0.22 : 0.16))}px`, transform: `scale(${push})`, transformOrigin: "50% 45%" }}>
-        <div style={{ marginBottom: 36 * u }}>
+      <AbsoluteFill style={{ padding: whole ? `${50 * u}px ${50 * u}px ${Math.max(270 * u, h * (portrait ? 0.2 : 0.15))}px` : `${80 * u}px ${70 * u}px ${Math.max(300 * u, h * (portrait ? 0.22 : 0.16))}px`, transform: `scale(${whole ? 1 : push})`, transformOrigin: "50% 45%" }}>
+        {!whole && <div style={{ marginBottom: 36 * u }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 24 * u }}>
             <div style={{ fontFamily: MONO, fontSize: 34 * u, color: accent, letterSpacing: 2 }}>{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div>
             <div style={{ fontFamily: FONT, fontSize: 60 * u, fontWeight: 800, color: p.text, textTransform: "uppercase", letterSpacing: 1 }}>{section.title}</div>
           </div>
           <div style={{ height: 5 * u, width: `${underline * 38}%`, background: accent, marginTop: 14 * u, borderRadius: 3, boxShadow: `0 0 ${14 * u}px ${accent}` }} />
-        </div>
+        </div>}
         <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {section.clip ? (
+          {section.clip && whole ? (
+            <OffthreadVideo src={asset(section.clip)} muted transparent playbackRate={section.clipRate} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+          ) : section.clip ? (
             <div style={{ height: "100%", aspectRatio: portrait ? "4 / 5" : "16 / 9", maxWidth: "100%", borderRadius: 26 * u, overflow: "hidden", border: `2px solid ${accent}55`, boxShadow: `0 0 ${50 * u}px ${accent}22`, background: "rgba(4,10,22,0.45)", backdropFilter: "blur(14px)" }}>
               <OffthreadVideo src={asset(section.clip)} muted transparent playbackRate={section.clipRate} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
@@ -594,7 +597,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
           <span style={{ fontFamily: FONT, fontSize: 24 * u, color: p.text }}>{(section.sourceLabels ?? []).join(" · ")}</span>
         </div>
       )}
-      {frame < 42 && (
+      {frame < 42 && !whole && (
         <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", background: `${p.bg1}${frame < 30 ? "d9" : "99"}`, opacity: interpolate(frame, [0, 6, 30, 42], [0, 1, 1, 0], { extrapolateRight: "clamp" }) }}>
           <div style={{ fontFamily: FONT, fontSize: 340 * u, fontWeight: 900, color: "transparent", WebkitTextStroke: `${4 * u}px ${accent}`, lineHeight: 1, transform: `scale(${1 + 0.08 * (frame / 42)})` }}>{String(index + 1).padStart(2, "0")}</div>
           <div style={{ fontFamily: FONT, fontSize: 74 * u, fontWeight: 800, color: p.text, textTransform: "uppercase", letterSpacing: 4 * u, marginTop: 8 * u }}>{section.title}</div>

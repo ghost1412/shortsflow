@@ -7,10 +7,25 @@ from engine import case_study as cs
 SRC = "In March 2021 the Acme payment portal was breached. Attackers used a stolen password and reached 4,200 customer records."
 
 
-def test_presets_have_four_sections_with_known_scenes():
+def test_presets_have_known_scenes_and_the_story_presets_have_four_sections():
     for name, sections in cs.PRESETS.items():
-        assert len(sections) == 4
+        assert len(sections) == (1 if name == "animation" else 4), name
         assert all(s["scene"] in cs.SCENES for s in sections), name
+
+
+def test_the_animation_preset_is_one_animated_section_with_a_long_narration():
+    (section,) = cs.load_template("animation")
+    assert section["scene"] == "animation" and section["sentences"] == "10-14"
+    prompt = cs.build_prompt("T", [section], [], "auto")
+    assert "Narration length: 10-14 short sentences" in prompt and "layout is animation" in prompt
+    assert cs.pick_layout("animation", "chart", None) == "animation"                  # the model may not swap the animation for a card scene
+
+
+def test_a_template_file_may_ask_for_a_narration_length(tmp_path):
+    f = tmp_path / "t.json"
+    f.write_text(json.dumps([{"id": "a", "question": "Why?", "sentences": "6-8"}, {"id": "b", "question": "How?", "sentences": "lots"}]), encoding="utf-8")
+    sections = cs.load_template(str(f))
+    assert sections[0]["sentences"] == "6-8" and "sentences" not in sections[1]
 
 
 def test_load_template_preset_file_and_errors(tmp_path):

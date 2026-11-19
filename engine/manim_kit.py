@@ -7,8 +7,8 @@ colliding, half the screen empty) do not depend on the model. Every builder retu
 
 The file is copied next to scene.py before a render (`engine.case_manim.render_scene`), and needs only Manim.
 """
-from manim import (Arrow, Create, DOWN, FadeIn, FadeOut, GrowArrow, Indicate, LaggedStart, LEFT, Line, ORIGIN, RIGHT, RoundedRectangle, Text, Transform, UP,
-                   VGroup, config)
+from manim import (Arrow, Create, DOWN, FadeIn, FadeOut, GrowArrow, Indicate, LaggedStart, LEFT, Line, ORIGIN, RIGHT, RoundedRectangle, Scene, Text, Transform,
+                   UP, VGroup, config)
 
 import numpy as np
 
@@ -47,6 +47,8 @@ def fit(group, fill=0.92, grow=2.4):
 
 def label(text, size=30, color=TEXT, max_width=None):
     """A Text that never runs wider than `max_width` (default: 40% of the frame): long text is wrapped on spaces first."""
+    if not isinstance(text, (str, int, float)):
+        raise TypeError("manim_kit labels must be plain text, not a Manim object (got " + type(text).__name__ + "): pass strings to chain(), box(), label()")
     max_width = max_width or frame_size()[0] * 0.4
     words, lines, line = str(text).split(), [], ""
     for word in words:
@@ -199,3 +201,8 @@ def callout(text, target, color=ACCENT, direction=UP):
     t.next_to(target, direction, buff=0.6)
     line = Line(t.get_edge_center(-direction), target.get_edge_center(direction), color=color, stroke_width=2.5)
     return VGroup(t, line)
+
+
+# A model often writes self.play_chain(group) instead of play_chain(self, group): both work.
+for _name in ("play_chain", "play_branch", "play_cycle", "play_before_after", "play_bar", "highlight_each"):
+    setattr(Scene, _name, globals()[_name])

@@ -15,9 +15,10 @@ BACKGROUND = "#05070d"
 MAX_TRIES = 3
 
 
-def manim_prompt(section, seconds, topic="", portrait=False, accent="#00e5a8", error=None):
+def manim_prompt(section, seconds, topic="", portrait=False, accent="#00e5a8", error=None, full=False):
     """The model prompt for one section's Manim scene."""
-    bounds = "x in [-3.4, 3.4], y in [-4.2, 4.2] (a tall frame: stack things downwards)" if portrait else "x in [-4.2, 4.2], y in [-2.3, 2.3]"
+    bounds = ("x in [-3.4, 3.4], y in [-6.0, 6.0] (a tall frame: stack things downwards, use the whole height)" if full else
+              "x in [-3.4, 3.4], y in [-4.2, 4.2] (a tall frame: stack things downwards)") if portrait else "x in [-4.2, 4.2], y in [-2.3, 2.3]"
     labels = "; ".join(str(x) for x in section.get("on_screen") or [])
     text = f"""Write ONE Manim Community Edition scene that visually explains this part of a video, in about {int(seconds)} seconds of animation.
 
@@ -49,6 +50,12 @@ Rules:
 - Give every Text the argument font="Segoe UI" (a clean sans-serif; other fonts are substituted when it is missing).
 - Never place two texts in the same corner or row: lay out with VGroup(...).arrange(DOWN or RIGHT, buff=0.4) and keep a margin of 0.6 from the edges.
 - Real line breaks in the code, valid Python 3. Return ONLY one fenced python block."""
+    if full:
+        text += ("\n\nThis animation is the WHOLE picture of the video, running under the narration from the first word to the last, so it must keep building. "
+                 "If the idea is geometric or numeric (shapes, areas, angles, graphs, curves, quantities), DRAW it with real Manim shapes (Polygon, Square, Circle, "
+                 "Line, Axes, plots, bars) placed and coloured to show the idea, and move them (Transform, shift, rotate, fade, change colour) as the narrator says each "
+                 "thing. Use the kit's chain, branch and box blocks only for steps and relationships, and label() / box() for short labels next to the shapes. Pass strings, "
+                 "never Manim objects, to the kit's label functions.")
     if error:
         text += f"\n\nYour previous attempt failed with this error, fix it:\n{str(error)[-600:]}"
     return text
@@ -155,7 +162,7 @@ def check_clip(mov, portrait=False, ffmpeg=None, every=2.5):
     return frame_problems(alphas, portrait) if alphas else []
 
 
-def render_scene(code, out_dir, portrait=False, fps=30, timeout=300, check=True):
+def render_scene(code, out_dir, portrait=False, fps=30, timeout=900, check=True, full=False):
     """Render `code` (an ExplainerScene) with the Manim command line at 1080p and `fps`. Returns the path of the transparent .mov clip; raises RuntimeError
     with Manim's message when it fails."""
     import subprocess
@@ -167,7 +174,10 @@ def render_scene(code, out_dir, portrait=False, fps=30, timeout=300, check=True)
         import shutil
         shutil.copy2(kit, os.path.join(out_dir, "manim_kit.py"))
     # a smaller frame makes everything drawn in it larger on screen: 9 x 5.06 units for 16:9, 7.2 x 9 for the 4:5 portrait panel
-    frame = "config.frame_width = 7.2\nconfig.frame_height = 9" if portrait else "config.frame_width = 9\nconfig.frame_height = 5.0625"
+    if portrait:
+        frame = "config.frame_width = 7.2\nconfig.frame_height = 12.8" if full else "config.frame_width = 7.2\nconfig.frame_height = 9"
+    else:
+        frame = "config.frame_width = 9\nconfig.frame_height = 5.0625"
     code = code.replace("from manim import *", "from manim import *\n" + frame, 1)
     with open(script, "w", encoding="utf-8") as f:
         f.write(code)
@@ -176,7 +186,7 @@ def render_scene(code, out_dir, portrait=False, fps=30, timeout=300, check=True)
         crowded = manim_overlap.overlap_problems(code, out_dir, portrait)      # texts on top of each other, found from where Manim puts them
         if crowded:
             raise RuntimeError("The picture was checked and is not good enough yet: " + "; ".join(crowded))
-    size = "1080,1350" if portrait else "1920,1080"
+    size = ("1080,1920" if full else "1080,1350") if portrait else "1920,1080"
     cmd = [sys.executable, "-m", "manim", "-ql", "-t", "--fps", str(fps), "-r", size, "--media_dir", out_dir, script, "ExplainerScene"]
     res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     if res.returncode != 0:
@@ -215,22 +225,39 @@ def find_clip(folder):
     return max(found, key=os.path.getmtime) if found else None
 
 
-def make_section_clip(section, seconds, out_dir, ask, render, topic="", portrait=False, accent="#00e5a8", tries=MAX_TRIES):
+CHECKED = "The picture was checked and is not good enough yet"       # the start of the message render_scene raises when only its checks object
+
+
+def make_section_clip(section, seconds, out_dir, ask, render, topic="", portrait=False, accent="#00e5a8", tries=MAX_TRIES, full=False, log=print):
     """Path of a rendered Manim clip for the section, None when every try fails. `ask(prompt)` returns the model's text;
-    `render(code, out_dir, portrait)` returns the mp4 path or raises. Each retry is told what went wrong."""
-    error = None
-    for _ in range(max(1, tries)):
-        code = extract_code(ask(manim_prompt(section, seconds, topic, portrait, accent, error)))
+    `render(code, out_dir, portrait)` returns the clip path or raises (it takes `check=False` to skip the picture checks). Each retry is told what
+    went wrong, and each failure is logged. When the tries run out and the last scene failed only the picture checks (overlapping text, drawing cut
+    off), not a crash, it is rendered once without the checks: an animation with a small flaw is better than none."""
+    error, flawed, label = None, None, str(section.get("title", ""))[:40]
+    for attempt in range(1, max(1, tries) + 1):
+        code = extract_code(ask(manim_prompt(section, seconds, topic, portrait, accent, error, full)))
         problem = code_problem(code)
         if problem:
             error = problem
+            log(f"[Log] Animation for '{label}', try {attempt}: {problem[:150]}")
             continue
         try:
             path = render(code, out_dir, portrait)
         except Exception as e:      # Manim errors are long: the end holds the cause
             error = str(e)[-600:]
+            flawed = (code, error) if CHECKED in error else None
+            log(f"[Log] Animation for '{label}', try {attempt}: {' '.join(error.split())[-170:]}")
             continue
         if path and os.path.exists(path):
             return path
         error = "the render produced no file"
+        log(f"[Log] Animation for '{label}', try {attempt}: {error}")
+    if flawed:
+        try:
+            path = render(flawed[0], out_dir, portrait, check=False)
+            if path and os.path.exists(path):
+                log(f"[Warning] The animation for '{label}' is used with a known flaw: {' '.join(flawed[1].split())[-170:]}")
+                return path
+        except Exception as e:
+            log(f"[Log] Animation for '{label}', last try without the checks: {' '.join(str(e).split())[-170:]}")
     return None

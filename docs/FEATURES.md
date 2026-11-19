@@ -310,6 +310,22 @@ Gemini key can hit its rate limit during a run; the run falls back to a lighter 
 What leaves the PC: the source text and the topic go to the AI text provider; a two to four word search phrase per section goes to Pexels; the narration text goes
 to the voice service. Nothing else. Check the facts of anything you publish: the check removes what the sources do not hold, it cannot tell you the sources are right.
 
+## 🎞️ Animated explainer (`--mode ANIMATE`)
+
+The case explainer cuts a topic into sections. `--mode ANIMATE` is the other style: **one continuous Manim animation** that runs under the whole narration
+and builds the idea up piece by piece (boxes, arrows, bars, loops, from the same tested kit), so it suits equations, processes and diagrams.
+
+```bash
+python main.py --mode ANIMATE --prompt "The Pythagorean theorem and why it works" --sources https://example.com/article
+python main.py --mode ANIMATE --prompt "How binary search halves the work" --case theme=blueprint --case formats=16:9
+```
+
+It is the case pipeline with the `animation` template, so everything else is shared: the script written from your `--sources` (without one it is marked
+UNVERIFIED), the narrator, word-timed captions, light music, the nine looks, 16:9 and 9:16, and the `--case KEY=VALUE` options (`theme`, `formats`,
+`background`, `plan_only`, `resume`, `draft`; `--case help` lists them). The animation is checked for overlapping text and for drawing cut off or cramped
+in the frame before it is rendered. By default nothing is drawn behind it (`background=none`); a `draft` render shows no animation (it never spends model
+calls). The older `--mode EXPLAINER` is unchanged.
+
 ## 🎛️ Engine Power Capabilities
 
 | Capability | Supported Technologies & Flags |

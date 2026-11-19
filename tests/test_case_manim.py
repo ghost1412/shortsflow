@@ -157,3 +157,72 @@ def test_the_overlap_probe_finds_a_real_overlap_and_passes_a_clean_scene(tmp_pat
             "        box = RoundedRectangle(width=5, height=1.2).shift(UP)\n        self.play(FadeIn(a), FadeIn(b), Create(box))\n        self.wait(0.5)\n")
     assert mo.overlap_problems(bad, str(tmp_path / "bad"))
     assert mo.overlap_problems(good, str(tmp_path / "good")) == []
+
+
+def test_the_kit_refuses_a_manim_object_as_a_label():
+    pytest.importorskip("manim")
+    from manim import Circle, VGroup
+    from engine import manim_kit as kit
+    with pytest.raises(TypeError) as e:
+        kit.label(VGroup(Circle(), Circle()))
+    assert "plain text" in str(e.value) and "VGroup" in str(e.value)
+    assert kit.label("ok").text == "ok" and kit.label(42).text == "42"
+
+
+def test_the_whole_frame_animation_prompt_asks_for_real_shapes_for_geometry():
+    section = {"title": "A", "narration": "n", "on_screen": []}
+    whole = cm.manim_prompt(section, 60, full=True)
+    panel = cm.manim_prompt(section, 60)
+    assert "DRAW it with real Manim shapes" in whole and "Pass strings" in whole
+    assert "WHOLE picture" not in panel
+    assert "y in [-6.0, 6.0]" in cm.manim_prompt(section, 60, portrait=True, full=True)
+
+
+def test_each_failed_try_is_logged_with_its_reason(tmp_path):
+    lines = []
+
+    def render(code, d, portrait):
+        raise RuntimeError("Manim render failed: NameError: name 'foo' is not defined")
+    assert cm.make_section_clip(SECTION, 20, str(tmp_path), lambda p: GOOD, render, tries=2, log=lines.append) is None
+    assert len(lines) == 2 and all("try" in ln and "NameError" in ln for ln in lines)
+
+
+def test_a_scene_that_fails_only_the_picture_checks_is_kept_on_the_last_resort(tmp_path):
+    clip = tmp_path / "c.webm"
+    clip.write_bytes(b"x")
+    calls, lines = [], []
+
+    def render(code, d, portrait, check=True):
+        calls.append(check)
+        if check:
+            raise RuntimeError(cm.CHECKED + ': the texts "A" and "B" overlap (100% of the smaller)')
+        return str(clip)
+    got = cm.make_section_clip(SECTION, 20, str(tmp_path), lambda p: GOOD, render, tries=2, log=lines.append)
+    assert got == str(clip) and calls == [True, True, False]
+    assert any("known flaw" in ln and "overlap" in ln for ln in lines)
+
+
+def test_a_crash_is_never_rendered_without_the_checks(tmp_path):
+    calls = []
+
+    def render(code, d, portrait, check=True):
+        calls.append(check)
+        raise RuntimeError("Manim render failed: SyntaxError")
+    assert cm.make_section_clip(SECTION, 20, str(tmp_path), lambda p: GOOD, render, tries=2, log=lambda *_: None) is None
+    assert calls == [True, True]
+
+
+def test_the_message_render_scene_raises_for_failed_checks_starts_with_the_marker(tmp_path, monkeypatch):
+    monkeypatch.setattr("engine.manim_overlap.overlap_problems", lambda code, d, portrait=False: ["the texts overlap"])
+    with pytest.raises(RuntimeError) as e:
+        cm.render_scene(GOOD, str(tmp_path))
+    assert str(e.value).startswith(cm.CHECKED)
+
+
+def test_kit_helpers_work_as_scene_methods_too():
+    pytest.importorskip("manim")
+    from manim import Scene
+    from engine import manim_kit as kit
+    for name in ("play_chain", "play_branch", "play_cycle", "play_before_after", "play_bar", "highlight_each"):
+        assert callable(getattr(Scene, name)), name
+        assert getattr(Scene, name) is getattr(kit, name)
