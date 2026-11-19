@@ -263,6 +263,12 @@ def fit_layout(scene, labels, previous=None):
     return "timeline" if previous == "checklist" else "checklist"
 
 
+def _undouble(text):
+    """Single quote marks where a model wrote two at the start or the end of a string (`[""Like this.""]`, `[""Like this."]`, `["Like this.""]`)."""
+    text = re.sub(r'(\[\s*|(?m:^\s*)|,\s*)""(?=[^",\]\s])', lambda m: m.group(1) + '"', text)
+    return re.sub(r'(?<=[^",\[\s])""(?=\s*(?:[\],]|$))', '"', text, flags=re.M)
+
+
 def parse_reply(reply):
     """The JSON object in a model's answer, or None. A small model often doubles the quote marks around a quoted line
     (`[""Like this?""]`), which is not valid JSON: such a line is repaired once before giving up."""
@@ -270,7 +276,7 @@ def parse_reply(reply):
     if not match:
         return None
     text = match.group(0)
-    for candidate in (text, re.sub(r'(?m)(^\s*|\[\s*)""(.+?)""(?=\s*(?:\]|,\s*$|$))', lambda m: m.group(1) + '"' + m.group(2).replace('"', "'") + '"', text)):
+    for candidate in (text, _undouble(text)):
         try:
             return json.loads(candidate)
         except ValueError:

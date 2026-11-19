@@ -187,3 +187,11 @@ def test_parse_reply_repairs_doubled_quotes_from_a_small_model():
     multi = '{"sections": [{"id": "a", "on_screen": [\n  ""First line"",\n  "Second"\n]}]}'
     assert cs.parse_reply(multi)["sections"][0]["on_screen"] == ["First line", "Second"]
     assert cs.parse_reply("no json here") is None
+
+
+def test_parse_reply_repairs_a_string_doubled_at_one_end_only():
+    from engine import case_study as cs
+    for line in ('[""Open only."]', '["Close only.""]', '[""Both.""]'):
+        out = cs.parse_reply('{"sections": [{"id": "a", "on_screen": %s, "cites": []}]}' % line)
+        assert out and out["sections"][0]["on_screen"][0].rstrip(".") in ("Open only", "Close only", "Both")
+    assert cs.parse_reply('{"sections": [{"id": "a", "on_screen": [""], "cites": []}]}')["sections"][0]["on_screen"] == [""]
