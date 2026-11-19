@@ -150,7 +150,11 @@ def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None
                 elif case_sources.is_pdf_name(item):
                     text = case_sources.pdf_text(fetch_raw(item))
                 else:
-                    text = _plain(fetch(item))
+                    text = fetch(item)
+                    if str(text).startswith("%PDF"):           # a PDF behind a link that does not end in .pdf
+                        text = case_sources.pdf_text(fetch_raw(item))
+                    else:
+                        text = _plain(text)
                 ref = item
             elif os.path.isfile(item) and case_sources.is_audio_or_video_file(item):
                 import tempfile

@@ -27,7 +27,8 @@ def is_youtube(url):
 
 
 def is_pdf_name(text):
-    return str(text or "").split("?")[0].split("#")[0].lower().endswith(".pdf")
+    plain = str(text or "").split("?")[0].split("#")[0].lower()
+    return plain.endswith(".pdf") or bool(re.match(r"https?://(?:www\.)?arxiv\.org/pdf/", plain))
 
 
 def subtitle_text(raw):

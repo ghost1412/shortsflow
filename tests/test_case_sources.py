@@ -159,3 +159,17 @@ def test_a_local_audio_or_video_file_is_transcribed_and_a_failure_is_a_skip(tmp_
 def test_audio_extensions():
     assert src.is_audio_or_video_file("C:/x/Talk.MP3") and src.is_audio_or_video_file("a.mkv") and not src.is_audio_or_video_file("a.pdf")
     assert not src.is_audio_or_video_file("notes.txt")
+
+
+def test_pdf_behind_a_link_without_pdf_ending_is_read_as_pdf():
+    from engine import case_sources, case_study as cs
+    assert case_sources.is_pdf_name("https://arxiv.org/pdf/2611.23219")
+    seen = []
+    import engine.case_sources as m
+    orig = m.pdf_text
+    m.pdf_text = lambda raw, **k: seen.append(raw) or "the paper text " * 10
+    try:
+        src, skipped = cs.gather_sources(["https://example.org/download?id=7"], fetch=lambda u: "%PDF-1.7 binary", fetch_raw=lambda u: b"%PDF-1.7 bytes")
+    finally:
+        m.pdf_text = orig
+    assert seen == [b"%PDF-1.7 bytes"] and src[0]["text"].startswith("the paper text") and not skipped
