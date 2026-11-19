@@ -251,3 +251,11 @@ def test_probe_finds_a_line_through_a_label(tmp_path):
 def test_kit_has_aliases_for_invented_colour_names():
     from engine import manim_kit as k
     assert k.SECONDARY == k.BLUE and k.PRIMARY == k.ACCENT and k.MUTED == k.DIM and k.DANGER == k.FAIL
+
+
+def test_known_crashes_get_a_fix_hint_on_the_retry():
+    from engine import case_manim as cm
+    assert "no self.camera.frame" in cm.with_hint("AttributeError: 'Camera' object has no attribute 'frame'")
+    assert "never use Tex or MathTex" in cm.with_hint("Tex/MathTex needs LaTeX; use Text()")
+    assert "manim_kit" in cm.with_hint("NameError: name 'DIM' is not defined")
+    assert cm.with_hint("some other error") == "some other error"

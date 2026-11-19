@@ -230,6 +230,25 @@ def find_clip(folder):
 CHECKED = "The picture was checked and is not good enough yet"       # the start of the message render_scene raises when only its checks object
 
 
+# known crashes and the fix to tell the model on the retry (the error text alone did not teach a small model: it repeated the mistake)
+HINTS = (
+    ("camera' object has no attribute 'frame'", "The scene is a plain Scene: there is no self.camera.frame. Do not move or zoom the camera; keep everything in the fixed frame."),
+    ("needs latex", "No LaTeX is installed: never use Tex or MathTex. Use Text() for every formula, written in plain characters."),
+    ("name 'dim' is not defined", "Start the file with `from manim import *` and `from manim_kit import *`; only the names ACCENT, TEXT, DIM, FAIL, BLUE exist as colours."),
+    ("is not defined", "Use only names that Manim or manim_kit define (start with `from manim import *` and `from manim_kit import *`); colours are ACCENT, TEXT, DIM, FAIL, BLUE."),
+    ("'numpy.ndarray' object has no attribute", "A position such as LEFT or point.get_center() is a numpy array, not an object: draw a Dot, Line or Text and move that object instead."),
+)
+
+
+def with_hint(error):
+    """The error text plus, when it is a known mistake, the way to avoid it."""
+    low = " ".join(str(error).lower().split())
+    for needle, hint in HINTS:
+        if needle in low:
+            return f"{error}\nHOW TO FIX: {hint}"
+    return error
+
+
 def make_section_clip(section, seconds, out_dir, ask, render, topic="", portrait=False, accent="#00e5a8", tries=MAX_TRIES, full=False, log=print):
     """Path of a rendered Manim clip for the section, None when every try fails. `ask(prompt)` returns the model's text;
     `render(code, out_dir, portrait)` returns the clip path or raises (it takes `check=False` to skip the picture checks). Each retry is told what
@@ -249,6 +268,7 @@ def make_section_clip(section, seconds, out_dir, ask, render, topic="", portrait
             error = str(e)[-600:]
             flawed = (code, error) if CHECKED in error else None
             log(f"[Log] Animation for '{label}', try {attempt}: {' '.join(error.split())[-170:]}")
+            error = with_hint(error)
             continue
         if path and os.path.exists(path):
             return path
