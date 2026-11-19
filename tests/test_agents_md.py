@@ -1,7 +1,6 @@
 """AGENTS.md is read by every agent that works on the repo: keep its facts true."""
 import os
 import re
-import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +15,9 @@ def test_every_file_it_names_exists():
 
 
 def test_the_python_version_it_states_matches_the_package():
-    minimum = re.search(r">=\s*(\d+\.\d+)", tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["requires-python"]).group(1)
+    # read with a pattern, not tomllib: that module needs Python 3.11 and CI also runs 3.10
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    minimum = re.search(r'requires-python\s*=\s*"[^"]*>=\s*(\d+\.\d+)', pyproject).group(1)
     stated = re.search(r"\*\*Python\*\*: `(\d+\.\d+)\+`", AGENTS)
     assert stated and stated.group(1) == minimum, f"AGENTS.md says Python {stated and stated.group(1)}+, pyproject needs {minimum}+"
 
