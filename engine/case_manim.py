@@ -46,6 +46,7 @@ Rules:
   Every builder returns a group already centred and inside the frame, so do NOT scale() or move() it; show several blocks one after another (FadeOut the last before the next).
   Reveal with the play_* helper (one part at a time), never with one FadeIn of the whole group.
 - Texts are checked: no text may cover another text or cross the edge of a box (inside the box, or clear of it). Show things one after another instead of stacking them.
+- Also checked: no line, arrow or dot may pass through a text. Put a label BESIDE the thing it names (label.next_to(thing, RIGHT or LEFT, buff=0.4)), never on it or on the path of a moving dot or line; keep a title at the top and the drawing below it. Use only the colour names ACCENT, TEXT, DIM, FAIL, BLUE.
 - Keep it moving: something on screen must change at least every 3 seconds (reveal a part, highlight_each, a bar filling, a dot travelling). Never self.wait() longer than 2 seconds in one go; spread the time over the steps instead.
 - Give every Text the argument font="Segoe UI" (a clean sans-serif; other fonts are substituted when it is missing).
 - Never place two texts in the same corner or row: lay out with VGroup(...).arrange(DOWN or RIGHT, buff=0.4) and keep a margin of 0.6 from the edges.
