@@ -226,3 +226,23 @@ def test_kit_helpers_work_as_scene_methods_too():
     for name in ("play_chain", "play_branch", "play_cycle", "play_before_after", "play_bar", "highlight_each"):
         assert callable(getattr(Scene, name)), name
         assert getattr(Scene, name) is getattr(kit, name)
+
+
+def test_overlap_sentence_for_a_line_through_text():
+    from engine import manim_overlap as mo
+    out = mo.sentences([[["line", "Speed c", ""], 0.5]])
+    assert "drawn through the text \"Speed c\"" in out[0]
+
+
+def test_probe_finds_a_line_through_a_label(tmp_path):
+    import shutil
+    import pytest
+    if not shutil.which("manim"):
+        pytest.skip("manim not installed")
+    from engine import manim_overlap as mo
+    code = ("from manim import *\nclass ExplainerScene(Scene):\n    def construct(self):\n"
+            "        t = Text('Speed c', font_size=30)\n        self.add(t)\n"
+            "        self.play(Create(Line(LEFT * 2, RIGHT * 2)), run_time=0.5)\n        self.wait(0.5)\n")
+    assert any("drawn through" in s for s in mo.overlap_problems(code, str(tmp_path)))
+    clear = code.replace("Line(LEFT * 2, RIGHT * 2)", "Line(DOWN + LEFT * 2, DOWN + RIGHT * 2)")
+    assert mo.overlap_problems(clear, str(tmp_path)) == []

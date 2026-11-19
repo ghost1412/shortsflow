@@ -15,7 +15,7 @@ import sys
 PRELUDE = '''
 import json as _json
 import os as _os
-from manim import Scene as _Scene, Text as _Text, Rectangle as _Rect
+from manim import Scene as _Scene, Text as _Text, Rectangle as _Rect, Line as _Line, Dot as _Dot
 
 _OVERLAP_OUT = _os.environ.get("MANIM_OVERLAP_OUT")
 _OVERLAP_FOUND = {}
@@ -33,12 +33,18 @@ def _overlap_visible(m):
 
 
 def _overlap_snapshot(scene):
-    texts, rects = [], []
+    texts, rects, strokes = [], [], []
     for m in scene.get_mobject_family_members():
         try:
             if isinstance(m, _Text) and str(getattr(m, "text", "")).strip() and _overlap_visible(m):
                 shown = str(getattr(m, "original_text", None) or m.text).strip().replace(chr(10), " ")
                 texts.append((shown[:40],) + _overlap_box(m))
+            elif isinstance(m, _Line) and _overlap_visible(m):
+                a, b = m.get_start(), m.get_end()
+                strokes.append(("line", [(float(a[0] + (b[0] - a[0]) * t / 12), float(a[1] + (b[1] - a[1]) * t / 12)) for t in range(13)]))
+            elif isinstance(m, _Dot) and _overlap_visible(m):
+                c = m.get_center()
+                strokes.append(("dot", [(float(c[0]), float(c[1]))]))
             elif isinstance(m, _Rect) and _overlap_visible(m):
                 box = _overlap_box(m)
                 if box[1] - box[0] < 13 and box[3] - box[2] < 7.5:         # not the whole frame
@@ -60,6 +66,11 @@ def _overlap_snapshot(scene):
             if share > 0.04:
                 key = ("text", ) + tuple(sorted((texts[i][0], texts[j][0])))
                 _OVERLAP_FOUND[key] = max(share, _OVERLAP_FOUND.get(key, 0))
+        for kind, pts in strokes:             # a line or dot drawn through a text strikes it out
+            hit = sum(1 for (x, y) in pts if ta[0] + 0.04 < x < ta[1] - 0.04 and ta[2] + 0.04 < y < ta[3] - 0.04)
+            if hit >= (1 if kind == "dot" else 2):
+                key = (kind, texts[i][0], "")
+                _OVERLAP_FOUND[key] = max(0.5, _OVERLAP_FOUND.get(key, 0))
         for r in rects:                       # a text may sit inside a box, or clear of it; crossing its edge is the fault
             x = inter(ta, r)
             if x / area_a > 0.05 and not inside(ta, r) and not inside(r, ta):
@@ -103,7 +114,9 @@ def sentences(found):
     out = []
     for key, share in sorted(found, key=lambda p: -p[1])[:3]:
         kind, a, b = (list(key) + ["", ""])[:3]
-        if kind == "box":
+        if kind in ("line", "dot"):
+            out.append(f"a {'line or arrow' if kind == 'line' else 'dot'} is drawn through the text \"{a}\"; move the text clear of it (put labels beside lines, not on them)")
+        elif kind == "box":
             out.append(f"the text \"{a}\" crosses the edge of a box (it is neither inside it nor clear of it); move it clear or into the box")
         else:
             out.append(f"the texts \"{a}\" and \"{b}\" overlap ({int(share * 100)}% of the smaller); move them apart, or show one after the other")
