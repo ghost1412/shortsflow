@@ -9,6 +9,7 @@ import json
 import os
 import re
 
+MAX_CHECKLIST = 3        # checklist rows that fit above the caption bar
 SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation")
 # the layouts the model may choose from by itself (terminal and formula only when a template asks for them: they suit few topics)
 AUTO_LAYOUTS = ("timeline", "flow", "counters", "checklist", "quote", "compare", "chart")
@@ -185,6 +186,7 @@ def build_prompt(topic, template, sources, layouts="auto"):
     parts += ["", "Every section needs several specific sentences with the real names, dates and figures from the sources, not a summary of a summary. "
               "A section about results, impact or why it matters states what the sources report was found, measured or changed (the outcomes), "
               "not how the work was set up; if the sources hold no such outcomes, say what they do claim. "
+              "When the work is a paper, name the institution or lab at most once and never read out a list of author names. "
               "Advice in the last section may be general, but must not add facts.", "", "One section per question, in this order:"]
     for s in template:
         parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  " + (f"Default layout: {s['scene']}" if layouts == "auto" else f"Scene kind: {s['scene']}")
@@ -320,6 +322,8 @@ def write_script(topic, template, sources, ask, layouts="auto"):
         if layouts == "auto":
             scene = fit_layout(scene, labels, previous)
         previous = scene
+        if scene == "checklist":
+            labels = labels[:MAX_CHECKLIST]       # more rows run into the caption bar
         sections.append({"id": sec["id"], "title": sec["title"], "scene": scene, "narration": narration,
                          "on_screen": labels, "cites": cites, "footage": footage})
     if not sections:

@@ -195,3 +195,13 @@ def test_parse_reply_repairs_a_string_doubled_at_one_end_only():
         out = cs.parse_reply('{"sections": [{"id": "a", "on_screen": %s, "cites": []}]}' % line)
         assert out and out["sections"][0]["on_screen"][0].rstrip(".") in ("Open only", "Close only", "Both")
     assert cs.parse_reply('{"sections": [{"id": "a", "on_screen": [""], "cites": []}]}')["sections"][0]["on_screen"] == [""]
+
+
+def test_checklist_keeps_three_rows_and_the_prompt_bans_author_lists():
+    import json
+    from engine import case_study as cs
+    t = cs.load_template("case")
+    rows = [{"id": x["id"], "narration": "A sentence about it.", "on_screen": ["a", "b", "c", "d", "e"], "scene": "checklist"} for x in t]
+    script = cs.write_script("T", t, [], lambda p: json.dumps({"title": "T", "sections": rows}), layouts="template")
+    assert all(len(s["on_screen"]) <= 3 for s in script["sections"] if s["scene"] == "checklist")
+    assert "never read out a list of author names" in cs.build_prompt("T", t, [])
