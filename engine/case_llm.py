@@ -13,9 +13,10 @@ import time
 COOLDOWN = 300          # seconds the cloud is skipped after it failed
 
 
-def local_chat(prompt, system="", model=None, url=None, timeout=900, max_tokens=8000, temperature=0.4, num_ctx=16384, post=None):
+def local_chat(prompt, system="", model=None, url=None, timeout=900, max_tokens=8000, temperature=0.4, num_ctx=16384, json_mode=False, post=None):
     """One reply from the local Ollama server (chat endpoint, no streaming, no format restriction so code is returned as written). Raises
-    RuntimeError when the server cannot answer or the reply is empty. `post` replaces requests.post (tests)."""
+    RuntimeError when the server cannot answer or the reply is empty. `json_mode=True` asks Ollama for valid JSON only (the script step; never
+    for code). Off by default, and nothing outside the case pipeline calls this function. `post` replaces requests.post (tests)."""
     from engine import script_gen
     if post is None:
         import requests
@@ -23,6 +24,8 @@ def local_chat(prompt, system="", model=None, url=None, timeout=900, max_tokens=
     messages = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
     payload = {"model": model or script_gen.LOCAL_LLM_MODEL, "messages": messages, "stream": False,
                "options": {"temperature": temperature, "num_predict": max_tokens, "num_ctx": num_ctx}}
+    if json_mode:
+        payload["format"] = "json"
     try:
         r = post(url or script_gen.LOCAL_LLM_URL, json=payload, timeout=timeout)
         r.raise_for_status()
@@ -34,16 +37,17 @@ def local_chat(prompt, system="", model=None, url=None, timeout=900, max_tokens=
     return text
 
 
-def make_ask(system, mode="auto", cloud=None, local=None, log=print, clock=time.monotonic):
+def make_ask(system, mode="auto", cloud=None, local=None, log=print, clock=time.monotonic, json_mode=False):
     """A function `ask(prompt)` for the case pipeline. `cloud(prompt, system)` and `local(prompt, system)` default to get_llm_response and
-    local_chat (tests pass fakes). See the module text for `mode`."""
+    local_chat (tests pass fakes). See the module text for `mode`. `json_mode=True` makes the local model answer in valid JSON (for a script
+    asked as JSON); the cloud call is unchanged."""
     if cloud is None:
         def cloud(prompt, system):
             from engine.script_gen import get_llm_response
             return get_llm_response(prompt, system_prompt=system, max_tokens=16000, timeout=300)
     if local is None:
         def local(prompt, system):
-            return local_chat(prompt, system)
+            return local_chat(prompt, system, json_mode=json_mode)
     state = {"down_until": 0.0}
 
     def ask(prompt):

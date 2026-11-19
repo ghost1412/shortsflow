@@ -49,7 +49,7 @@ def _make_script(args, session_dir, opts):
         print("[Warning] No usable source: the video will be marked UNVERIFIED. Give --sources to ground it.")
 
     from engine.case_llm import make_ask
-    ask = make_ask("You write explainer video scripts. Return raw JSON only.", opts["llm"])
+    ask = make_ask("You write explainer video scripts. Return raw JSON only.", opts["llm"], json_mode=True)
     script, error = None, None
     for attempt in (1, 2):                  # a model that is busy sometimes answers with something that is not the script: one more try
         try:

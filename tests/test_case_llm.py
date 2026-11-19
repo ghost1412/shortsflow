@@ -64,3 +64,35 @@ def test_local_chat_reads_the_reply_and_reports_failures():
         raise ConnectionError("refused")
     with pytest.raises(RuntimeError, match="did not answer"):
         case_llm.local_chat("p", post=boom)
+
+
+def test_json_mode_is_off_by_default_and_only_added_when_asked():
+    class R:
+        def raise_for_status(self): pass
+        def json(self): return {"message": {"content": "{}"}}
+    seen = []
+
+    def post(url, json, timeout):
+        seen.append(json)
+        return R()
+    case_llm.local_chat("p", post=post)
+    case_llm.local_chat("p", json_mode=True, post=post)
+    assert "format" not in seen[0] and seen[1]["format"] == "json"
+
+
+def test_make_ask_passes_json_mode_to_the_local_model_only():
+    got = {}
+
+    def fake_local_chat(prompt, system="", **k):
+        got.update(k)
+        return "{}"
+    orig = case_llm.local_chat
+    case_llm.local_chat = fake_local_chat
+    try:
+        case_llm.make_ask("s", "local", json_mode=True)("p")
+        assert got.get("json_mode") is True
+        got.clear()
+        case_llm.make_ask("s", "local")("p")
+        assert got.get("json_mode") is False
+    finally:
+        case_llm.local_chat = orig
