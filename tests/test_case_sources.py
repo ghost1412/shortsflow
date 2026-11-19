@@ -173,3 +173,14 @@ def test_pdf_behind_a_link_without_pdf_ending_is_read_as_pdf():
     finally:
         m.pdf_text = orig
     assert seen == [b"%PDF-1.7 bytes"] and src[0]["text"].startswith("the paper text") and not skipped
+
+
+def test_pdf_text_joins_a_decimal_split_by_a_stray_space():
+    from engine import case_sources as m
+
+    class Page:
+        def extract_text(self): return "The factor is 2 .14 and the error 0 .143% per cycle, in 2019. 5 labs joined, which is long enough."
+    class Doc:
+        pages = [Page()]
+    assert "2.14" in m.pdf_text(b"x", reader=lambda f: Doc()) and "0.143%" in m.pdf_text(b"x", reader=lambda f: Doc())
+    assert "2019. 5 labs" in m.pdf_text(b"x", reader=lambda f: Doc())

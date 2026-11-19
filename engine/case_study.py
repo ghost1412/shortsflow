@@ -254,6 +254,17 @@ def pick_layout(default, chosen, previous, layouts="auto"):
     return chosen
 
 
+_POWERS = {3: "thousand", 6: "million", 9: "billion", 12: "trillion"}
+
+
+def spell_powers(label):
+    """"3 x 10^9 cycles" (also "3 × 10^9", "3e9") as "3 billion cycles": a counter reads it like a number, not a formula."""
+    def repl(m):
+        word = _POWERS.get(int(m.group(2)))
+        return f"{m.group(1)} {word}" if word else m.group(0)
+    return re.sub(r"(\d+(?:\.\d+)?)\s*(?:[x×]|\\times)\s*10\s*\^\s*\{?(\d+)\}?", repl, str(label))
+
+
 def fit_layout(scene, labels, previous=None):
     """Counters show big numbers: with fewer than two labels that start with a number (or hold a short figure) the cards would be long sentences
     crowding each other, so the section becomes a checklist (a timeline when the section before is one)."""
@@ -311,6 +322,7 @@ def write_script(topic, template, sources, ask, layouts="auto"):
         labels = [str(x).strip()[:80] for x in (row.get("on_screen") or []) if str(x).strip()][:6] if isinstance(row.get("on_screen"), list) else []
         if sources:
             labels = [x for x in labels if not unsupported(x, source_text)]
+        labels = [spell_powers(x) for x in labels]
         if not narration:
             continue
         known = {s["id"] for s in sources}

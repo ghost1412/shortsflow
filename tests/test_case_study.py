@@ -205,3 +205,11 @@ def test_checklist_keeps_three_rows_and_the_prompt_bans_author_lists():
     script = cs.write_script("T", t, [], lambda p: json.dumps({"title": "T", "sections": rows}), layouts="template")
     assert all(len(s["on_screen"]) <= 3 for s in script["sections"] if s["scene"] == "checklist")
     assert "never read out a list of author names" in cs.build_prompt("T", t, [])
+
+
+def test_powers_of_ten_in_labels_are_spelled_as_words():
+    from engine import case_study as cs
+    assert cs.spell_powers("3 × 10^9 cycles between errors") == "3 billion cycles between errors"
+    assert cs.spell_powers("1.5 x 10^6 users") == "1.5 million users"
+    assert cs.spell_powers("2 × 10^7 cells") == "2 × 10^7 cells"
+    assert cs.spell_powers("300,000 computers") == "300,000 computers"

@@ -66,7 +66,7 @@ def pdf_text(source, max_pages=MAX_PDF_PAGES, reader=None):
         raise
     except Exception as e:
         raise SourceError(f"the PDF could not be read ({str(e)[:80]})")
-    text = " ".join(text.split())
+    text = re.sub(r"(?<=\d) \.(?=\d)", ".", " ".join(text.split()))      # a decimal the PDF split: "2 .14" is 2.14
     if len(text) < 40:
         raise SourceError("the PDF has almost no text (a scan? OCR is not done here)")
     return text
