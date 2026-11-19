@@ -172,3 +172,9 @@ def test_counters_without_numbers_become_a_checklist():
     assert cs.fit_layout("counters", ["Binary reward", "Budget"], previous="checklist") == "timeline"
     assert cs.fit_layout("counters", ["300,000 computers", "$4 billion lost", "150 countries"]) == "counters"
     assert cs.fit_layout("flow", ["a"]) == "flow"
+
+
+def test_prompt_asks_for_outcomes_not_setup():
+    from engine import case_study as cs
+    prompt = cs.build_prompt("T", cs.load_template("case"), [{"id": "S1", "ref": "x", "text": "t"}])
+    assert "the outcomes" in prompt and "not how the work was set up" in prompt

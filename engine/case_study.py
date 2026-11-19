@@ -183,6 +183,8 @@ def build_prompt(topic, template, sources, layouts="auto"):
     else:
         parts.append("No sources were given. Use only well-known facts you are certain about, and leave out numbers you are unsure of.")
     parts += ["", "Every section needs several specific sentences with the real names, dates and figures from the sources, not a summary of a summary. "
+              "A section about results, impact or why it matters states what the sources report was found, measured or changed (the outcomes), "
+              "not how the work was set up; if the sources hold no such outcomes, say what they do claim. "
               "Advice in the last section may be general, but must not add facts.", "", "One section per question, in this order:"]
     for s in template:
         parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  " + (f"Default layout: {s['scene']}" if layouts == "auto" else f"Scene kind: {s['scene']}")
