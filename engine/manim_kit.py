@@ -86,10 +86,31 @@ def chain(labels, colors=None, vertical=None):
     n = len(labels)
     colors = colors or [ACCENT] * n
     room = w * (1 - 2 * MARGIN)
-    each = (w * 0.78) if vertical else (room - (n - 1) * 0.9) / max(1, n)
+    snake = (not vertical) and n >= 4              # a wide frame with 4+ steps: two rows (second one runs back), so the boxes and text stay big
+    per_row = -(-n // 2) if snake else n
+    each = (w * 0.78) if vertical else (room - (per_row - 1) * 0.9) / max(1, per_row)
     longest = max((len(str(t)) for t in labels), default=1)
-    size = 30 if longest <= 18 and n <= 3 else 26 if longest <= 30 else 22
+    size = 30 if longest <= 18 and n <= 3 else 28 if snake and longest <= 30 else 26 if longest <= 30 else 22
     boxes = VGroup(*[box(t, colors[i % len(colors)], size=size, max_width=max(1.6, each - 0.6)) for i, t in enumerate(labels)])
+    if snake:
+        top = VGroup(*boxes[:per_row]).arrange(RIGHT, buff=0.9)
+        bottom = VGroup(*boxes[per_row:][::-1]).arrange(RIGHT, buff=0.9)       # reversed: step per_row+1 sits under step per_row
+        bottom.next_to(top, DOWN, buff=1.0)
+        bottom.align_to(top, RIGHT)
+        bottom.shift(RIGHT * (boxes[per_row - 1].get_center()[0] - boxes[per_row].get_center()[0]))     # a straight arrow between the rows
+        arrows = VGroup()
+        for i in range(n - 1):
+            a, b = boxes[i], boxes[i + 1]
+            if i < per_row - 1:
+                start, end = a.get_edge_center(RIGHT), b.get_edge_center(LEFT)
+            elif i == per_row - 1:
+                start, end = a.get_edge_center(DOWN), b.get_edge_center(UP)
+            else:
+                start, end = a.get_edge_center(LEFT), b.get_edge_center(RIGHT)
+            arrows.add(Arrow(start, end, buff=0.08, color=DIM, stroke_width=4, max_tip_length_to_length_ratio=0.25))
+        group = fit(VGroup(boxes, arrows))
+        group.parts = list(boxes)
+        return group
     boxes.arrange(DOWN if vertical else RIGHT, buff=0.7)
     arrows = VGroup(*[Arrow(boxes[i].get_edge_center(DOWN if vertical else RIGHT), boxes[i + 1].get_edge_center(UP if vertical else LEFT), buff=0.08,
                             color=DIM, stroke_width=4, max_tip_length_to_length_ratio=0.25) for i in range(n - 1)])

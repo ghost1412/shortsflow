@@ -259,3 +259,18 @@ def test_known_crashes_get_a_fix_hint_on_the_retry():
     assert "never use Tex or MathTex" in cm.with_hint("Tex/MathTex needs LaTeX; use Text()")
     assert "manim_kit" in cm.with_hint("NameError: name 'DIM' is not defined")
     assert cm.with_hint("some other error") == "some other error"
+
+
+def test_a_wide_chain_of_four_or_more_steps_is_two_rows_inside_the_frame():
+    pytest.importorskip("manim")
+    from manim import config
+    from engine import manim_kit as kit
+    config.frame_width, config.frame_height = 14.222, 8.0
+    labels = ["Make and cool syrup", "Mix dry ingredients and ghee", "Form dough and roll balls", "Fry in batches at 130C", "Soak in warm syrup"]
+    wide = kit.chain(labels)
+    ys = sorted({round(float(b.get_center()[1]), 1) for b in wide.parts})
+    assert len(wide.parts) == 5 and len(ys) == 2                       # two rows, every step kept, in order
+    assert all(abs(b.get_center()[0]) + b.width / 2 <= 7.2 and abs(b.get_center()[1]) + b.height / 2 <= 4.1 for b in wide.parts)
+    assert len(wide[1]) == 4                                           # an arrow between each pair of steps
+    three = kit.chain(labels[:3])
+    assert len({round(float(b.get_center()[1]), 1) for b in three.parts}) == 1           # a short chain stays in one row
