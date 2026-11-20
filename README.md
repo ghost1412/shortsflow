@@ -2,14 +2,15 @@
 
 # ShortsFlow
 
-> **Turn a long video, a web page, a PDF or an arXiv paper into finished videos, then publish them. On your own PC.**
-> Captioned vertical clips from a podcast or interview, or a narrated explainer with animated diagrams written only from your sources.
-> Free and open source (MIT): no watermark, no credits, no subscription, no account needed to clip.
+> **Drop in a podcast or interview, get captioned vertical clips. No account, no API key, no upload.**
+> And it goes further: give it a web page, a PDF or an arXiv paper and it writes, animates and narrates a finished explainer video, then publishes it.
+> Free and open source (MIT): no watermark, no credits, no subscription. Runs on your own PC.
 
 <p align="center">
-  <!-- DEMO VIDEO: replace with the YouTube link / thumbnail, e.g. [![Watch the 90 s demo](docs/demo_thumb.png)](https://youtu.be/XXXX) -->
-  <img src="demos/demo_case_16x9.gif" width="520" alt="A case explainer made from one web page: an animated diagram over stock footage, a source chip and captions" />
-  <br/><sub>A real run of <code>--mode CASE</code>: one web page in, a narrated explainer with an animated diagram out. Clips from a podcast are further down.</sub>
+  <img src="demos/demo_podcast_cuts.gif" width="260" alt="A podcast clip: the crop cuts to whoever is speaking, with word-by-word captions" />
+  &nbsp;&nbsp;
+  <img src="demos/demo_case_9x16.gif" width="260" alt="A case explainer made from one web page: an animated diagram over stock footage, a source chip and captions" />
+  <br/><sub><b>Clip it:</b> the 9:16 crop cuts to whoever is talking, with word-timed captions. &nbsp;|&nbsp; <b>Explain it:</b> one web page in, a narrated explainer with an animated diagram out (<code>--mode CASE</code>).</sub>
 </p>
 
 <p align="center">
