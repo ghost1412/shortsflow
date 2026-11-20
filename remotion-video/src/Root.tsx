@@ -80,13 +80,14 @@ export const RemotionRoot: React.FC = () => {
           theme: "dark" as const,
           bgMusicVolume: 0.12,
           introSeconds: 2.5,
+          hook: "",
           outroSeconds: 3,
           verified: true,
           removedClaims: 0,
           sources: [],
           captionsOff: false,
           sections: [
-            { title: "What happened", scene: "timeline" as const, labels: ["First", "Second", "Third"], cues: [], clipRate: 1, sourceLabels: [], footage: [], beats: [], start: 2.5, end: 8 },
+            { title: "What happened", scene: "timeline" as const, labels: ["First", "Second", "Third"], cues: [], clipRate: 1, clipAspect: 16 / 9, sourceLabels: [], footage: [], beats: [], start: 2.5, end: 8 },
           ],
           words: [],
         }}
