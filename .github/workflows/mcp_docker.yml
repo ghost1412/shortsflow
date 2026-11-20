@@ -31,6 +31,6 @@ jobs:
           by_id = {r["id"]: r for r in rows if "id" in r}
           assert by_id[1]["result"]["serverInfo"]["name"], "no initialize reply"
           tools = [t["name"] for t in by_id[2]["result"]["tools"]]
-          assert len(tools) == 5, tools
+          assert len(tools) == 9, tools
           print("OK, tools:", tools)
           EOF

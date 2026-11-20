@@ -3,7 +3,7 @@
 # ShortsFlow
 
 > **Drop in a podcast or interview, get captioned vertical clips. No account, no API key, no upload.**
-> And it does much more: it **dubs** a video into another language, makes **recaps** of a trip, wedding or event, turns photos into reels, writes and animates **explainers** from a web page, PDF or arXiv paper, makes idea-to-video shorts, and **publishes** and schedules them.
+> And it does much more: it cuts a long video into one **highlights video** of the best moments that still tells the whole story, it **dubs** a video into another language, makes **recaps** of a trip, wedding or event, turns photos into reels, writes and animates **explainers** from a web page, PDF or arXiv paper, makes idea-to-video shorts, and **publishes** and schedules them.
 > Free and open source (MIT): no watermark, no credits, no subscription. Runs on your own PC.
 
 <p align="center">
@@ -26,6 +26,7 @@
 | You give it | You get | One line |
 |---|---|---|
 | A long video, a YouTube link, a podcast | **Captioned 9:16 shorts**: moments picked on sentence boundaries, face-tracked crops, a cut to whoever speaks, word-by-word captions, silences removed | `shortsflow clip interview.mp4 --captions` |
+| A long video (a talk, a match, a film, an event) | **One highlights video**: the best moments, kept in story order so the whole story is still told, at the length you choose (a few minutes up to as long as you like), landscape like the source, with transitions and optional captions | the **Highlights video** card, or `python main.py --source_video talk.mp4 --extract_mode long --target_duration 300 --reel_captions` |
 | A topic and sources (web page, PDF, arXiv paper, YouTube, audio) | **A sectioned explainer video** (16:9 and 9:16): the script is written only from your sources and its numbers are checked against them, with narration, Mermaid diagrams, Manim animation, stock footage, captions and music | `python main.py --mode CASE --prompt "The topic" --sources LINK` |
 | A topic | **One continuous animated explanation** (equations, processes, algorithms) | `python main.py --mode ANIMATE --prompt "How binary search halves the work"` |
 | One line of text | **Idea-to-video shorts**: facts, would-you-rather, stories, 30+ formats | `python main.py --mode FACTS --category "space mysteries"` |
