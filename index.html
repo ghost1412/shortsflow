@@ -5,10 +5,10 @@
 <link rel="icon" href="assets/branding/logo.svg" type="image/svg+xml">
 <link rel="icon" href="assets/branding/favicon.ico" sizes="any">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ShortsFlow: free, open-source Opus Clip alternative</title>
-<meta name="description" content="Turn a long video into captioned vertical Shorts on your own PC. Free, open source, no watermark, no credits.">
-<meta property="og:title" content="ShortsFlow: free, open-source Opus Clip alternative">
-<meta property="og:description" content="Turn a long video into captioned vertical Shorts on your own PC. No watermark, no credits.">
+<title>ShortsFlow: free, open-source AI video studio and Opus Clip alternative</title>
+<meta name="description" content="Clip long videos into captioned Shorts, dub them, make recaps, and turn a web page, PDF or paper into a narrated explainer with animated diagrams, then publish. On your own PC. Free, open source, no watermark.">
+<meta property="og:title" content="ShortsFlow: free, open-source AI video studio">
+<meta property="og:description" content="Clips, dubs, recaps and source-grounded explainer videos, then publish. On your own PC. No watermark, no credits.">
 <meta property="og:image" content="https://ghost1412.github.io/shortsflow/assets/branding/social-card.png">
 <style>
   :root {
@@ -58,7 +58,7 @@
   .step { counter-increment: s; position: relative; padding-top: 44px; }
   .step::before { content: counter(s); position: absolute; top: 12px; left: 18px; width: 28px; height: 28px; border-radius: 50%; background: var(--soft); color: var(--accent); font-weight: 800; display: grid; place-items: center; }
   .steps { counter-reset: s; }
-  .demos { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  .demos { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
   .demos figure { margin: 0; }
   .demos img { width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); }
   code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9rem; }
@@ -72,14 +72,15 @@
 <div class="wrap">
   <header class="top">
     <a class="brand" href="#"><img src="assets/branding/logo-64.png" width="28" height="28" alt="" style="vertical-align:-6px;margin-right:8px">ShortsFlow</a>
-    <nav aria-label="Sections"><a href="#demos">Demos</a><a href="#try">Try it</a><a href="#local">Privacy</a><a href="gallery.html">Gallery</a><a href="clip-a-podcast-without-uploading.html">Podcast clips, no upload</a><a href="https://github.com/ghost1412/shortsflow">GitHub</a></nav>
+    <nav aria-label="Sections"><a href="#demos">Demos</a><a href="#app">The app</a><a href="#try">Try it</a><a href="#local">Privacy</a><a href="gallery.html">Gallery</a><a href="clip-a-podcast-without-uploading.html">Podcast clips, no upload</a><a href="https://github.com/ghost1412/shortsflow">GitHub</a></nav>
   </header>
 
   <main>
     <div class="hero">
       <div>
-        <h1>Turn long videos into Shorts. Automatically.</h1>
+        <h1>Turn long videos into Shorts. Then go further.</h1>
         <p class="lead">Upload a podcast, interview or YouTube video. ShortsFlow finds the engaging moments, follows the speaker, adds animated captions and exports vertical clips you can review and publish.</p>
+        <p class="lead" style="margin-top:-8px">It also <strong>dubs</strong> a video into another language, makes <strong>recaps</strong> of a trip or event, and turns a web page, PDF or paper into a narrated <strong>explainer</strong> with animated diagrams, then <strong>publishes</strong> and schedules it.</p>
         <p class="lead" style="margin-top:-8px"><strong>Free. Open source. No watermark, no credit limits.</strong> It runs on your own computer.</p>
         <div class="cta">
           <a class="btn primary" href="https://github.com/ghost1412/shortsflow/releases/latest/download/ShortsFlow-Setup.exe">Download for Windows</a>
@@ -117,10 +118,20 @@
       <h2>What it makes</h2>
       <p class="sub">Real outputs. Each one is small here; the exported videos are much sharper.</p>
       <div class="demos">
+        <figure><img loading="lazy" src="demos/demo_case_9x16.gif" alt="An explainer made from one web page: an animated diagram over stock footage with a source chip and captions"><figcaption>Explainer written from one web page, with an animated diagram</figcaption></figure>
         <figure><img loading="lazy" src="demos/demo_podcast_cuts.gif" alt="Podcast clip with speaker cuts and captions"><figcaption>Podcast clipping with active-speaker cuts</figcaption></figure>
         <figure><img loading="lazy" src="demos/demo_spot_the_lie.gif" alt="A spot-the-lie short with three facts"><figcaption>"Spot the lie" quiz short, made from an idea</figcaption></figure>
         <figure><img loading="lazy" src="demos/demo_facts.gif" alt="An animated facts short"><figcaption>Animated facts short</figcaption></figure>
         <figure><img loading="lazy" src="demos/demo_recap.gif" alt="A recap video with title cards and fast cuts made from six clips"><figcaption>Recap: six clips become one video</figcaption></figure>
+      </div>
+    </section>
+
+    <section id="app">
+      <h2>One app for all of it</h2>
+      <p class="sub">A browser app that runs on your PC: a card for each thing you can make, and a place to publish what you made. Shown here in dark mode.</p>
+      <div class="demos" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+        <figure><img loading="lazy" src="demos/ui_home.jpg" alt="The ShortsFlow app: cards for shorts, highlights, dubbing, recaps, photo reels, video from an idea, case explainer, clip tool, publishing and settings" width="980" height="620"><figcaption>Pick what to make: shorts, dubs, recaps, photo reels, explainers and more</figcaption></figure>
+        <figure><img loading="lazy" src="demos/ui_publish.jpg" alt="The Publish videos card: a list of finished videos filtered by format, a preview, editable title and description, and platform choices" width="980" height="1200"><figcaption>Publish any finished video, now or at a time you set, to your own YouTube channel or through Upload-Post</figcaption></figure>
       </div>
     </section>
 
@@ -140,7 +151,7 @@ shortsflow clip my_video.mp4</pre></div>
 
     <section id="local">
       <h2>What stays on your PC, and what can leave it</h2>
-      <p class="sub">Local by default. Here is exactly where data can go.</p>
+      <p class="sub">Local by default. Here is exactly where data can go. (Explainers also send the text of your sources to the AI provider, short footage search phrases to Pexels, and narration text to the voice service.)</p>
       <div class="note">
         <p style="margin:0 0 8px"><strong>Stays on your PC:</strong> your video files, the speech recognition, the cropping, the captions and the rendering.</p>
         <p style="margin:0 0 8px"><strong>Fetched from the internet:</strong> a YouTube link is downloaded from YouTube to your PC when you paste one.</p>
@@ -152,6 +163,9 @@ shortsflow clip my_video.mp4</pre></div>
     <section>
       <h2>And more</h2>
       <div class="grid">
+        <div class="card"><h3>Explainers from sources</h3><p>A web page, PDF, arXiv paper or YouTube video in; a narrated video out, written only from what the source says, with Mermaid and Manim animation.</p></div>
+        <div class="card"><h3>Recaps and photo reels</h3><p>Trip, wedding or event footage into one story; photos into a reel with music.</p></div>
+        <div class="card"><h3>Publish and schedule</h3><p>YouTube, TikTok, Instagram, X and more, from the app, now or later.</p></div>
         <div class="card"><h3>30+ formats</h3><p>Facts quizzes, explainers, top-5 lists, stories and more, from just an idea.</p></div>
         <div class="card"><h3>Dubbing</h3><p>Translate a video's speech and re-voice it, with a choice of tone and voice speed.</p></div>
         <div class="card"><h3>Game footage</h3><p>Finds story and action moments, even silent fights, and picks the framing.</p></div>

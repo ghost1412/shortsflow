@@ -44,6 +44,12 @@
   <br/><sub>Clips, a case explainer, an animated explainer, a facts short and a recap. All made by ShortsFlow from public-domain or Creative Commons material.</sub>
 </p>
 
+<p align="center">
+  <img src="demos/ui_home.jpg" width="440" alt="The ShortsFlow browser app: a card for shorts, dubbing, recaps, photo reels, explainers, publishing and settings" />
+  <img src="demos/ui_publish.jpg" width="300" alt="The Publish videos card: pick a finished video, filter by format, edit its title and description, publish now or later" />
+  <br/><sub>The browser app (<code>shortsflow webui</code>), in dark mode: a card for each thing you can make, and a Publish videos card for posting any finished video now or at a time you set.</sub>
+</p>
+
 **Why it is different from a clipper.** Most tools stop at "cut a long video into shorts". ShortsFlow also writes the video: the case explainer reads your sources, drafts a script that only uses what they say (a number the source does not contain is rejected), draws each scene as a diagram, animation or footage, narrates it and renders both shapes. Everything runs on your PC with a local Whisper, a local FFmpeg and an optional local Ollama; a cloud AI key only makes the writing better and is never required to clip.
 
 **Built to be automated.** A browser app (a card per task, a Publish videos card, Settings for keys and your own YouTube channel), a desktop studio, a CLI, Docker, a REST API (`python -m shortsflow.api`, with an n8n flow), an MCP server for AI agents, a scheduler for posts, and a daily GitHub Action that makes and posts a short by itself. 1,300+ offline tests run on every push.
