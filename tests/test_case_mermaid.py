@@ -13,6 +13,20 @@ FLOW = "flowchart LR\n    A[Crafted string sent] --> B{JNDI lookup on?}\n    B -
 SOURCE = "A crafted string is sent. The JNDI lookup contacts the attacker LDAP server and a malicious class is loaded and run."
 
 
+def _real_checker_runs():
+    """True when Node and the Remotion packages are here AND the checker really runs on this Node (an old Node cannot start some packages)."""
+    node = shutil.which("node")
+    if not (node and os.path.isfile(cm.CHECKER) and os.path.isdir(os.path.join(cm.REMOTION, "node_modules", "jsdom"))
+            and os.path.isdir(os.path.join(cm.REMOTION, "node_modules", "mermaid"))):
+        return False
+    try:
+        res = subprocess.run([node, os.path.join("scripts", "check_mermaid.mjs")], input="flowchart LR\n A --> B", capture_output=True, text=True,
+                             encoding="utf-8", errors="replace", cwd=cm.REMOTION, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return res.stdout.strip().startswith("OK")
+
+
 def test_clean_takes_the_diagram_out_of_a_model_answer():
     assert cm.clean("Here you go:\n```mermaid\nflowchart TD\n A-->B\n```\nEnjoy") == "flowchart TD\n A-->B"
     assert cm.clean("Sure!\nsequenceDiagram\n A->>B: hi") == "sequenceDiagram\n A->>B: hi"
@@ -50,10 +64,8 @@ def test_check_reads_the_checker_output_and_never_blocks_on_a_missing_checker(tm
 
 
 def test_the_real_checker_when_node_and_mermaid_are_installed():
-    node = shutil.which("node")
-    if not (node and os.path.isfile(cm.CHECKER) and os.path.isdir(os.path.join(cm.REMOTION, "node_modules", "jsdom"))
-            and os.path.isdir(os.path.join(cm.REMOTION, "node_modules", "mermaid"))):
-        pytest.skip("node or the Remotion packages are missing")
+    if not _real_checker_runs():
+        pytest.skip("node or the Remotion packages are missing, or this Node is too old for them")
     assert cm.check(FLOW) == (True, "")
     ok, reason = cm.check("flowchart LR\n A[One] --> \n B[Two")
     assert ok is False and "Parse error" in reason
@@ -141,10 +153,8 @@ def test_a_diagram_with_too_many_nodes_is_refused_with_the_reason_but_unknown_co
 
 
 def test_the_real_checker_counts_nodes_when_it_can():
-    node = shutil.which("node")
-    if not (node and os.path.isfile(cm.CHECKER) and os.path.isdir(os.path.join(cm.REMOTION, "node_modules", "jsdom"))
-            and os.path.isdir(os.path.join(cm.REMOTION, "node_modules", "mermaid"))):
-        pytest.skip("node or the Remotion packages are missing")
+    if not _real_checker_runs():
+        pytest.skip("node or the Remotion packages are missing, or this Node is too old for them")
     big = "flowchart LR\n" + "\n".join(f"    N{i} --> N{i + 1}" for i in range(8))
     ok, why = cm.check(big)
     assert ok is False and "nodes" in why
