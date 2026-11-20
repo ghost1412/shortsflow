@@ -2,7 +2,9 @@
 
 Release notes for the `shortsflow` package and the Windows installer. Newest first.
 
-## Unreleased
+## 0.9.1 (2026-11-20)
+
+**Highlights:** a Settings page in the browser app (keys, publishing), the animated explainer mode `--mode ANIMATE`, a `recipe` template, research papers and PDFs read properly, and a local-model fallback when the cloud text model is rate-limited.
 
 - Browser app: a **Settings** section. Add, replace or remove API keys (stored in `.env`, only the last four characters shown, switched off when the app is open to other devices); choose upload platforms (through Upload-Post); publish a finished case video or clip set now, with a preview that sends nothing; optional automatic publishing after a run (off by default, never twice to the same platform). New `shortsflow/settings.py`.
 - Case explainer: new `recipe` template (the dish, the steps, the numbers, the tips). Counters keep a unit with its number (`130°C`, `20 g`, `3 cm`) and show a range whole (`5–7`); at most four counters and three checklist rows per section, so they clear the caption bar; four counters in landscape are drawn smaller, in one row. A PDF link without `.pdf` (arXiv) is read as a PDF; a decimal a PDF splits (`2 .14`) is joined; `3 x 10^9` in a label reads `3 billion`; results sections ask for outcomes, not setup; the prompt bans author lists. Manim: the overlap check also finds a line, arrow or dot drawn through a text; retries after known crashes are told the fix; colour aliases in the kit.
