@@ -148,3 +148,26 @@ def test_the_real_checker_counts_nodes_when_it_can():
     big = "flowchart LR\n" + "\n".join(f"    N{i} --> N{i + 1}" for i in range(8))
     ok, why = cm.check(big)
     assert ok is False and "nodes" in why
+
+
+def test_a_section_whose_template_default_is_a_diagram_stays_a_diagram_when_the_model_says_flow():
+    assert cs.pick_layout("diagram", "flow", "timeline") == "diagram"
+    assert cs.pick_layout("diagram", "counters", "timeline") == "counters"                  # a clearly different choice is respected
+    assert cs.pick_layout("flow", "flow", "timeline") == "flow" and cs.pick_layout("diagram", "flow", "timeline", layouts="template") == "diagram"
+
+
+def test_when_the_model_picks_the_layout_but_writes_no_diagram_one_is_asked_for_from_the_narration():
+    t = cs.load_template("case")
+    rows = [{"id": s["id"], "narration": "A crafted string is sent. The lookup contacts the attacker server.", "on_screen": ["String sent", "Lookup"], "scene": s["scene"] if s["scene"] != "diagram" else "flow"}
+            for s in t]                                                                   # the model answers "flow" for the diagram section and gives no code
+    reply = json.dumps({"title": "T", "sections": rows})
+    asked = []
+
+    def ask(prompt):
+        asked.append(prompt)
+        return reply if len(asked) == 1 else "```mermaid\n" + FLOW + "\n```"
+    src = [{"id": "S1", "ref": "x", "text": SOURCE + " crafted string sent lookup attacker server"}]
+    script = cs.write_script("T", t, src, ask, check_diagram=lambda c: (True, ""))
+    how = [s for s in script["sections"] if s["id"] == "how"][0]
+    assert how["scene"] == "diagram" and how["diagram"] == FLOW
+    assert any("Draw ONE Mermaid diagram" in a and "crafted string is sent" in a for a in asked[1:])

@@ -264,6 +264,8 @@ def pick_layout(default, chosen, previous, layouts="auto"):
     terminal or equation keeps it."""
     if layouts != "auto" or default in ("terminal", "equation", "animation") or chosen not in AUTO_LAYOUTS:
         return default
+    if default == "diagram" and chosen == "flow":      # a drawn diagram is the better way to show a process than a plain row of boxes
+        return default
     if chosen == previous and default != previous:
         return default
     return chosen
@@ -392,7 +394,11 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
             scene = fit_layout(scene, labels, previous)
         diagram = ""
         if scene == "diagram":
-            diagram = resolve_diagram(row.get("diagram"), source_text if sources else None, ask, sec["title"], check_diagram)
+            grounding = source_text if sources else None
+            if row.get("diagram"):
+                diagram = resolve_diagram(row.get("diagram"), grounding, ask, sec["title"], check_diagram)
+            if not diagram:                        # the model picked the layout but wrote no usable diagram: ask for one from the section's own text
+                diagram = diagram_for({"title": sec["title"], "narration": narration, "on_screen": labels}, topic, ask, grounding, check_diagram)
             if not diagram:
                 scene = "flow"                     # the diagram could not be made valid and grounded: the plain row of steps shows the labels
         previous = scene
