@@ -377,7 +377,7 @@ const Checklist: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) =>
         const tick = interpolate(frame - delay - 8, [0, 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
         const on = i === act;
         return (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 30 * u, background: p.card, backdropFilter: p.blur, border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 20 * u, padding: `${26 * u}px ${32 * u}px`, opacity: t, transform: `translateX(${(1 - t) * -80 * u}px) scale(${on ? 1.03 : 1})`, transformOrigin: "left center", boxShadow: glow(on, accent, u) }}>
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 30 * u, background: p.card, backdropFilter: p.blur, border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 20 * u, padding: `${(labels.length >= 3 ? 17 : 26) * u}px ${32 * u}px`, opacity: t, transform: `translateX(${(1 - t) * -80 * u}px) scale(${on ? 1.03 : 1})`, transformOrigin: "left center", boxShadow: glow(on, accent, u) }}>
             <div style={{ width: 58 * u, height: 58 * u, borderRadius: 14 * u, border: `3px solid ${accent}`, background: tick > 0.5 ? `${accent}33` : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 44 * u, fontFamily: FONT, fontWeight: 800, flexShrink: 0 }}>
               <span style={{ opacity: tick, transform: `scale(${0.4 + 0.6 * tick})` }}>✓</span>
             </div>
