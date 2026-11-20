@@ -32,7 +32,10 @@ SECRET_NAMES = tuple(n for n in KEY_NAMES if n != "UPLOAD_POST_USER")      # the
 PORTRAIT_PLATFORMS = ("tiktok", "instagram", "pinterest", "threads")
 LANDSCAPE_PLATFORMS = ("linkedin", "facebook", "x")
 PREFS_FILE = "settings.json"
-DEFAULT_PREFS = {"auto_publish": False, "platforms": []}
+DEFAULT_PREFS = {"auto_publish": False, "platforms": [], "youtube_privacy": "private", "youtube_account": "1"}
+DIRECT = "youtube_direct"          # a "platform" that goes straight to the person's own YouTube channel (their own Google app), not through Upload-Post
+PRIVACY = ("private", "unlisted", "public")
+YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 
 def is_real(value):
@@ -130,24 +133,37 @@ def prefs_path(home):
     return os.path.join(home, PREFS_FILE)
 
 
+def valid_platforms():
+    from engine.publish import PLATFORMS
+    return tuple(PLATFORMS) + (DIRECT,)
+
+
+def clean_account(account):
+    """The YouTube account slot ("1", "2", ...): letters and digits only, at most 8, "1" when empty."""
+    return re.sub(r"[^A-Za-z0-9]", "", str(account or "1"))[:8] or "1"
+
+
 def load_prefs(home):
     """The saved upload preferences, with defaults for anything missing or invalid."""
-    from engine.publish import PLATFORMS
     prefs = dict(DEFAULT_PREFS)
     try:
         with open(prefs_path(home), encoding="utf-8") as f:
             data = json.load(f)
         prefs["auto_publish"] = bool(data.get("auto_publish", False))
-        prefs["platforms"] = [p for p in (data.get("platforms") or []) if p in PLATFORMS]
+        prefs["platforms"] = [p for p in (data.get("platforms") or []) if p in valid_platforms()]
+        prefs["youtube_privacy"] = data.get("youtube_privacy") if data.get("youtube_privacy") in PRIVACY else "private"
+        prefs["youtube_account"] = clean_account(data.get("youtube_account"))
     except (OSError, ValueError, AttributeError):
         pass
     return prefs
 
 
-def save_prefs(home, auto_publish, platforms):
-    """Save the upload preferences. Returns the saved dict."""
-    from engine.publish import PLATFORMS
-    prefs = {"auto_publish": bool(auto_publish), "platforms": [p for p in (platforms or []) if p in PLATFORMS]}
+def save_prefs(home, auto_publish, platforms, youtube_privacy=None, youtube_account=None):
+    """Save the upload preferences (a YouTube setting left as None keeps its saved value). Returns the saved dict."""
+    before = load_prefs(home)
+    prefs = {"auto_publish": bool(auto_publish), "platforms": [p for p in (platforms or []) if p in valid_platforms()],
+             "youtube_privacy": youtube_privacy if youtube_privacy in PRIVACY else before["youtube_privacy"],
+             "youtube_account": clean_account(youtube_account) if youtube_account is not None else before["youtube_account"]}
     with open(prefs_path(home), "w", encoding="utf-8", newline="\n") as f:
         json.dump(prefs, f, indent=1)
     return prefs
@@ -290,18 +306,33 @@ def record_published(folder, platforms):
         json.dump(data, f, indent=1)
 
 
-def publish_run(folder, kind, platforms, dry_run=False, publisher=None, env_path=None, environ=None, again=False):
+def publish_run(folder, kind, platforms, dry_run=False, publisher=None, env_path=None, environ=None, again=False, direct=None):
     """Publish a finished run and remember where. A platform the run was already published to is refused unless `again` (so a re-render or a
-    second click never posts twice)."""
+    second click never posts twice). The platforms that go through Upload-Post and the direct YouTube route are sent separately; `direct` is
+    {"home", "privacy", "account", "uploader"} for the latter."""
+    if not platforms:
+        return False, ["Choose at least one platform."]
     if not dry_run and not again:
         done = [p for p in platforms if p in published_to(folder)]
         if done:
             when = published_to(folder)[done[0]]
             return False, [f"Already published to {', '.join(done)} (on {when}). Tick \"publish again\" if you really want to post it once more."]
-    ok, lines = _publish_run(folder, kind, platforms, dry_run, publisher, env_path, environ)
-    if ok and not dry_run:
-        record_published(folder, platforms)
-    return ok, lines
+    parts = []
+    others = [p for p in platforms if p != DIRECT]
+    if others:
+        ok, lines = _publish_run(folder, kind, others, dry_run, publisher, env_path, environ)
+        parts.append((others, ok, lines))
+    if DIRECT in platforms:
+        d = direct or {}
+        ok, lines = publish_direct(folder, kind, d.get("privacy", "private"), d.get("account", "1"), d.get("home"), dry_run=dry_run, uploader=d.get("uploader"))
+        parts.append(([DIRECT], ok, lines))
+    all_ok, all_lines = True, []
+    for plats, ok, lines in parts:
+        all_ok = all_ok and ok
+        all_lines += lines
+        if ok and not dry_run:
+            record_published(folder, plats)               # only what really went out is remembered
+    return all_ok, all_lines
 
 
 def _publish_run(folder, kind, platforms, dry_run=False, publisher=None, env_path=None, environ=None):
@@ -350,7 +381,8 @@ def auto_publish(home, since, publisher=None, environ=None):
     todo = [p for p in prefs["platforms"] if p not in published_to(folder)]
     if not todo:
         return ["Auto-publish: this run was already published to " + ", ".join(prefs["platforms"]) + ", so nothing was sent."]
-    ok, lines = publish_run(folder, kind, todo, publisher=publisher, env_path=os.path.join(home, ".env"), environ=environ)
+    direct = {"home": home, "privacy": prefs["youtube_privacy"], "account": prefs["youtube_account"]}
+    ok, lines = publish_run(folder, kind, todo, publisher=publisher, env_path=os.path.join(home, ".env"), environ=environ, direct=direct)
     return ["Auto-publish:"] + lines
 
 
@@ -358,3 +390,140 @@ def _finished_after(folder, kind, since):
     import glob
     files = glob.glob(os.path.join(folder, "case_*.mp4")) if kind == "case" else [os.path.join(folder, "metadata.json")]
     return any(os.path.isfile(p) and os.path.getmtime(p) >= since for p in files)
+
+
+# ---- YouTube, direct to the person's own channel (their own Google OAuth client; nothing goes through a third party)
+def youtube_paths(home, account="1"):
+    """(client secrets file, token file) of an account slot, the same names engine.social_gen.YouTubeUploader uses ("client_secrets.json" /
+    "token.json" for account 1, "client_secrets_2.json" / "token_2.json" for account 2)."""
+    acc = clean_account(account)
+    suffix = "" if acc == "1" else "_" + acc.lower()
+    return os.path.join(home, f"client_secrets{suffix}.json"), os.path.join(home, f"token{suffix}.json")
+
+
+def _token_ok(path):
+    """True when the saved sign-in can be used or refreshed (never opens a browser)."""
+    try:
+        from google.oauth2.credentials import Credentials
+        creds = Credentials.from_authorized_user_file(path, YOUTUBE_SCOPES)
+        return bool(creds.valid or creds.refresh_token)
+    except Exception:
+        return False
+
+
+def youtube_status(home, account="1"):
+    """{"secrets": the Google client file is saved, "connected": a usable sign-in is saved}."""
+    secrets, token = youtube_paths(home, account)
+    return {"secrets": os.path.isfile(secrets), "connected": os.path.isfile(token) and _token_ok(token)}
+
+
+def youtube_status_markdown(home, account="1"):
+    st = youtube_status(home, account)
+    return (f"**Account {clean_account(account)}:** client file " + ("✅ saved" if st["secrets"] else "❌ not added yet") + " · sign-in "
+            + ("✅ connected" if st["connected"] else "❌ not connected"))
+
+
+def save_client_secrets(home, account, raw):
+    """Save the Google OAuth client file of an account slot. `raw` is its text or bytes. Returns (ok, message)."""
+    try:
+        text = raw.decode("utf-8-sig") if isinstance(raw, (bytes, bytearray)) else str(raw or "")
+        data = json.loads(text)
+    except (ValueError, UnicodeDecodeError):
+        return False, "That is not a valid JSON file. Download the OAuth client file again from Google Cloud Console."
+    section = data.get("installed") if isinstance(data, dict) else None
+    if isinstance(data, dict) and not section and isinstance(data.get("web"), dict):
+        return False, "This is a Web client. Create the OAuth client ID again with the type **Desktop app**, and download that file."
+    if not isinstance(section, dict) or not section.get("client_id") or not section.get("client_secret"):
+        return False, "This does not look like a Google OAuth client file (a Desktop app client with client_id and client_secret)."
+    secrets, _ = youtube_paths(home, account)
+    with open(secrets, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(data, f, indent=1)
+    return True, "Client file saved. Now press Connect YouTube."
+
+
+def connect_youtube(home, account, run_flow=None):
+    """Sign in once: opens the browser on this PC for the Google sign-in and saves the token. `run_flow(secrets_path)` returns the credentials as
+    JSON text and replaces the real sign-in (tests). Returns (ok, message)."""
+    secrets, token = youtube_paths(home, account)
+    if not os.path.isfile(secrets):
+        return False, "Add the Google client file first."
+    if run_flow is None:
+        def run_flow(path):
+            from google_auth_oauthlib.flow import InstalledAppFlow
+            flow = InstalledAppFlow.from_client_secrets_file(path, YOUTUBE_SCOPES)
+            return flow.run_local_server(port=0, timeout_seconds=300).to_json()
+    try:
+        creds_json = run_flow(secrets)
+    except Exception as e:
+        return False, f"The sign-in did not finish ({' '.join(str(e).split())[:120]}). Press Connect YouTube to try again."
+    with open(token, "w", encoding="utf-8", newline="\n") as f:
+        f.write(creds_json)
+    return True, "Connected. Videos can now be published to this channel."
+
+
+def disconnect_youtube(home, account):
+    """Forget the saved sign-in of an account slot (the client file stays). Returns (ok, message)."""
+    _, token = youtube_paths(home, account)
+    if not os.path.isfile(token):
+        return False, "This account was not connected."
+    os.remove(token)
+    return True, "Disconnected. The client file is kept."
+
+
+def publish_direct(folder, kind, privacy, account, home, dry_run=False, uploader=None):
+    """Upload a finished run to the person's own YouTube channel. A case video goes up once (the tall version when there is one, as a Short), a
+    set of clips goes up clip by clip. `uploader` replaces engine.social_gen.YouTubeUploader (tests). Returns (ok, [message lines])."""
+    import glob
+    from engine.platform_limits import LIMITS, truncate_words
+    privacy = privacy if privacy in PRIVACY else "private"
+    items = []                                              # (path, title, description, tags)
+    if kind == "case":
+        videos = sorted(p for p in glob.glob(os.path.join(folder, "case_*.mp4")) if "draft" not in os.path.basename(p))
+        picked = route(videos, ["tiktok"]).get("tiktok") or []
+        if not picked:
+            return False, ["There is no video to upload."]
+        title, description = _case_title(folder)
+        tall = any(k in os.path.basename(picked[0]).lower() for k in ("9x16", "4x5"))
+        items.append((picked[0], title, description + ("\n\n#Shorts" if tall else ""), []))
+    else:
+        meta = os.path.join(folder, "metadata.json")
+        try:
+            with open(meta, encoding="utf-8") as f:
+                for it in json.load(f):
+                    path = os.path.join(folder, it.get("file", ""))
+                    if os.path.isfile(path):
+                        items.append((path, it.get("title") or "New short", it.get("description") or "", list(it.get("tags") or [])))
+        except (OSError, ValueError):
+            return False, ["This run has no clips to upload."]
+        if not items:
+            return False, ["This run has no clips to upload."]
+    if dry_run:
+        return True, [f"✅ {os.path.basename(path)} → YouTube ({privacy}) as: {truncate_words(title, LIMITS['youtube']['title'])} (preview only, nothing sent)" for path, title, _d, _t in items]
+    if home is None:
+        return False, ["Settings need the app folder to find the saved YouTube sign-in."]
+    secrets, token = youtube_paths(home, account)
+    if not youtube_status(home, account)["connected"]:
+        return False, ["YouTube is not connected: add the client file and press Connect YouTube in Settings first."]
+    if uploader is None:
+        from engine.social_gen import YouTubeUploader
+        uploader = YouTubeUploader(secrets_file=secrets, token_file=token, account=clean_account(account))
+    try:
+        if not uploader.authenticate():
+            return False, ["The saved YouTube sign-in no longer works: press Connect YouTube again."]
+    except Exception as e:
+        return False, [f"YouTube sign-in failed: {str(e)[:140]}"]
+    lines, all_ok = [], True
+    for path, title, description, tags in items:
+        try:
+            vid = uploader.upload_video(path, truncate_words(title, LIMITS["youtube"]["title"]), description, [str(t).lstrip("#") for t in tags][:15], privacy=privacy)
+        except Exception as e:
+            vid = None
+            lines.append(f"❌ {os.path.basename(path)} → YouTube: {str(e)[:140]}")
+            all_ok = False
+            continue
+        if vid:
+            lines.append(f"✅ {os.path.basename(path)} → YouTube ({privacy}): https://youtu.be/{vid}")
+        else:
+            lines.append(f"❌ {os.path.basename(path)} → YouTube: the upload did not return a video id")
+            all_ok = False
+    return all_ok, lines

@@ -56,6 +56,15 @@ PRESETS = {
         {"id": "do", "title": "What to do", "question": "What should the viewer do or remember?", "scene": "checklist"},
     ],
     # a recipe page: the dish, the steps in order, the quantities / temperatures / times, the tips
+    # a news story: sharp, attributed, balanced (every claim belongs to the person who made it; the video takes no side)
+    "news": [
+        {"id": "headline", "title": "The headline", "question": "What is the single biggest thing that happened? Write it like a sharp news explainer: short punchy sentences, active verbs, the stakes first, "
+                                                                "and who said or did it named. No hype the source does not back.", "scene": "quote"},
+        {"id": "happened", "title": "What happened", "question": "What happened, in order, with who said or did each thing (name them, quote only what the source quotes)?", "scene": "timeline"},
+        {"id": "sides", "title": "Who says what", "question": "What does each side say it wants or claims, side by side? Attribute every claim to the person or group that made it, "
+                                                              "and do not take a side.", "scene": "compare"},
+        {"id": "next", "title": "What to watch next", "question": "What is still unresolved, what could happen next, and what should the viewer watch for?", "scene": "checklist"},
+    ],
     "recipe": [
         {"id": "what", "title": "The dish", "question": "What is this dish, where is it from, and what does it taste like?", "scene": "quote"},
         {"id": "make", "title": "How to make it", "question": "What are the steps in order, with the real quantities, temperatures and times from the source?", "scene": "flow"},

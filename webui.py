@@ -671,11 +671,15 @@ def settings_remove_key(name):
     return (("✅ " if ok else "⚠️ ") + message, *settings_keys_view())
 
 
-def settings_save_uploads(auto, platforms):
-    """Save which platforms to publish to and whether finished runs are published by themselves."""
+def settings_save_uploads(auto, platforms, privacy="private", account="1"):
+    """Save which platforms to publish to, how public a direct YouTube upload is, and whether finished runs are published by themselves."""
     from shortsflow import settings
-    ready, why = settings.publish_ready(ENV_PATH)
-    prefs = settings.save_prefs(ROOT, bool(auto) and ready, platforms)
+    platforms = list(platforms or [])
+    needs_upload_post = any(p != settings.DIRECT for p in platforms)
+    ready, why = settings.publish_ready(ENV_PATH) if needs_upload_post else (True, "")
+    if settings.DIRECT in platforms and not settings.youtube_status(ROOT, account)["connected"]:
+        ready, why = False, "connect YouTube below first (the client file, then Connect YouTube)."
+    prefs = settings.save_prefs(ROOT, bool(auto) and ready, platforms, youtube_privacy=privacy, youtube_account=account)
     if auto and not ready:
         return "⚠️ Saved, but automatic publishing stays off: " + why
     if prefs["auto_publish"] and not prefs["platforms"]:
@@ -686,13 +690,51 @@ def settings_save_uploads(auto, platforms):
     return "✅ Saved. Nothing is published by itself; use the Publish box below."
 
 
+def youtube_view(account):
+    from shortsflow import settings
+    return settings.youtube_status_markdown(ROOT, account)
+
+
+def youtube_save_file(account, path):
+    """Store the Google client file chosen in the upload box. Returns (message, status)."""
+    from shortsflow import settings
+    if _remote():
+        return REMOTE_KEYS_MESSAGE, youtube_view(account)
+    if not path:
+        return "⚠️ Choose the client file first (the JSON you downloaded from Google Cloud Console).", youtube_view(account)
+    try:
+        with open(path, "rb") as f:
+            raw = f.read(200_000)
+    except OSError:
+        return "⚠️ That file could not be read.", youtube_view(account)
+    ok, message = settings.save_client_secrets(ROOT, account, raw)
+    return ("✅ " if ok else "⚠️ ") + message, youtube_view(account)
+
+
+def youtube_connect(account):
+    """Open the Google sign-in in the browser of this PC and save the result. Blocks until the sign-in is done or times out."""
+    from shortsflow import settings
+    if _remote():
+        return REMOTE_KEYS_MESSAGE, youtube_view(account)
+    ok, message = settings.connect_youtube(ROOT, account)
+    return ("✅ " if ok else "⚠️ ") + message, youtube_view(account)
+
+
+def youtube_disconnect(account):
+    from shortsflow import settings
+    if _remote():
+        return REMOTE_KEYS_MESSAGE, youtube_view(account)
+    ok, message = settings.disconnect_youtube(ROOT, account)
+    return ("✅ " if ok else "⚠️ ") + message, youtube_view(account)
+
+
 def publish_runs_update():
     from shortsflow import settings
     runs = settings.list_runs(ROOT)
     return gr.update(choices=[(label, folder + "|" + kind) for label, folder, kind in runs], value=(runs[0][1] + "|" + runs[0][2]) if runs else None)
 
 
-def publish_selected(run, platforms, preview, again):
+def publish_selected(run, platforms, preview, again, privacy="private", account="1"):
     """Publish (or preview) the chosen finished run to the chosen platforms. Returns a Markdown message."""
     from shortsflow import settings
     if not run or "|" not in run:
@@ -701,7 +743,8 @@ def publish_selected(run, platforms, preview, again):
     norm = lambda p: os.path.normcase(os.path.abspath(p))
     if not os.path.isdir(folder) or norm(os.path.dirname(folder)) != norm(os.path.join(ROOT, "sessions")):
         return "That run is not in this app's sessions folder."
-    ok, lines = settings.publish_run(folder, kind, list(platforms or []), dry_run=bool(preview), env_path=ENV_PATH, again=bool(again))
+    ok, lines = settings.publish_run(folder, kind, list(platforms or []), dry_run=bool(preview), env_path=ENV_PATH, again=bool(again),
+                                     direct={"home": ROOT, "privacy": privacy, "account": account})
     head = "Preview (nothing was sent):" if preview else ("Published:" if ok else "Not published:")
     return head + "\n\n" + "\n\n".join(lines)
 
@@ -1439,9 +1482,32 @@ def build_ui():
                         "add its key and profile name above, and choose the platforms here. **The video and its title leave this PC when you publish.** "
                         "Tall videos go to TikTok, Instagram, Pinterest and Threads, wide ones to LinkedIn, Facebook and X, and YouTube gets both.")
             _prefs = _settings.load_prefs(ROOT)
-            s_platforms = gr.CheckboxGroup(list(_PLATFORMS), value=_prefs["platforms"], label="Publish to")
+            s_platforms = gr.CheckboxGroup([(p, p) for p in _PLATFORMS] + [("YouTube direct (your own Google app: set it up below)", _settings.DIRECT)],
+                                           value=_prefs["platforms"], label="Publish to")
+            s_yt_privacy = gr.Radio(list(_settings.PRIVACY), value=_prefs["youtube_privacy"], label="A direct YouTube upload is",
+                                    info="Private is the safe start. A new Google app may be limited to private until Google reviews it.")
             s_auto = gr.Checkbox(_prefs["auto_publish"], label="Publish automatically when a run finishes (clips and case videos)",
                                  info="Off by default. A run is never published twice to the same place unless you ask for it below.")
+            with gr.Accordion("Connect YouTube directly (your own channel, no third party)", open=False):
+                gr.Markdown("Videos go **straight from this PC to your channel** through your own Google app, so nothing passes through another service. "
+                            "One-time setup: in [Google Cloud Console](https://console.cloud.google.com) make a project, enable **YouTube Data API v3**, "
+                            "set up the OAuth consent screen (add your own Google account as a test user), create an **OAuth client ID of type Desktop app**, "
+                            "and download its JSON. Then: choose the file below, **Save client file**, and **Connect YouTube** (your browser opens for the sign-in). "
+                            "The sign-in is kept in `token.json` on this PC. Google's daily quota allows only a few uploads a day, and while the app is in "
+                            "Testing mode the sign-in expires after about a week (connect again).")
+                s_yt_account = gr.Dropdown(["1", "2", "3", "4"], value=_prefs["youtube_account"], label="Channel slot",
+                                           info="Slot 1 uses client_secrets.json and token.json, slot 2 uses client_secrets_2.json and token_2.json, and so on.")
+                s_yt_status = gr.Markdown(_settings.youtube_status_markdown(ROOT, _prefs["youtube_account"]))
+                s_yt_file = gr.File(label="Google client file (the downloaded JSON)", file_types=[".json"], type="filepath", interactive=not _remote())
+                with gr.Row():
+                    s_yt_save = gr.Button("Save client file", interactive=not _remote())
+                    s_yt_connect = gr.Button("Connect YouTube (opens your browser)", variant="primary", interactive=not _remote())
+                    s_yt_disconnect = gr.Button("Disconnect", interactive=not _remote())
+                s_yt_msg = gr.Markdown(REMOTE_KEYS_MESSAGE if _remote() else "")
+                s_yt_account.change(youtube_view, [s_yt_account], s_yt_status)
+                s_yt_save.click(youtube_save_file, [s_yt_account, s_yt_file], [s_yt_msg, s_yt_status])
+                s_yt_connect.click(youtube_connect, [s_yt_account], [s_yt_msg, s_yt_status])
+                s_yt_disconnect.click(youtube_disconnect, [s_yt_account], [s_yt_msg, s_yt_status])
             s_save_up = gr.Button("Save upload settings")
             s_up_msg = gr.Markdown("")
             gr.Markdown("### Publish a finished run now")
@@ -1455,10 +1521,10 @@ def build_ui():
             s_pub_msg = gr.Markdown("")
             s_save.click(settings_save_key, [s_name, s_value], [s_msg, s_table, s_name, s_value])
             s_remove.click(settings_remove_key, [s_name], [s_msg, s_table, s_name])
-            s_save_up.click(settings_save_uploads, [s_auto, s_platforms], s_up_msg)
+            s_save_up.click(settings_save_uploads, [s_auto, s_platforms, s_yt_privacy, s_yt_account], s_up_msg)
             s_refresh.click(publish_runs_update, None, s_run)
-            s_preview.click(lambda r, p, a: publish_selected(r, p, True, a), [s_run, s_platforms, s_again], s_pub_msg)
-            s_publish.click(lambda r, p, a: publish_selected(r, p, False, a), [s_run, s_platforms, s_again], s_pub_msg)
+            s_preview.click(lambda r, p, a, v, acc: publish_selected(r, p, True, a, v, acc), [s_run, s_platforms, s_again, s_yt_privacy, s_yt_account], s_pub_msg)
+            s_publish.click(lambda r, p, a, v, acc: publish_selected(r, p, False, a, v, acc), [s_run, s_platforms, s_again, s_yt_privacy, s_yt_account], s_pub_msg)
             demo.load(publish_runs_update, None, s_run)
         mode_card = gr.Radio(web_args_modes(), value="shorts", label="What do you want to make?",
                              info="Pick one. Only the steps for that appear below.", elem_id="sf-modes")

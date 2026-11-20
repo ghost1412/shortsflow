@@ -75,9 +75,9 @@ def test_upload_profile_is_shown_in_full_but_the_key_is_masked(tmp_path):
 
 def test_prefs_default_off_round_trip_and_ignore_bad_platforms(tmp_path):
     home = str(tmp_path)
-    assert st.load_prefs(home) == {"auto_publish": False, "platforms": []}
+    assert st.load_prefs(home) == {"auto_publish": False, "platforms": [], "youtube_privacy": "private", "youtube_account": "1"}
     st.save_prefs(home, True, ["youtube", "nonsense", "tiktok"])
-    assert st.load_prefs(home) == {"auto_publish": True, "platforms": ["youtube", "tiktok"]}
+    assert st.load_prefs(home) == {"auto_publish": True, "platforms": ["youtube", "tiktok"], "youtube_privacy": "private", "youtube_account": "1"}
     (tmp_path / "settings.json").write_text("not json", encoding="utf-8")
     assert st.load_prefs(home)["auto_publish"] is False
 
