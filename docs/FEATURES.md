@@ -257,6 +257,17 @@ _Honest take: the paid tools have a nicer editor, hosted convenience and tested 
 
 ---
 
+## ⚙️ Settings: keys and uploads (browser app)
+
+Open **⚙️ Settings: keys and uploads** at the top of the app.
+
+- **Keys:** every key the app knows (Gemini, Groq, OpenAI, Anthropic, DeepSeek, OpenRouter, Hugging Face, Pexels, ElevenLabs, Upload-Post) with its status. Pick one, paste it, **Save key**; **Remove key** deletes it. A key goes into this PC's `.env` (the command line reads the same file), works from the next run, and only its last four characters are ever shown. The key box is switched off when the app is open to other devices (`--share` or a non-local host).
+- **Uploads:** publishing goes through [Upload-Post](https://upload-post.com), which holds your YouTube, TikTok, Instagram, Facebook, LinkedIn, X, Threads and Pinterest sign-ins: add its key and profile name, then tick the platforms. **The video and its title leave this PC when you publish.** Tall videos go to TikTok, Instagram, Pinterest and Threads, wide ones to LinkedIn, Facebook and X, and YouTube gets both.
+- **Publish a finished run now:** pick a case video or a set of clips, **Preview (sends nothing)** to see what would go where, then **Publish now**. A run is not published twice to the same platform unless you tick *Publish again*.
+- **Automatic:** *Publish automatically when a run finishes* is **off by default**. When on, a finished clip run or case video (not drafts) is published to the ticked platforms, once.
+
+Command line: `python -m engine.publish sessions/FOLDER/metadata.json --platforms tiktok,youtube` (same service).
+
 ## 🧾 Case explainers (`--mode CASE`)
 
 A topic and sources in, a sectioned explainer video out: what happened, how it worked, what it cost, what could change. It works for any

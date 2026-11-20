@@ -251,7 +251,7 @@ def clip_video(url, upload, clip_count, target_duration, layout, smart_crop, tig
         cmd += web_args.caption_look_args(caption_position, caption_size)
     cmd += web_args.game_args(game, game_mix, game_framing)
     cmd += web_args.template_args(visual_template, intro_animation, outro_animation, tpl_speaker, tpl_role, tpl_show, tpl_handle, tpl_headline, tpl_cta)
-    yield from _run(cmd)
+    yield from with_auto_publish(_run(cmd))
 
 
 def dub_video(upload, url, target_lang, spoken="auto", burn_captions=False, tts_provider="auto", voice="auto", original="music", resume=None, tone="faithful", delivery="neutral", llm_provider="auto", caption_size="default", caption_position="bottom"):
@@ -586,7 +586,7 @@ def case_video(topic, sources, template, theme_label, formats, no_manim, backgro
     status = "📝 Reading the sources and writing the script..."
     yield status, "", None
     log, seen = "", 0
-    for log, _videos in _run(cmd):
+    for log, _videos in with_auto_publish(_run(cmd)):
         lines = log.splitlines()
         for line in lines[seen:]:
             if line.startswith("[Log] Script:"):
@@ -597,7 +597,7 @@ def case_video(topic, sources, template, theme_label, formats, no_manim, backgro
         yield status, log, None
     videos = web_args.find_case_videos(session, draft=bool(draft))
     if videos:
-        yield f"✅ Done! {len(videos)} video{'s' if len(videos) != 1 else ''} ready below (also in {session}).", log, videos
+        yield f"✅ Done! {len(videos)} video{'s' if len(videos) != 1 else ''} ready below (also in {session})." + (" Auto-publish ran: see the log." if "[Publish]" in log else ""), log, videos
         return
     reason = next((ln.split("]", 1)[1].strip() for ln in reversed(log.splitlines()) if ln.startswith("[Error]")), "")
     yield "❌ No video was made." + (f" {reason}" if reason else " Open 'Technical details' for the reason."), log, None
@@ -636,6 +636,91 @@ def save_llm_key(provider, key):
 
 def save_groq_key(key):
     return save_llm_key("groq", key)
+
+
+# --- Settings: keys and uploads (shortsflow/settings.py holds the logic; these only connect it to the page) ---
+ENV_PATH = os.path.join(ROOT, ".env")
+REMOTE_KEYS_MESSAGE = "⚠️ Keys can only be changed on the PC that runs the app: this app is open to other devices, so the key box is switched off."
+
+
+def _remote():
+    return bool(os.environ.get("SHORTSFLOW_REMOTE"))
+
+
+def settings_keys_view():
+    """(table markdown, dropdown update) for the key list."""
+    from shortsflow import settings
+    rows = settings.key_rows(ENV_PATH)
+    return settings.rows_markdown(rows), gr.update(choices=settings.choices(rows))
+
+
+def settings_save_key(name, value):
+    """Save a key typed in the password box. Returns (message, table, dropdown, cleared box)."""
+    from shortsflow import settings
+    if _remote():
+        return (REMOTE_KEYS_MESSAGE, *settings_keys_view(), "")
+    ok, message = settings.set_key(ENV_PATH, name, value)
+    return (("✅ " if ok else "⚠️ ") + message, *settings_keys_view(), "" if ok else value)
+
+
+def settings_remove_key(name):
+    from shortsflow import settings
+    if _remote():
+        return (REMOTE_KEYS_MESSAGE, *settings_keys_view())
+    ok, message = settings.remove_key(ENV_PATH, name)
+    return (("✅ " if ok else "⚠️ ") + message, *settings_keys_view())
+
+
+def settings_save_uploads(auto, platforms):
+    """Save which platforms to publish to and whether finished runs are published by themselves."""
+    from shortsflow import settings
+    ready, why = settings.publish_ready(ENV_PATH)
+    prefs = settings.save_prefs(ROOT, bool(auto) and ready, platforms)
+    if auto and not ready:
+        return "⚠️ Saved, but automatic publishing stays off: " + why
+    if prefs["auto_publish"] and not prefs["platforms"]:
+        settings.save_prefs(ROOT, False, [])
+        return "⚠️ Choose at least one platform for automatic publishing."
+    if prefs["auto_publish"]:
+        return f"✅ Saved. Every finished case video and set of clips will be published to {', '.join(prefs['platforms'])} when its run ends."
+    return "✅ Saved. Nothing is published by itself; use the Publish box below."
+
+
+def publish_runs_update():
+    from shortsflow import settings
+    runs = settings.list_runs(ROOT)
+    return gr.update(choices=[(label, folder + "|" + kind) for label, folder, kind in runs], value=(runs[0][1] + "|" + runs[0][2]) if runs else None)
+
+
+def publish_selected(run, platforms, preview, again):
+    """Publish (or preview) the chosen finished run to the chosen platforms. Returns a Markdown message."""
+    from shortsflow import settings
+    if not run or "|" not in run:
+        return "Choose a finished run first."
+    folder, kind = run.rsplit("|", 1)
+    norm = lambda p: os.path.normcase(os.path.abspath(p))
+    if not os.path.isdir(folder) or norm(os.path.dirname(folder)) != norm(os.path.join(ROOT, "sessions")):
+        return "That run is not in this app's sessions folder."
+    ok, lines = settings.publish_run(folder, kind, list(platforms or []), dry_run=bool(preview), env_path=ENV_PATH, again=bool(again))
+    head = "Preview (nothing was sent):" if preview else ("Published:" if ok else "Not published:")
+    return head + "\n\n" + "\n\n".join(lines)
+
+
+def with_auto_publish(stream):
+    """Pass a run's (log, videos) stream through and, when auto-publish is on, publish the run that just finished and add the result to the log."""
+    import time
+    from shortsflow import settings
+    since = time.time()
+    log, last = "", None
+    for log, videos in stream:
+        last = (log, videos)
+        yield log, videos
+    try:
+        lines = settings.auto_publish(ROOT, since)
+    except Exception as e:                 # a publishing problem must never hide a finished video
+        lines = [f"Auto-publish failed: {str(e)[:160]}"]
+    if lines and last is not None:
+        yield last[0] + "\n[Publish] " + "\n[Publish] ".join(lines) + "\n", last[1]
 
 
 def _cards_from_videos(videos):
@@ -1335,6 +1420,46 @@ def build_ui():
         gr.HTML(WORDS_CSS)
         from shortsflow.timeline import DRAG_JS
         demo.load(None, None, None, js=DRAG_JS)
+        with gr.Accordion("⚙️ Settings: keys and uploads", open=False):
+            from engine.publish import PLATFORMS as _PLATFORMS
+            from shortsflow import settings as _settings
+            _rows = _settings.key_rows(ENV_PATH)
+            gr.Markdown("### Keys\nA key is saved in this PC's `.env` file, used from the next run, and only its last four characters are ever shown here. "
+                        "Most things work without any key.")
+            s_table = gr.Markdown(_settings.rows_markdown(_rows))
+            with gr.Row():
+                s_name = gr.Dropdown(_settings.choices(_rows), label="Which key", value=None, scale=2)
+                s_value = gr.Textbox(label="The key (or profile name)", type="password", placeholder="paste it here", scale=3,
+                                     interactive=not _remote())
+            with gr.Row():
+                s_save = gr.Button("Save key", variant="primary", interactive=not _remote())
+                s_remove = gr.Button("Remove key", interactive=not _remote())
+            s_msg = gr.Markdown(REMOTE_KEYS_MESSAGE if _remote() else "")
+            gr.Markdown("### Uploads\nPublishing goes through [Upload-Post](https://upload-post.com): you connect YouTube, TikTok, Instagram and the rest there once, "
+                        "add its key and profile name above, and choose the platforms here. **The video and its title leave this PC when you publish.** "
+                        "Tall videos go to TikTok, Instagram, Pinterest and Threads, wide ones to LinkedIn, Facebook and X, and YouTube gets both.")
+            _prefs = _settings.load_prefs(ROOT)
+            s_platforms = gr.CheckboxGroup(list(_PLATFORMS), value=_prefs["platforms"], label="Publish to")
+            s_auto = gr.Checkbox(_prefs["auto_publish"], label="Publish automatically when a run finishes (clips and case videos)",
+                                 info="Off by default. A run is never published twice to the same place unless you ask for it below.")
+            s_save_up = gr.Button("Save upload settings")
+            s_up_msg = gr.Markdown("")
+            gr.Markdown("### Publish a finished run now")
+            with gr.Row():
+                s_run = gr.Dropdown(label="Finished run", choices=[], scale=4)
+                s_refresh = gr.Button("Refresh the list", scale=1)
+            with gr.Row():
+                s_preview = gr.Button("Preview (sends nothing)")
+                s_publish = gr.Button("Publish now", variant="primary")
+                s_again = gr.Checkbox(False, label="Publish again even if already published")
+            s_pub_msg = gr.Markdown("")
+            s_save.click(settings_save_key, [s_name, s_value], [s_msg, s_table, s_name, s_value])
+            s_remove.click(settings_remove_key, [s_name], [s_msg, s_table, s_name])
+            s_save_up.click(settings_save_uploads, [s_auto, s_platforms], s_up_msg)
+            s_refresh.click(publish_runs_update, None, s_run)
+            s_preview.click(lambda r, p, a: publish_selected(r, p, True, a), [s_run, s_platforms, s_again], s_pub_msg)
+            s_publish.click(lambda r, p, a: publish_selected(r, p, False, a), [s_run, s_platforms, s_again], s_pub_msg)
+            demo.load(publish_runs_update, None, s_run)
         mode_card = gr.Radio(web_args_modes(), value="shorts", label="What do you want to make?",
                              info="Pick one. Only the steps for that appear below.", elem_id="sf-modes")
         with gr.Column():

@@ -79,3 +79,6 @@ docs/launch_ready/
 !assets/branding/logo-*.png
 !assets/branding/social-card.png
 .gradio/
+
+# per-person app settings (upload preferences)
+settings.json
