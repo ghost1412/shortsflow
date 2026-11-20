@@ -176,3 +176,4 @@ python gui_app.py
 6. **Verifying Work**:
    * Hot-spot files, verification steps and known issues live in **[ROADMAP.md](ROADMAP.md)**.
    * Verify rendering without an LLM key: `python scripts/offline_facts_render.py`.
+   * Changing a case-video layout (`remotion-video/src/CaseVideo.tsx`, `engine/manim_kit.py`): do not tune numbers for the example in front of you. Scene content is fitted by measurement (`AutoFit`, `captionZone`), so fix the rule, then check it with the worst case: `python scripts/layout_stress.py`, render the draft in both shapes and look for anything that touches a heading, the caption bar or another label. Also run `cd remotion-video && npx tsc --noEmit -p .` (CI does).

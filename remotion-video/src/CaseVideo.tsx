@@ -1,7 +1,7 @@
 // "CaseVideo": a sectioned explainer. Every section of the script is one scene (timeline, flow, counters, checklist, terminal, quote)
 // drawn from its on-screen labels, over a themed background, with word-timed captions. No custom fonts (a font load stalled the CI
 // renderer before), no stock footage: everything is drawn, so a run needs no key and no download.
-import React from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { AbsoluteFill, Audio, Img, Loop, OffthreadVideo, Sequence, interpolate, random, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import katex from "katex";
 import { z } from "zod";
@@ -257,7 +257,7 @@ const Timeline: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
         return (
           <React.Fragment key={i}>
             <div style={{ position: "absolute", left: x - 38 * u, top: y - 38 * u, width: 76 * u, height: 76 * u, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: i <= act ? `${accent}33` : p.bg1, border: `${4 * u}px solid ${accent}`, transform: `scale(${0.4 + 0.6 * t})`, boxShadow: glow(on, accent, u) }}><Icon name={iconFor(labels[i])} size={40 * u} color={accent} /></div>
-            <div style={{ position: "absolute", left: portrait ? x + 70 * u : x - 230 * u, top: portrait ? y - 34 * u : above ? y - 200 * u : y + 64 * u, width: portrait ? aw - x - 70 * u : 460 * u, textAlign: portrait ? "left" : "center", fontFamily: FONT, fontSize: 44 * u, fontWeight: 700, lineHeight: 1.15, color: i <= act ? p.text : p.dim, opacity: t, transformOrigin: portrait ? "left center" : "center", transform: `translateY(${(1 - t) * (above ? 30 : -30) * u}px) scale(${on ? 1.06 : 1})` }}>{l}</div>
+            <div style={{ position: "absolute", left: portrait ? x + 70 * u : x - 230 * u, ...(portrait ? { top: y - 34 * u } : above ? { bottom: ah - y + 64 * u } : { top: y + 64 * u }), width: portrait ? aw - x - 70 * u : 460 * u, textAlign: portrait ? "left" : "center", fontFamily: FONT, fontSize: 44 * u, fontWeight: 700, lineHeight: 1.15, color: i <= act ? p.text : p.dim, opacity: t, transformOrigin: portrait ? "left center" : "center", transform: `translateY(${(1 - t) * (above ? 30 : -30) * u}px) scale(${on ? 1.06 : 1})` }}>{l}</div>
           </React.Fragment>
         );
       })}
@@ -377,7 +377,7 @@ const Checklist: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) =>
         const tick = interpolate(frame - delay - 8, [0, 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
         const on = i === act;
         return (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 30 * u, background: p.card, backdropFilter: p.blur, border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 20 * u, padding: `${(labels.length >= 3 ? 17 : 26) * u}px ${32 * u}px`, opacity: t, transform: `translateX(${(1 - t) * -80 * u}px) scale(${on ? 1.03 : 1})`, transformOrigin: "left center", boxShadow: glow(on, accent, u) }}>
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 30 * u, background: p.card, backdropFilter: p.blur, border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 20 * u, padding: `${26 * u}px ${32 * u}px`, opacity: t, transform: `translateX(${(1 - t) * -80 * u}px) scale(${on ? 1.03 : 1})`, transformOrigin: "left center", boxShadow: glow(on, accent, u) }}>
             <div style={{ width: 58 * u, height: 58 * u, borderRadius: 14 * u, border: `3px solid ${accent}`, background: tick > 0.5 ? `${accent}33` : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 44 * u, fontFamily: FONT, fontWeight: 800, flexShrink: 0 }}>
               <span style={{ opacity: tick, transform: `scale(${0.4 + 0.6 * tick})` }}>✓</span>
             </div>
@@ -583,7 +583,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
           <AbsoluteFill style={{ background: "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)" }} />
         </AbsoluteFill>
       )}
-      <AbsoluteFill style={{ padding: whole ? `${50 * u}px ${50 * u}px ${Math.max(270 * u, h * (portrait ? 0.2 : 0.15))}px` : `${80 * u}px ${70 * u}px ${Math.max(300 * u, h * (portrait ? 0.22 : 0.16))}px`, transform: `scale(${whole ? 1 : push})`, transformOrigin: "50% 45%" }}>
+      <AbsoluteFill style={{ padding: whole ? `${50 * u}px ${50 * u}px ${Math.max(270 * u, h * (portrait ? 0.2 : 0.15))}px` : `${80 * u}px ${70 * u}px ${Math.max(300 * u, h * (portrait ? 0.22 : 0.16), captionZone(u, h))}px`, transform: `scale(${whole ? 1 : push})`, transformOrigin: "50% 45%" }}>
         {!whole && <div style={{ marginBottom: 36 * u }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 24 * u }}>
             <div style={{ fontFamily: MONO, fontSize: 34 * u, color: accent, letterSpacing: 2 }}>{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div>
@@ -599,7 +599,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
               <OffthreadVideo src={asset(section.clip)} muted transparent playbackRate={section.clipRate} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
           ) : (
-            <View labels={section.labels.length ? section.labels : [section.title]} cues={section.cues} p={p} accent={accent} frames={frames} />
+            <AutoFit><View labels={section.labels.length ? section.labels : [section.title]} cues={section.cues} p={p} accent={accent} frames={frames} /></AutoFit>
           )}
         </div>
       </AbsoluteFill>
@@ -643,6 +643,33 @@ const Cover: React.FC<{ title: string; p: Pal; accent: string; frames: number; s
   );
 };
 
+// The caption box sits `captionPad` above the bottom edge and can wrap to two lines of 62-unit type inside a padded pill. The scenes reserve
+// exactly that much (captionZone), so a long caption can never reach into a scene, whatever its content.
+const captionPad = (u: number, h: number) => Math.max(150 * u, h * 0.09);
+const captionZone = (u: number, h: number) => captionPad(u, h) + (2 * 62 * 1.25 + 2 * 22 + 28) * u;
+
+// Scales its content down (never up) so that it fits the room it is given: the natural size of the content is measured, so this holds for any
+// number of items, any label length and any video shape. A floor keeps the type readable.
+const AutoFit: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const outer = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const [k, setK] = useState(1);
+  useLayoutEffect(() => {
+    const o = outer.current, i = inner.current;
+    if (!o || !i) return;
+    const fit = Math.min(1, o.clientHeight / Math.max(1, i.offsetHeight), o.clientWidth / Math.max(1, i.offsetWidth));
+    const next = Math.max(0.3, fit);          // a floor keeps absurd content from vanishing; real content (a handful of short labels) is never near it
+    if (Math.abs(next - k) > 0.004) setK(next);
+  });
+  return (
+    <div ref={outer} style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div ref={inner} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", transform: `scale(${k})`, transformOrigin: "center center" }}>
+        {children}
+      </div>
+    </div>
+  );
+};
+
 const Captions: React.FC<{ words: Props["words"]; accent: string; pill: string }> = ({ words, accent, pill }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -660,7 +687,7 @@ const Captions: React.FC<{ words: Props["words"]; accent: string; pill: string }
   const chunk = chunks.find((c) => now >= c[0].start - 0.05 && now <= c[c.length - 1].end + 0.25);
   if (!chunk) return null;
   return (
-    <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "center", paddingBottom: Math.max(150 * u, h * 0.09) }}>
+    <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "center", paddingBottom: captionPad(u, h) }}>
       <div style={{ background: pill, borderRadius: 22 * u, padding: `${22 * u}px ${38 * u}px`, maxWidth: "88%", textAlign: "center" }}>
         {chunk.map((w, i) => {
           const active = now >= w.start && now <= w.end + 0.05;

@@ -2,6 +2,10 @@
 
 Release notes for the `shortsflow` package and the Windows installer. Newest first.
 
+## Unreleased
+
+- Case video layout: every scene is **measured and fitted** into the room between its heading and the caption bar (`AutoFit`), and the caption zone is one shared definition (`captionZone`), so a long caption or long labels can no longer overlap a scene whatever the topic; timeline labels grow away from the line; landscape animations use a wider panel and a two-row chain; a hook line on the cover. `scripts/layout_stress.py` writes a worst-case script to check a layout change against.
+
 ## 0.9.1 (2026-11-20)
 
 **Highlights:** a Settings page in the browser app (keys, publishing), the animated explainer mode `--mode ANIMATE`, a `recipe` template, research papers and PDFs read properly, and a local-model fallback when the cloud text model is rate-limited.
