@@ -184,3 +184,53 @@ def test_pdf_text_joins_a_decimal_split_by_a_stray_space():
         pages = [Page()]
     assert "2.14" in m.pdf_text(b"x", reader=lambda f: Doc()) and "0.143%" in m.pdf_text(b"x", reader=lambda f: Doc())
     assert "2019. 5 labs" in m.pdf_text(b"x", reader=lambda f: Doc())
+
+
+def test_a_page_that_is_empty_until_its_scripts_run_is_read_through_the_browser_and_a_short_static_page_is_not():
+    from engine import case_study as cs
+    shell = "<html><head><script src='app.js'></script></head><body><div id='root'></div></body></html>"
+    rendered = "<html><body><main>" + "".join(f"<li>Base hero Health increased from {100 + i} to {200 + i} in this patch</li>" for i in range(12)) + "</main></body></html>"
+    seen = []
+    sources, skipped = cs.gather_sources(["https://example.com/app"], fetch=lambda u: shell, render=lambda u: seen.append(u) or rendered)
+    assert seen == ["https://example.com/app"] and not skipped and "Base hero Health increased from 100 to 200" in sources[0]["text"]
+    # a short page that has a script but real text is read as it is: no browser is started
+    seen.clear()
+    short = "<html><script>x=1</script><p>Three short sentences about a topic that has enough words to be read as it stands now.</p></html>"
+    cs.gather_sources(["https://example.com/short"], fetch=lambda u: short, render=lambda u: seen.append(u) or rendered)
+    assert seen == []
+
+
+def test_readable_text_drops_menus_and_numbers_but_keeps_statements_and_bullets():
+    from engine import case_study as cs
+    html = ("<nav><a>Home</a> <a>News and many other links here today</a></nav><ul><li>Home</li><li>Heroes</li></ul>"
+            "<div>2d 7.22c 7.22b 7.22 7.21d 7.21c 7.21b 7.21</div>"
+            "<main><h1>Patch 7.42 notes for everyone who plays</h1>"
+            + "".join(f"<li>Base hero Health increased from {100 + i} to {200 + i}</li>" for i in range(10)) + "</main><footer>Terms of use and privacy policy of this website</footer>")
+    text = cs._readable(html)
+    assert "Base hero Health increased from 100 to 200" in text and "Patch 7.42 notes" in text
+    assert "Home" not in text and "7.22c" not in text and "Terms of use" not in text and "News and many" not in text
+
+
+def test_the_browser_command_for_a_page_and_its_failures():
+    from engine import case_sources as cso
+    import pytest
+    ran = []
+
+    def run(cmd, limit):
+        ran.append(cmd)
+        return "<html>" + "x " * 200 + "</html>"
+    out = cso.rendered_html("https://example.com/p", browser=r"C:\x\chrome-headless-shell.exe", run=run)
+    assert "--dump-dom" in ran[0] and "https://example.com/p" in ran[0] and "--headless=new" not in ran[0] and any(a.startswith("--virtual-time-budget") for a in ran[0])
+    cso.rendered_html("https://example.com/p", browser=r"C:\Chrome\chrome.exe", run=run)
+    assert "--headless=new" in ran[1]
+    with pytest.raises(cso.SourceError):
+        cso.rendered_html("https://example.com/p", browser=r"C:\x\chrome-headless-shell.exe", run=lambda c, t: "<html></html>")
+
+
+def test_no_browser_at_all_is_a_clear_skip_reason(monkeypatch):
+    from engine import case_sources as cso
+    import pytest
+    monkeypatch.setattr(cso, "find_browser", lambda: None)
+    with pytest.raises(cso.SourceError) as e:
+        cso.rendered_html("https://example.com/p")
+    assert "no browser was found" in str(e.value)

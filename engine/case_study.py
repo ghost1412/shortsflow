@@ -108,7 +108,32 @@ def _paragraphs(html):
     return text if len(found) >= 3 and len(text) > 400 else None
 
 
+_DROP_BLOCKS = r"script|style|noscript|svg|head|nav|header|footer|aside|form|select|button|dialog"
+_BLOCK_TAGS = re.compile(r"(?i)</?(?:p|div|li|ul|ol|tr|td|th|h[1-6]|section|article|main|br|table|dd|dt|blockquote|pre)\b[^>]*>")
+
+
+def _readable(html):
+    """The running text of a page as sentences-and-bullets, menus left out: every block (paragraph, list item, heading, table cell) is one line, and a
+    line that is too short to be a statement, or is mostly numbers (a menu, a list of version numbers, a language picker), is dropped. Returns ''
+    when nothing is left."""
+    import html as htmllib
+    body = re.sub(r"(?is)<(" + _DROP_BLOCKS + r")\b.*?</\1>", " ", html)
+    text = htmllib.unescape(re.sub(r"(?s)<[^>]+>", " ", _BLOCK_TAGS.sub("\n", body)))
+    kept = []
+    for line in text.split("\n"):
+        words = line.split()
+        if len(words) < 4:
+            continue
+        if sum(1 for w in words if any(c.isdigit() for c in w)) / len(words) > 0.6:
+            continue
+        kept.append(" ".join(words))
+    return " ".join(x if x[-1] in ".!?:;" else x + " ." for x in kept)
+
+
 def _plain(html):
+    readable = _readable(html)
+    if len(readable) >= 400:                       # a page with real content: that content, without its menus and footers
+        return readable
     paragraphs = _paragraphs(html)
     if paragraphs:
         html = paragraphs
@@ -134,7 +159,7 @@ def default_fetch_raw(url, timeout=30):
     return r.content
 
 
-def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None, audio=None, transcribe=None, trim=None):
+def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None, audio=None, transcribe=None, trim=None, render=None):
     """[{"id": "S1", "ref", "text"}] from up to three items: a web link (its paragraphs), a PDF link or file, a YouTube link (its captions), a
     caption file (.srt, .vtt), a text file, or pasted text. Items that cannot be read are skipped (the second return value lists them with the
     reason). A YouTube video without captions, and an audio or video file, are listened to by the speech model on this PC (minutes, first 40 minutes
@@ -164,7 +189,11 @@ def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None
                     if str(text).startswith("%PDF"):           # a PDF behind a link that does not end in .pdf
                         text = case_sources.pdf_text(fetch_raw(item))
                     else:
+                        scripted = "<script" in str(text).lower()
                         text = _plain(text)
+                        if len(text) < 40 and scripted:        # a page that would be skipped as empty but runs scripts: let a headless browser on this PC build it
+                            print("[Log] This page has almost no text until its scripts run: opening it in a headless browser on this PC...")
+                            text = _plain((render or case_sources.rendered_html)(item))
                 ref = item
             elif os.path.isfile(item) and case_sources.is_audio_or_video_file(item):
                 import tempfile
@@ -182,6 +211,11 @@ def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None
             continue
         sources.append({"id": f"S{len(sources) + 1}", "ref": ref, "text": text[:MAX_SOURCE_CHARS]})
     return sources, skipped
+
+
+DIAGRAM_CHOICE = ("Choose the diagram type by the story: parties talking back and forth (a client and a server, an attacker and a victim, a protocol, a handshake, "
+                  "a supply chain, who sends what to whom) is a sequenceDiagram with at most 4 participants and 6 messages; one chain of steps is a flowchart; "
+                  "a life cycle is a stateDiagram-v2; related ideas are a mindmap.")
 
 
 def build_prompt(topic, template, sources, layouts="auto"):
@@ -216,7 +250,8 @@ def build_prompt(topic, template, sources, layouts="auto"):
               '"\\\\frac{a}{b}"), built up step by step; it must come from the sources.',
               'For a section whose layout is diagram, add the key "diagram" with Mermaid source: the first line names the type (flowchart LR, sequenceDiagram, '
               'stateDiagram-v2, mindmap, timeline or pie); at most 6 nodes; labels of 1 to 4 words; every number and name taken from the sources; no styling lines '
-              '(classDef, style, linkStyle, init directives), no HTML. Mermaid places everything itself; a flowchart direction is changed to fit the video shape.',
+              '(classDef, style, linkStyle, init directives), no HTML. Mermaid places everything itself; a flowchart direction is changed to fit the video shape. '
+              + DIAGRAM_CHOICE,
               'For a section whose layout is animation, on_screen may be an empty list: the whole section is one animated picture, so write the narration '
               'as a walk through the idea in order, each sentence matching one thing that appears on screen.']
     return "\n".join(parts)
@@ -333,6 +368,7 @@ def resolve_diagram(raw, source_text, ask, title, check=None):
                 if ok:
                     return code
                 problem = "Mermaid could not read it: " + reason
+        print(f"[Log] Diagram for '{str(title)[:40]}', try {attempt}: {problem[:200]}")
         if attempt == 2:
             break
         try:
@@ -350,7 +386,7 @@ def diagram_for(section, topic, ask, source_text=None, check=None):
     nl = "\n"
     reply = ask("Draw ONE Mermaid diagram that explains this part of an explainer video about: " + str(topic) + nl + nl + "Section: " + str(section.get("title", ""))
                 + nl + "What the narrator says over it: " + str(section.get("narration", "")) + nl + "Key labels: " + labels
-                + nl + nl + "Rules: the first line names the type (flowchart LR, sequenceDiagram, stateDiagram-v2, mindmap or timeline); at most 6 nodes; labels of 1 to 4 words; "
+                + nl + nl + DIAGRAM_CHOICE + " Rules: the first line names the type (flowchart LR, sequenceDiagram, stateDiagram-v2, mindmap or timeline); at most 6 nodes; labels of 1 to 4 words; "
                 "every number and name taken from the narration above; no styling lines (classDef, style, linkStyle, init directives), no HTML. "
                 "Return ONLY the Mermaid source, no explanation, no code fence.")
     return resolve_diagram(reply, source_text, ask, section.get("title", ""), check)
@@ -400,6 +436,7 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
             if not diagram:                        # the model picked the layout but wrote no usable diagram: ask for one from the section's own text
                 diagram = diagram_for({"title": sec["title"], "narration": narration, "on_screen": labels}, topic, ask, grounding, check_diagram)
             if not diagram:
+                print(f"[Warning] No usable diagram for '{sec['title']}'; it uses the plain flow (Manim animation) instead.")
                 scene = "flow"                     # the diagram could not be made valid and grounded: the plain row of steps shows the labels
         previous = scene
         if scene == "counters":

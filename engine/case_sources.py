@@ -6,6 +6,8 @@ a "skipped" line). Network and PDF access are injectable, so the tests run offli
 """
 import os
 import re
+import shutil
+import subprocess
 
 MAX_PDF_PAGES = 60
 
@@ -184,3 +186,50 @@ def read_file(path):
     with open(path, encoding="utf-8", errors="replace") as f:
         raw = f.read()
     return subtitle_text(raw) if ext in (".srt", ".vtt") else raw
+
+
+# ---- pages that only show their text after JavaScript has run (many news and patch-note sites)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def find_browser():
+    """The path of a Chrome that can dump a page headlessly: the one Remotion downloaded for the video renderer, else a Chrome, Chromium or Edge on
+    this PC. None when there is none."""
+    import glob
+    for pattern in (os.path.join(ROOT, "remotion-video", "node_modules", ".remotion", "chrome-headless-shell", "*", "*", "chrome-headless-shell*"),
+                    os.path.join(os.path.expanduser("~"), ".shortsflow", "remotion-video", "node_modules", ".remotion", "chrome-headless-shell", "*", "*", "chrome-headless-shell*")):
+        for path in sorted(glob.glob(pattern)):
+            if os.path.isfile(path) and not path.endswith((".zip", ".txt")):
+                return path
+    for name in ("chrome", "google-chrome", "chromium", "chromium-browser", "msedge"):
+        found = shutil.which(name)
+        if found:
+            return found
+    for path in (r"C:\Program Files\Google\Chrome\Application\chrome.exe", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                 r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"):
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def rendered_html(url, browser=None, run=None, timeout=75, budget_ms=15000):
+    """The HTML of a page after its scripts have run, from a headless browser on this PC (the page is fetched from here, as a normal request would).
+    `run(cmd, timeout)` returns the browser's output and replaces subprocess (tests). Raises SourceError when there is no browser or it fails."""
+    browser = browser or find_browser()
+    if not browser:
+        raise SourceError("this page builds its text with JavaScript and no browser was found to run it (the video renderer's Chrome is installed with `shortsflow init`)")
+    shell = "headless-shell" in os.path.basename(browser).lower()
+    cmd = [browser] + ([] if shell else ["--headless=new"]) + ["--disable-gpu", f"--virtual-time-budget={int(budget_ms)}", "--dump-dom", url]
+    if os.name != "nt" and hasattr(os, "geteuid") and os.geteuid() == 0:
+        cmd.insert(1, "--no-sandbox")                  # Chrome refuses to start as root without it (containers)
+    if run is None:
+        def run(command, limit):
+            res = subprocess.run(command, capture_output=True, timeout=limit)
+            return res.stdout.decode("utf-8", errors="replace")
+    try:
+        out = run(cmd, timeout)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise SourceError(f"the browser could not open the page ({str(e)[:80]})")
+    if len(out.strip()) < 200:
+        raise SourceError("the browser opened the page but it stayed empty")
+    return out

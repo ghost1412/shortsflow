@@ -171,3 +171,23 @@ def test_when_the_model_picks_the_layout_but_writes_no_diagram_one_is_asked_for_
     how = [s for s in script["sections"] if s["id"] == "how"][0]
     assert how["scene"] == "diagram" and how["diagram"] == FLOW
     assert any("Draw ONE Mermaid diagram" in a and "crafted string is sent" in a for a in asked[1:])
+
+
+def test_clean_unwraps_a_diagram_the_model_put_inside_json():
+    wrapped = '{\n  "mermaid": "flowchart LR\\n    A[One] --> B[Two]\\n    B --> C[Three]"\n}'
+    assert cm.clean(wrapped) == "flowchart LR\n    A[One] --> B[Two]\n    B --> C[Three]"
+    nested = '{"title": "x", "diagram": {"code": "sequenceDiagram\\n A->>B: hi"}}'
+    assert cm.clean(nested) == "sequenceDiagram\n A->>B: hi"
+    assert cm.clean('"flowchart TD\\n A-->B"') == "flowchart TD\n A-->B"                 # a JSON string
+    assert cm.clean('{"scene": "timeline", "title": "x"}') == ""                      # a scene name is not a diagram: a type word alone is refused
+    assert cm.clean('{"note": "no diagram in here"}') == "" and cm.clean("[1, 2, 3]") == ""
+    assert cm.clean("flowchart TD\n A-->B") == "flowchart TD\n A-->B"                  # plain text is unchanged
+
+
+def test_a_failed_diagram_says_why_in_the_log(capsys):
+    t = cs.load_template("case")
+    rows = [{"id": s["id"], "narration": "A sentence.", "on_screen": ["a", "b"], "scene": s["scene"]} for s in t]
+    reply = json.dumps({"title": "T", "sections": rows})
+    cs.write_script("T", t, [], lambda p: reply, check_diagram=lambda c: (False, "nope"))
+    out = capsys.readouterr().out
+    assert "[Log] Diagram for" in out and "No usable diagram for" in out and "plain flow" in out

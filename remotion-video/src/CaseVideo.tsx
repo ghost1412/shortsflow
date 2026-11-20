@@ -550,7 +550,8 @@ const MermaidDiagram: React.FC<{ code: string; p: Pal; accent: string; frames: n
         mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", fontFamily: p.font,
           // the type is as big as the whole drawing can be scaled: a tall frame wants wide boxes with one line of text (a short chain), a wide frame narrow boxes with wrapped text (a short row)
           flowchart: { useMaxWidth: false, htmlLabels: true, curve: "basis", padding: 24, nodeSpacing: portrait ? 60 : 52, rankSpacing: portrait ? 64 : 54, wrappingWidth: portrait ? 560 : 170 },
-          sequence: { useMaxWidth: false, mirrorActors: false, actorMargin: 90, messageMargin: 50, width: 200, height: 72, boxMargin: 14, noteMargin: 16 },
+          sequence: { useMaxWidth: false, mirrorActors: false, actorMargin: 100, messageMargin: 26, width: 300, height: 54, boxMargin: 8, noteMargin: 12, actorFontSize: 40, messageFontSize: 40, noteFontSize: 40 },
+          fontSize: 30,
           themeVariables: { fontFamily: p.font, fontSize: "30px" } });
         const out = await mermaid.render("sf-mmd-" + Math.random().toString(36).slice(2, 9), code);
         if (alive) setSvg(out.svg);
@@ -575,7 +576,8 @@ const MermaidDiagram: React.FC<{ code: string; p: Pal; accent: string; frames: n
     }
     const [nx, ny, nw, nh] = el.dataset.nat.split(" ").map(Number);
     el.style.maxWidth = "none";
-    const nodes = Array.from(el.querySelectorAll<SVGGElement>("g.node, g.actor-man, rect.actor-top, g.mindmap-node, g.statediagram-state"));
+    const isSequence = !!el.querySelector("rect.actor-top");
+    const nodes = Array.from(el.querySelectorAll<SVGGElement>("g.node, g.mindmap-node, g.statediagram-state"));
     const start = 0.8 * fps, end = Math.max(start + fps, frames - 2.5 * fps);
     const at = (i: number) => start + ((end - start) * i) / Math.max(1, nodes.length - 1);
     const shown = (i: number) => interpolate(frame, [at(i), at(i) + 10], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
@@ -612,11 +614,25 @@ const MermaidDiagram: React.FC<{ code: string; p: Pal; accent: string; frames: n
       el.style.height = `${box.clientHeight}px`;
     } else {
       el.setAttribute("viewBox", `${nx} ${ny} ${nw} ${nh}`);
-      const k = Math.min(box.clientWidth / nw, box.clientHeight / nh, MAX_GROW);
+      const k = Math.min(box.clientWidth / nw, box.clientHeight / nh, isSequence ? 3 : MAX_GROW);
       el.style.width = `${nw * k}px`;
       el.style.height = `${nh * k}px`;
     }
 
+    // a sequence diagram: the participants stay on screen, the messages appear one at a time (each is its text followed by its line), the one being told brightest
+    if (isSequence) {
+      const parts = Array.from(el.querySelectorAll<SVGElement>("text.messageText, line.messageLine0, line.messageLine1, path.messageLine0, path.messageLine1"));
+      const steps: SVGElement[][] = [];
+      parts.forEach((q) => { if (q.matches("text.messageText") || steps.length === 0) steps.push([q]); else steps[steps.length - 1].push(q); });
+      if (steps.length > 1) {
+        const stepAt = (i: number) => start + ((end - start) * i) / Math.max(1, steps.length - 1);
+        const stepShown = (i: number) => interpolate(frame, [stepAt(i), stepAt(i) + 10], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+        let now = -1;
+        steps.forEach((_, i) => { if (stepShown(i) > 0.5) now = i; });
+        steps.forEach((group, i) => group.forEach((q) => { q.style.opacity = String(stepShown(i) * (i === now ? 1 : 0.72)); }));
+      }
+      return;
+    }
     // reveal: nodes in the order of the drawing, evenly across the section; an arrow appears with the node it points to
     if (nodes.length < 2) return;
     // Mermaid prefixes every id with a random render id ("t1eag7m-flowchart-A-0", "t1eag7m-L_A_B_0"), so names are read from the end of the id
@@ -656,8 +672,8 @@ const MermaidDiagram: React.FC<{ code: string; p: Pal; accent: string; frames: n
     .sf-mmd .edgeLabel rect, .sf-mmd .edgeLabel .background { fill: transparent !important; opacity: 0 !important; }
     .sf-mmd .cluster rect { fill: ${p.light ? "#00000010" : "#ffffff0a"} !important; stroke: ${p.dim} !important; rx: 18px; }
     .sf-mmd rect.actor { fill: ${cardFill} !important; stroke: ${accent} !important; stroke-width: 3px !important; rx: 14px; }
-    .sf-mmd text.actor, .sf-mmd text.actor > tspan { fill: ${p.text} !important; font-size: 28px; }
-    .sf-mmd .messageText { fill: ${p.text} !important; font-size: 24px; }
+    .sf-mmd text.actor, .sf-mmd text.actor > tspan { fill: ${p.text} !important; }
+    .sf-mmd .messageText { fill: ${p.text} !important; stroke: none !important; }
     .sf-mmd .actor-line { stroke: ${p.dim} !important; stroke-width: 2px !important; }
     .sf-mmd text.noteText, .sf-mmd .noteText > tspan { fill: #0b1f33 !important; }`;
   return (

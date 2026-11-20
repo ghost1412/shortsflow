@@ -26,10 +26,37 @@ MAX_CHARS = 1800
 MAX_NODES = 6           # more than this and the type is too small to read on a phone
 
 
+def _unwrap_json(text):
+    """The diagram inside a JSON answer such as {"mermaid": "flowchart LR\n A-->B"}. The model sometimes answers in JSON because the chat it is
+    asked in says "raw JSON only". The text itself when it is not JSON or holds no diagram."""
+    if not text.lstrip().startswith(("{", "[", '"')):
+        return text
+    import json
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return text
+
+    def strings(x):
+        if isinstance(x, str):
+            yield x
+        elif isinstance(x, dict):
+            for v in x.values():
+                yield from strings(v)
+        elif isinstance(x, list):
+            for v in x:
+                yield from strings(v)
+    pattern = r"(?m)^\s*(" + "|".join(re.escape(t) for t in TYPES) + r")\b"
+    for value in strings(data):
+        if re.search(pattern, value) and len([ln for ln in value.split("\n") if ln.strip()]) >= 2:       # a type word alone ("timeline" is also a scene name) is not a diagram
+            return value
+    return text
+
+
 def clean(text):
     """The Mermaid source in a model's answer: the content of a ``` fence when there is one, else the text from the first line that starts a
     known diagram type. Returns '' when none is found."""
-    text = str(text or "").strip()
+    text = _unwrap_json(str(text or "").strip())
     fence = re.search(r"```(?:mermaid)?[ \t]*\r?\n(.*?)```", text, re.S)
     if fence:
         text = fence.group(1).strip()
