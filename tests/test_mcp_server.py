@@ -28,7 +28,8 @@ def test_handshake_and_tool_list_work_from_any_working_directory(tmp_path):
     info = by_id[1]["result"]["serverInfo"]
     assert info["version"] == __version__                     # not a stale hard-coded number
     tools = {t["name"] for t in by_id[2]["result"]["tools"]}
-    assert tools == {"generate_short", "extract_clips", "generate_social_package", "get_render_status", "list_supported_modes"}
+    assert tools == {"generate_short", "extract_clips", "generate_social_package", "get_render_status", "list_supported_modes",
+                     "create_explainer", "dub_video", "list_videos", "publish_video"}
     assert all(t["inputSchema"]["type"] == "object" for t in by_id[2]["result"]["tools"])
 
 
@@ -76,7 +77,7 @@ def test_a_minimal_container_still_answers_introspection_and_explains_rendering(
                                                                               "clientInfo": {"name": "t", "version": "1"}}})
         assert recv()["result"]["serverInfo"]["version"] == __version__
         send({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
-        assert len(recv()["result"]["tools"]) == 5
+        assert len(recv()["result"]["tools"]) == 9
         send({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "generate_short", "arguments": {"mode": "FACTS"}}})
         job_id = json.loads(recv()["result"]["content"][0]["text"])["job_id"]
         time.sleep(1.5)
@@ -124,7 +125,8 @@ def test_every_tool_and_parameter_is_described():
             assert prop.get("description"), f"{tool['name']}.{name} has no description"
         for name in tool["inputSchema"].get("required", []):
             assert name in tool["inputSchema"]["properties"]
-    assert "Dubbing" not in json.dumps(mcp_server.TOOLS_DEFINITIONS)   # not implemented, must not be advertised
+    names = {t["name"] for t in mcp_server.TOOLS_DEFINITIONS}
+    assert {"create_explainer", "dub_video", "list_videos", "publish_video"} <= names
 
 
 def test_list_supported_modes_matches_the_schema():
@@ -132,3 +134,66 @@ def test_list_supported_modes_matches_the_schema():
     info = json.loads(reply["content"][0]["text"])
     assert info["tts_providers"] == mcp_server.TTS_PROVIDERS and info["content_modes"] == mcp_server.CONTENT_MODES
     assert "edge-tts" not in info["tts_providers"] and "chime" not in info["sfx_presets"]
+
+
+def test_the_explainer_dub_and_publish_lists_match_the_pipeline():
+    from engine import case_options, publish
+    assert mcp_server.EXPLAINER_TEMPLATES == list(case_options.TEMPLATES) and mcp_server.EXPLAINER_THEMES == list(case_options.THEMES)
+    assert mcp_server.PUBLISH_PLATFORMS == list(publish.PLATFORMS) + ["youtube_direct"]
+
+
+def _capture_job(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(mcp_server, "run_main_command", lambda job_id, args: seen.update(args=args))
+    monkeypatch.setattr(mcp_server.threading, "Thread", lambda target, args: type("T", (), {"start": lambda self: target(*args)})())
+    return seen
+
+
+def test_create_explainer_builds_the_case_command_and_asks_for_a_source(monkeypatch):
+    seen = _capture_job(monkeypatch)
+    bad = mcp_server.handle_tool_call("create_explainer", {"topic": "T"})
+    assert bad["isError"] and "source" in bad["content"][0]["text"]
+    ok = mcp_server.handle_tool_call("create_explainer", {"topic": "How X works", "sources": ["https://example.com/a"], "template": "postmortem",
+                                                          "theme": "neon", "formats": "9:16", "draft": True})
+    assert json.loads(ok["content"][0]["text"])["status"] == "processing"
+    a = seen["args"]
+    assert a[:4] == ["--mode", "CASE", "--prompt", "How X works"] and ["--sources", "https://example.com/a"] == a[4:6]
+    assert "theme=neon" in a and "template=postmortem" in a and "formats=9:16" in a and "draft" in a
+    mcp_server.handle_tool_call("create_explainer", {"topic": "Binary search", "kind": "animate"})
+    assert seen["args"][:2] == ["--mode", "ANIMATE"] and "--sources" not in seen["args"]
+
+
+def test_dub_video_needs_a_language_from_the_list(monkeypatch):
+    seen = _capture_job(monkeypatch)
+    assert mcp_server.handle_tool_call("dub_video", {"source_video": "a.mp4", "target_lang": "xx"})["isError"]
+    mcp_server.handle_tool_call("dub_video", {"source_video": "a.mp4", "target_lang": "es", "dub_captions": True, "dub_voice": "male"})
+    assert seen["args"] == ["--mode", "DUB", "--source_video", "a.mp4", "--target_lang", "es", "--dub_captions", "--dub_voice", "male"]
+
+
+def test_publish_video_previews_by_default_and_refuses_paths_outside_sessions(monkeypatch, tmp_path):
+    monkeypatch.setattr(mcp_server, "ROOT_DIR", str(tmp_path))
+    folder = tmp_path / "sessions" / "case_a"
+    folder.mkdir(parents=True)
+    video = folder / "case_9x16.mp4"
+    video.write_bytes(b"x" * 100)
+    outside = tmp_path / "other.mp4"
+    outside.write_bytes(b"x" * 100)
+    assert mcp_server.handle_tool_call("publish_video", {"path": str(outside), "platforms": ["tiktok"]})["isError"]
+    assert mcp_server.handle_tool_call("publish_video", {"path": str(video), "platforms": []})["isError"]
+    calls = []
+    from shortsflow import settings
+    monkeypatch.setattr(settings, "publish_file", lambda path, *a, **k: calls.append(k) or (True, ["ok"]))
+    out = json.loads(mcp_server.handle_tool_call("publish_video", {"path": str(video), "platforms": ["tiktok"]})["content"][0]["text"])
+    assert out["dry_run"] is True and out["sent"] is False and calls[-1]["dry_run"] is True
+    out = json.loads(mcp_server.handle_tool_call("publish_video", {"path": str(video), "platforms": ["tiktok"], "dry_run": False})["content"][0]["text"])
+    assert out["dry_run"] is False and out["sent"] is True
+
+
+def test_list_videos_reports_shape_and_where_it_was_published(monkeypatch, tmp_path):
+    monkeypatch.setattr(mcp_server, "ROOT_DIR", str(tmp_path))
+    folder = tmp_path / "sessions" / "case_a"
+    folder.mkdir(parents=True)
+    (folder / "case_9x16.mp4").write_bytes(b"x" * 60000)
+    out = json.loads(mcp_server.handle_tool_call("list_videos", {"shape": "tall"})["content"][0]["text"])
+    assert out["count"] == 1 and out["videos"][0]["shape"] == "tall" and out["videos"][0]["published_to"] == []
+    assert json.loads(mcp_server.handle_tool_call("list_videos", {"shape": "wide"})["content"][0]["text"])["count"] == 0

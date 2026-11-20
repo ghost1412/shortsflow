@@ -410,6 +410,10 @@ Claude Desktop / Cursor: add this under `mcpServers` in the tool's config JSON (
 * `generate_social_package`: Generate platform metadata (`.meta.json`) for YouTube Shorts, TikTok, and Reels.
 * `get_render_status`: Query live rendering job progress.
 * `list_supported_modes`: List the content modes, caption styles and options the server accepts.
+* `create_explainer`: A narrated explainer from a topic and sources (`kind: case`) or one continuous animation (`kind: animate`); templates, themes and shapes as in `--mode CASE`. Poll `get_render_status`; the finished videos are listed under `outputs`.
+* `dub_video`: Translate and re-voice a video into one of 17 languages (optional burned-in subtitles, male or female voice).
+* `list_videos`: The finished videos (path, title, shape, where already published), newest first; read-only.
+* `publish_video`: Publish one finished video through Upload-Post or direct to your own YouTube channel. **It only previews unless `dry_run` is false**, never posts the same video twice to a platform, and only takes paths inside the sessions folder.
 
 ---
 

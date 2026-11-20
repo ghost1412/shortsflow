@@ -41,4 +41,4 @@ Modes: FACTS, STORY, EXPLAINER, WYR, TOP_5, CHAT_STORY, HORROR, TRUE_CRIME, REDD
 - Always pass `--skip-upload` unless the user explicitly asks to publish.
 - Output files are `interactive_short_<id>.mp4` in the project root (or the `--session_dir`), each with a `.txt` / `.meta.json` caption package.
 - LLM fallback order is Gemini → Ollama → HuggingFace; choose explicitly with `--llm_provider` / `--llm_model`.
-- For agents that speak MCP, prefer `python mcp_server.py` (tools: `generate_short`, `extract_clips`, `get_render_status`, `generate_social_package`, `list_supported_modes`).
+- For agents that speak MCP, prefer `python mcp_server.py` (tools: `generate_short`, `extract_clips`, `get_render_status`, `generate_social_package`, `list_supported_modes`, `create_explainer`, `dub_video`, `list_videos`, `publish_video`; publishing only previews unless `dry_run` is false).

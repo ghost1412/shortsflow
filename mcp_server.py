@@ -10,6 +10,7 @@ import os
 import json
 import subprocess
 import threading
+import time
 import uuid
 from typing import Dict, Any
 
@@ -47,6 +48,15 @@ TTS_PROVIDERS = ["auto", "edgetts", "elevenlabs", "voicestudio", "local", "kokor
 ASPECT_RATIOS = ["9:16", "16:9", "1:1", "4:5"]
 SFX_PRESETS = ["auto", "whoosh", "pop", "riser", "boom", "none"]
 VIBES = ["suspense", "spooky", "cinematic", "upbeat", "sarcastic", "funny"]
+# The explainer, dub and publish tools. These mirror engine/case_options.py, the --target_lang help and engine/publish.py (a test pins them);
+# they are copied here because the minimal container (Dockerfile.mcp) has no engine/ folder.
+EXPLAINER_KINDS = ["case", "animate"]
+EXPLAINER_TEMPLATES = ["case", "postmortem", "history", "explainer", "recipe", "news", "animation"]
+EXPLAINER_THEMES = ["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"]
+DUB_LANGUAGES = ["es", "hi", "de", "fr", "ja", "pt", "zh", "it", "ru", "ko", "ar", "en", "tr", "nl", "pl", "uk", "id"]
+VIDEO_SHAPES = ["all", "tall", "wide", "square"]
+PUBLISH_PLATFORMS = ["tiktok", "instagram", "youtube", "facebook", "linkedin", "x", "threads", "pinterest", "youtube_direct"]
+PRIVACY = ["private", "unlisted", "public"]
 
 _CAPTION_HELP = ("Animated caption look (needs use_remotion): HORMOZI = bold yellow single words, GLOW_BOX = words in boxes with a "
                  "pink highlight, BOUNCE = bouncy gold single words, MINIMAL = clean dark boxes, AUTO/RANDOM = pick for me.")
@@ -155,7 +165,7 @@ TOOLS_DEFINITIONS = [
     {
         "name": "get_render_status",
         "description": (
-            "Check a background job started by generate_short or extract_clips. Returns a JSON object with status "
+            "Check a background job started by generate_short, extract_clips, create_explainer or dub_video. Returns a JSON object with status "
             "('processing', 'completed', 'failed' or 'not_found'), progress (0-100), the last log lines, and an error message "
             "(the last lines of the log) when the job failed. Jobs are remembered only while this server is running. "
             "Call it every 20-30 seconds until the status is no longer 'processing'. It changes nothing."),
@@ -163,7 +173,7 @@ TOOLS_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "job_id": {"type": "string",
-                           "description": "The job_id returned by generate_short or extract_clips. Required."},
+                           "description": "The job_id returned by generate_short, extract_clips, create_explainer or dub_video. Required."},
             },
             "required": ["job_id"],
         },
@@ -175,6 +185,93 @@ TOOLS_DEFINITIONS = [
             "aspect ratios and sound-effect presets. Instant, read-only, takes no input. Call it first if you are unsure "
             "which value to pass."),
         "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "create_explainer",
+        "description": (
+            "Make a narrated explainer video from a topic and sources (a web page, PDF, arXiv paper, YouTube link, or a text or audio "
+            "file): the script is written only from the sources, with narration, diagrams, Manim animation, stock footage, captions and "
+            "music, in 16:9 and 9:16. kind 'animate' makes one continuous animation under the whole narration instead. It runs in the "
+            "background: the call returns a job_id, so poll get_render_status until it is 'completed' or 'failed' (then 'outputs' lists "
+            "the finished videos). The source text goes to the configured AI text provider and short footage search phrases to Pexels; "
+            "nothing is posted. Use extract_clips to cut a video you already have and generate_short for an idea with no sources."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "What the video explains, e.g. 'How binary search halves the work'. Required."},
+                "sources": {"type": "array", "items": {"type": "string"}, "maxItems": 3,
+                            "description": "Up to 3 sources: web links, PDF or arXiv links, YouTube links, or file paths. Required for kind 'case'; optional for 'animate'."},
+                "kind": {"type": "string", "enum": EXPLAINER_KINDS, "default": "case",
+                         "description": "case = a sectioned explainer; animate = one continuous animation (equations, processes, algorithms)."},
+                "template": {"type": "string", "enum": EXPLAINER_TEMPLATES, "default": "case",
+                             "description": "The kind of story for kind 'case': case, postmortem (what went wrong), history, explainer, recipe, news or animation."},
+                "theme": {"type": "string", "enum": EXPLAINER_THEMES, "default": "dark", "description": "The look of the whole video."},
+                "formats": {"type": "string", "default": "16:9,9:16",
+                            "description": "Video shapes to render, comma separated: 16:9, 9:16 (and 1:1 or 4:5). One shape renders faster."},
+                "draft": {"type": "boolean", "default": False,
+                          "description": "A quick, small render to check the result before the full one."},
+            },
+            "required": ["topic"],
+        },
+    },
+    {
+        "name": "dub_video",
+        "description": (
+            "Translate a video's speech and re-voice it in another language: transcribe, translate sentence by sentence, speak with one "
+            "synthetic voice, lower the original audio and write translated subtitles (no voice cloning, no lip-sync). It runs in the "
+            "background: the call returns a job_id, so poll get_render_status until it is 'completed' or 'failed'. The text to speak is "
+            "sent to the voice service (Edge or ElevenLabs) and the transcript to the AI text provider; nothing is posted. Use "
+            "extract_clips instead to cut shorts without changing the language."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "source_video": {"type": "string", "description": "Local video file path or a video URL to dub. Required."},
+                "target_lang": {"type": "string", "enum": DUB_LANGUAGES, "description": "The language to dub into. Required."},
+                "dub_captions": {"type": "boolean", "default": False, "description": "Burn the translated subtitles into the dubbed video (re-encodes)."},
+                "dub_voice": {"type": "string", "enum": ["female", "male"], "default": "female", "description": "The voice for the target language."},
+            },
+            "required": ["source_video", "target_lang"],
+        },
+    },
+    {
+        "name": "list_videos",
+        "description": (
+            "List the finished videos this ShortsFlow install has made (clips, case explainers in each shape, dubs, recaps), newest first, "
+            "with each one's path, title, shape (tall, wide or square), length and where it was already published. Read-only and instant. "
+            "Call it to find the path to give publish_video, or to see what a finished job produced."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "shape": {"type": "string", "enum": VIDEO_SHAPES, "default": "all", "description": "Only videos of this shape: tall is 9:16, wide is 16:9."},
+                "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 100, "description": "How many videos to return."},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "publish_video",
+        "description": (
+            "Publish one finished video (a path from list_videos) to YouTube, TikTok, Instagram and the other platforms, through the "
+            "user's own Upload-Post account, or directly to their own YouTube channel (youtube_direct). By default it only previews: "
+            "dry_run is true, nothing is sent and the reply shows what would go where. Set dry_run to false only when the user asked to "
+            "post: the video and its title then leave this PC, and a video is never sent twice to the same platform. Keys and the YouTube "
+            "sign-in are set in the ShortsFlow app's Settings card."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Path of a finished video inside the ShortsFlow sessions folder, from list_videos. Required."},
+                "platforms": {"type": "array", "items": {"type": "string", "enum": PUBLISH_PLATFORMS}, "minItems": 1,
+                              "description": "Where to publish. youtube_direct goes straight to the user's own channel; the others go through Upload-Post. Required."},
+                "title": {"type": "string", "description": "Title on the platform. Empty uses the video's own title."},
+                "description": {"type": "string", "description": "Description text. Empty uses the video's own description."},
+                "tags": {"type": "string", "description": "Tags separated by commas. Empty uses the video's own tags."},
+                "privacy": {"type": "string", "enum": PRIVACY, "default": "private",
+                            "description": "For a youtube_direct upload: private, unlisted or public."},
+                "dry_run": {"type": "boolean", "default": True,
+                            "description": "True (the default) only previews and sends nothing. False really publishes."},
+            },
+            "required": ["path", "platforms"],
+        },
     },
 ]
 
@@ -190,6 +287,7 @@ def run_main_command(job_id: str, args_list: list):
                                  "requirements). Clone https://github.com/ghost1412/shortsflow and run mcp_server.py from it."})
         return
     cmd = [sys.executable, main_py, "--video_id", job_id, "--skip_upload"] + args_list
+    started = time.time()
     results_json = None
     if "--source_video" in args_list and "--output_json" not in args_list:
         # the clipping pipeline reports where the finished clips are; read that instead of guessing a file name
@@ -234,6 +332,10 @@ def run_main_command(job_id: str, args_list: list):
                         JOBS[job_id]["output"] = paths[0] if paths else None
                     except (OSError, ValueError):
                         pass
+                elif not results_json and ("--mode" in args_list and args_list[args_list.index("--mode") + 1] in ("CASE", "ANIMATE", "DUB")):
+                    paths = _videos_since(started)
+                    JOBS[job_id]["outputs"] = paths
+                    JOBS[job_id]["output"] = paths[0] if paths else None
             else:
                 JOBS[job_id]["status"] = "failed"
                 JOBS[job_id]["error"] = "\n".join(log_lines[-10:])
@@ -241,6 +343,111 @@ def run_main_command(job_id: str, args_list: list):
         with JOBS_LOCK:
             JOBS[job_id]["status"] = "failed"
             JOBS[job_id]["error"] = str(e)
+
+def _text(obj, error=False):
+    reply = {"content": [{"type": "text", "text": obj if isinstance(obj, str) else json.dumps(obj, indent=2)}]}
+    if error:
+        reply["isError"] = True
+    return reply
+
+
+def _settings():
+    """shortsflow.settings, or None in the minimal container (it only has shortsflow/__init__.py)."""
+    try:
+        if ROOT_DIR not in sys.path:
+            sys.path.insert(0, ROOT_DIR)
+        from shortsflow import settings
+        return settings
+    except Exception:
+        return None
+
+
+def _videos_since(since):
+    """Paths of finished videos written after `since` (a time.time() value), newest first."""
+    st = _settings()
+    if st is None:
+        return []
+    try:
+        return [v["path"] for v in st.list_videos(ROOT_DIR, limit=100, min_bytes=1000) if os.path.getmtime(v["path"]) >= since - 2]
+    except Exception:
+        return []
+
+
+def _start_job(job_id, cli_args, message):
+    threading.Thread(target=run_main_command, args=(job_id, cli_args)).start()
+    return _text({"job_id": job_id, "status": "processing", "message": message})
+
+
+def _create_explainer(job_id, args):
+    topic = str(args.get("topic", "")).strip()
+    if not topic:
+        return _text("create_explainer needs 'topic'.", True)
+    kind = args.get("kind") if args.get("kind") in EXPLAINER_KINDS else "case"
+    sources = [str(x).strip() for x in (args.get("sources") or []) if str(x).strip()][:3]
+    if kind == "case" and not sources:
+        return _text("create_explainer with kind 'case' needs at least one source (a link or file); the script is written only from them. "
+                     "Use kind 'animate' for an animation from a topic alone.", True)
+    cli = ["--mode", "ANIMATE" if kind == "animate" else "CASE", "--prompt", topic]
+    for src in sources:
+        cli += ["--sources", src]
+    theme = args.get("theme") if args.get("theme") in EXPLAINER_THEMES else "dark"
+    cli += ["--case", f"theme={theme}"]
+    if kind == "case" and args.get("template") in EXPLAINER_TEMPLATES and args["template"] != "case":
+        cli += ["--case", f"template={args['template']}"]
+    formats = str(args.get("formats") or "").strip()
+    if formats:
+        cli += ["--case", f"formats={formats}"]
+    if args.get("draft"):
+        cli += ["--case", "draft"]
+    return _start_job(job_id, cli, f"Explainer video ({kind}) started for '{topic}'.")
+
+
+def _dub_video(job_id, args):
+    source = str(args.get("source_video", "")).strip()
+    lang = args.get("target_lang")
+    if not source or lang not in DUB_LANGUAGES:
+        return _text("dub_video needs 'source_video' and a 'target_lang' from: " + ", ".join(DUB_LANGUAGES) + ".", True)
+    cli = ["--mode", "DUB", "--source_video", source, "--target_lang", lang]
+    if args.get("dub_captions"):
+        cli.append("--dub_captions")
+    if args.get("dub_voice") in ("female", "male"):
+        cli += ["--dub_voice", args["dub_voice"]]
+    return _start_job(job_id, cli, f"Dubbing {source} into {lang} started.")
+
+
+def _list_videos(args):
+    st = _settings()
+    if st is None:
+        return _text("Listing videos needs the full ShortsFlow checkout (shortsflow/settings.py). Run mcp_server.py from it.", True)
+    shape = args.get("shape") if args.get("shape") in VIDEO_SHAPES else "all"
+    try:
+        limit = max(1, min(100, int(args.get("limit", 20))))
+    except (TypeError, ValueError):
+        limit = 20
+    rows = []
+    for v in st.list_videos(ROOT_DIR, shape=shape, limit=limit):
+        rows.append({"path": v["path"], "title": v.get("title"), "shape": v.get("shape"), "label": v.get("label"),
+                     "published_to": sorted(st.file_published_to(v["path"]))})
+    return _text({"count": len(rows), "videos": rows})
+
+
+def _publish_video(args):
+    st = _settings()
+    if st is None:
+        return _text("Publishing needs the full ShortsFlow checkout (shortsflow/settings.py). Run mcp_server.py from it.", True)
+    path = str(args.get("path", "")).strip()
+    platforms = [p for p in (args.get("platforms") or []) if p in PUBLISH_PLATFORMS]
+    if not path or not platforms:
+        return _text("publish_video needs 'path' (from list_videos) and at least one of 'platforms': " + ", ".join(PUBLISH_PLATFORMS) + ".", True)
+    norm = lambda q: os.path.normcase(os.path.abspath(q))
+    if not norm(path).startswith(norm(os.path.join(ROOT_DIR, "sessions")) + os.sep):
+        return _text("That video is not inside the ShortsFlow sessions folder. Use a path from list_videos.", True)
+    dry = args.get("dry_run", True) is not False        # only an explicit false really publishes
+    ok, lines = st.publish_file(path, args.get("title", ""), args.get("description", ""), args.get("tags", ""), platforms,
+                                privacy=args.get("privacy") if args.get("privacy") in PRIVACY else "private",
+                                home=ROOT_DIR, dry_run=dry, env_path=os.path.join(ROOT_DIR, ".env"))
+    return _text({"dry_run": dry, "ok": bool(ok), "sent": (not dry) and bool(ok), "details": lines}, error=not ok)
+
 
 def handle_tool_call(tool_name: str, args: dict) -> dict:
     job_id = str(uuid.uuid4())[:8]
@@ -351,6 +558,18 @@ def handle_tool_call(tool_name: str, args: dict) -> dict:
             ]
         }
 
+    elif tool_name == "create_explainer":
+        return _create_explainer(job_id, args)
+
+    elif tool_name == "dub_video":
+        return _dub_video(job_id, args)
+
+    elif tool_name == "list_videos":
+        return _list_videos(args)
+
+    elif tool_name == "publish_video":
+        return _publish_video(args)
+
     elif tool_name == "get_render_status":
         req_id = args.get("job_id", "")
         with JOBS_LOCK:
@@ -373,6 +592,11 @@ def handle_tool_call(tool_name: str, args: dict) -> dict:
             "aspect_ratios": ASPECT_RATIOS,
             "sfx_presets": SFX_PRESETS,
             "vibes": VIBES,
+            "explainer_kinds": EXPLAINER_KINDS,
+            "explainer_templates": EXPLAINER_TEMPLATES,
+            "explainer_themes": EXPLAINER_THEMES,
+            "dub_languages": DUB_LANGUAGES,
+            "publish_platforms": PUBLISH_PLATFORMS,
         }
         return {
             "content": [
