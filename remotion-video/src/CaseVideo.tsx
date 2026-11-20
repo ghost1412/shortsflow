@@ -367,8 +367,10 @@ const Checklist: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) =>
   const { u } = useUnit();
   const at = cueFrames(labels.length, cues, frames, fps);
   const act = activeIndex(frame, at);
+  const longest = Math.max(0, ...labels.map((l) => l.length));
+  const fs = longest > 55 ? 36 : longest > 38 ? 42 : 48;       // long lines wrap to two rows: smaller type keeps the rows clear of the heading and the caption
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 28 * u, width: "100%", maxWidth: 1400 * u }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: (longest > 38 ? 18 : 28) * u, width: "100%", maxWidth: 1400 * u }}>
       {labels.map((l, i) => {
         const delay = at[i];
         const t = enter(frame, delay, fps);
@@ -379,7 +381,7 @@ const Checklist: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) =>
             <div style={{ width: 58 * u, height: 58 * u, borderRadius: 14 * u, border: `3px solid ${accent}`, background: tick > 0.5 ? `${accent}33` : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 44 * u, fontFamily: FONT, fontWeight: 800, flexShrink: 0 }}>
               <span style={{ opacity: tick, transform: `scale(${0.4 + 0.6 * tick})` }}>✓</span>
             </div>
-            <div style={{ fontFamily: FONT, fontSize: 48 * u, fontWeight: 600, color: p.text }}>{l}</div>
+            <div style={{ fontFamily: FONT, fontSize: fs * u, fontWeight: 600, color: p.text }}>{l}</div>
           </div>
         );
       })}

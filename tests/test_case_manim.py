@@ -302,3 +302,21 @@ def test_clip_aspect_reads_the_size_of_a_clip_and_falls_back(tmp_path):
     out = tmp_path / "wide.mp4"
     subprocess.run([ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=1980x900:d=0.2:r=10", str(out)], check=True)
     assert cr.clip_aspect(str(out)) == 2.2
+
+
+def test_a_cycle_in_the_wide_panel_has_separate_boxes_and_arrows_that_do_not_cross_the_labels():
+    pytest.importorskip("manim")
+    import numpy as np
+    from manim import config
+    from engine import manim_kit as kit
+    config.frame_width, config.frame_height = 9, 4.090909
+    group = kit.cycle(["Output Token", "Masked Attention", "Linear and Softmax", "Next Element"])
+    boxes = [(float(p.get_left()[0]), float(p.get_right()[0]), float(p.get_bottom()[1]), float(p.get_top()[1])) for p in group.parts]
+    for i in range(len(boxes)):
+        for j in range(i + 1, len(boxes)):
+            a, b = boxes[i], boxes[j]
+            assert a[1] <= b[0] or b[1] <= a[0] or a[3] <= b[2] or b[3] <= a[2]          # no two boxes touch
+    for arrow in group[1]:
+        for point in (arrow.get_start(), arrow.get_end()):
+            assert not any(x0 + 0.02 < point[0] < x1 - 0.02 and y0 + 0.02 < point[1] < y1 - 0.02 for x0, x1, y0, y1 in boxes)      # ends sit outside the boxes
+    config.frame_width, config.frame_height = 14.222, 8.0

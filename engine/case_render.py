@@ -112,6 +112,17 @@ def _first_spoken(label, words):
 ORDERED_SCENES = ("compare", "chart", "quote")      # their labels keep the order the script gave; the others follow the narration
 
 
+def even_cues(count, duration, first=0.8, tail=2.5):
+    """`count` appearance times spread evenly from `first` seconds to `tail` seconds before the end of a section (a timeline: its events
+    come in the order of time and each one stays until the next arrives)."""
+    if count <= 0:
+        return []
+    last = max(first, (duration or 0) - tail)
+    if count == 1:
+        return [round(first, 2)]
+    return [round(first + (last - first) * i / (count - 1), 2) for i in range(count)]
+
+
 def spoken_order(labels, words, duration=None, first_by=1.5, gap=0.8):
     """(labels, cues): the labels in the order the narrator reaches them, each with the second it is spoken. A label the narrator
     never says follows the last one. The first cue is at most `first_by` seconds in, so a scene is never empty while the narrator
@@ -206,7 +217,9 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
     footage = footage or [None] * len(script["sections"])
     for sec, (start, end), ws, clip, foot in zip(script["sections"], timing, words_per_section, clips, footage):
         labels, cues = list(sec.get("on_screen") or []), None
-        if sec["scene"] in ORDERED_SCENES:                 # a heading row, a ranking or a main line: the authored order is part of the meaning
+        if sec["scene"] == "timeline":                     # events in the order of time, whatever order the narrator mentions them in
+            cues = even_cues(len(labels), end - start)
+        elif sec["scene"] in ORDERED_SCENES:               # a heading row, a ranking or a main line: the authored order is part of the meaning
             cues = label_cues(labels, ws, duration=end - start)
             if cues:
                 cues[0] = min(cues[0], 1.5)                # the first one does not wait for the narrator to reach it

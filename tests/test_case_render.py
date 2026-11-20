@@ -133,10 +133,10 @@ def test_source_chips_and_the_removed_claims_reach_the_props():
 def test_compare_chart_and_quote_keep_the_authored_label_order_and_start_early():
     words = [{"word": w, "start": 6 + i * 0.5, "end": 6.4 + i * 0.5} for i, w in enumerate("After the patch ports were blocked and before it they were open".split())]
     script = dict(SCRIPT, sections=[dict(SCRIPT["sections"][0], scene="compare", on_screen=["Before | After", "Open | Blocked"]),
-                                    dict(SCRIPT["sections"][0], scene="timeline", on_screen=["Blocked ports", "After the patch"])])
+                                    dict(SCRIPT["sections"][0], scene="flow", on_screen=["Blocked ports", "After the patch"])])
     props = cr.build_props(script, [(2.0, 20.0), (20.0, 40.0)], [words, words])
     assert props["sections"][0]["labels"] == ["Before | After", "Open | Blocked"] and props["sections"][0]["cues"][0] <= 1.5
-    assert props["sections"][1]["labels"] == ["After the patch", "Blocked ports"]                  # a timeline follows the narration
+    assert props["sections"][1]["labels"] == ["After the patch", "Blocked ports"]                  # a flow follows the narration (a timeline keeps its order of time: see below)
 
 
 def test_build_props_hands_the_clip_aspect_to_the_renderer_and_defaults_to_16x9():
@@ -152,3 +152,14 @@ def test_build_props_carries_the_hook_to_the_cover():
     props = cr.build_props(script, [(2.0, 12.0), (12.0, 20.0)], [[], []])
     assert props["hook"] == "One bug, millions of servers"
     assert cr.build_props(dict(SCRIPT), [(2.0, 12.0), (12.0, 20.0)], [[], []])["hook"] == ""
+
+
+def test_a_timeline_keeps_the_order_of_time_and_spreads_its_events():
+    cues = cr.even_cues(4, 30.0)
+    assert cues[0] == 0.8 and cues == sorted(cues) and cues[-1] <= 27.5 and len(set(cues)) == 4
+    assert cr.even_cues(1, 30.0) == [0.8] and cr.even_cues(0, 30.0) == [] and cr.even_cues(3, 2.0)[-1] >= 0.8
+    script = dict(SCRIPT, sections=[dict(SCRIPT["sections"][0], scene="timeline", on_screen=["2013: bug", "2021: found", "2022: fixed"],
+                                         narration="Fixed in 2022. Found in 2021. The bug dates from 2013.")] + SCRIPT["sections"][1:])
+    props = cr.build_props(script, [(2.0, 32.0), (32.0, 40.0)], [[{"word": "Fixed", "start": 0.0, "end": 0.4}], []])
+    assert props["sections"][0]["labels"] == ["2013: bug", "2021: found", "2022: fixed"]          # not re-ordered by the narration
+    assert props["sections"][0]["cues"] == cr.even_cues(3, 30.0)

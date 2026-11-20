@@ -161,12 +161,21 @@ def cycle(labels, radius=None, color=ACCENT):
     w, h = frame_size()
     radius = radius or min(w, h) * 0.3
     n = len(labels)
-    nodes = VGroup(*[box(t, color, size=24, max_width=radius * 0.9) for t in labels])
+    wide = w > h * 1.5                                    # a wide, short frame: the ring is an ellipse that uses the width, or the boxes touch
+    rx, ry = (w * 0.30, h * 0.30) if wide else (radius * 1.25, radius)
+    nodes = VGroup(*[box(t, color, size=24, max_width=(rx * 0.7 if wide else radius * 0.9)) for t in labels])
     for i, node in enumerate(nodes):
         angle = np.pi / 2 - 2 * np.pi * i / n
-        node.move_to(radius * np.array([np.cos(angle) * 1.25, np.sin(angle), 0]))
-    arrows = VGroup(*[Arrow(nodes[i].get_center(), nodes[(i + 1) % n].get_center(), buff=0.55, color=DIM, stroke_width=4,
-                            max_tip_length_to_length_ratio=0.2) for i in range(n)])
+        node.move_to(np.array([np.cos(angle) * rx, np.sin(angle) * ry, 0]))
+    def edge_arrow(a, b):
+        """An arrow from the border of box a to the border of box b (not centre to centre, which runs through the labels)."""
+        d = b.get_center() - a.get_center()
+        norm = float(np.linalg.norm(d)) or 1.0
+        unit = d / norm
+        start = a[0].get_boundary_point(unit) + unit * 0.08
+        end = b[0].get_boundary_point(-unit) - unit * 0.08
+        return Arrow(start, end, buff=0, color=DIM, stroke_width=4, max_tip_length_to_length_ratio=0.25)
+    arrows = VGroup(*[edge_arrow(nodes[i], nodes[(i + 1) % n]) for i in range(n)])
     group = fit(VGroup(nodes, arrows))
     group.parts = list(nodes)
     return group
