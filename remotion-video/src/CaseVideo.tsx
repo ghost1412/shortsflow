@@ -1,13 +1,13 @@
 // "CaseVideo": a sectioned explainer. Every section of the script is one scene (timeline, flow, counters, checklist, terminal, quote)
 // drawn from its on-screen labels, over a themed background, with word-timed captions. No custom fonts (a font load stalled the CI
 // renderer before), no stock footage: everything is drawn, so a run needs no key and no download.
-import React, { useLayoutEffect, useRef, useState } from "react";
-import { AbsoluteFill, Audio, Img, Loop, OffthreadVideo, Sequence, interpolate, random, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AbsoluteFill, Audio, Img, Loop, OffthreadVideo, Sequence, continueRender, delayRender, interpolate, random, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import katex from "katex";
 import { z } from "zod";
 
 export const CASE_THEMES = ["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"] as const;
-export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation"] as const;
+export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation", "diagram"] as const;
 
 export const caseVideoSchema = z.object({
   title: z.string().default("Explainer"),
@@ -31,6 +31,7 @@ export const caseVideoSchema = z.object({
     footage: z.array(z.object({ src: z.string(), seconds: z.number().default(10), kind: z.enum(["video", "image"]).default("video") })).default([]),   // stock clips, one per beat, shown behind the scene
     beats: z.array(z.tuple([z.number(), z.number()])).default([]),                       // seconds after the section starts: a new picture at each
     clip: z.string().optional(),                // a rendered animation (Manim) drawn for this section, shown instead of the plain scene
+    diagram: z.string().optional(),             // Mermaid source (any diagram type), drawn by Mermaid's own layout and revealed step by step
     clipRate: z.number().default(1),
     clipAspect: z.number().default(16 / 9),     // width / height of the clip: older clips are 16:9, the landscape panel clips are wider
     cues: z.array(z.number()).default([]),     // seconds after the section starts at which each label is spoken
@@ -527,7 +528,150 @@ const Chart: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
   );
 };
 
-const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation, compare: Compare, chart: Chart, animation: Quote } as const;
+// A Mermaid diagram of any type, laid out by Mermaid's own engine (so nothing overlaps whatever the model wrote). It is drawn inside the same glass
+// panel as the other scenes, across the whole width, with large type (the panel is wide enough that a diagram of up to six nodes is not scaled down),
+// coloured like the chosen look, and revealed step by step: nodes in order of the drawing, each arrow with the node it points to. The step being
+// spoken glows, the earlier ones settle back. A diagram type without nodes is simply shown whole. If Mermaid cannot draw it, `fallback` is shown.
+const MAX_GROW = 1.7;
+const CAMERA_WINDOW = 4;      // a chain longer than this is shown this many steps at a time, the view following the story
+const MermaidDiagram: React.FC<{ code: string; p: Pal; accent: string; frames: number; fallback: React.ReactNode }> = ({ code, p, accent, frames, fallback }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const { u, portrait } = useUnit();
+  const host = useRef<HTMLDivElement>(null);
+  const [svg, setSvg] = useState("");
+  const [failed, setFailed] = useState(false);
+  const [handle] = useState(() => delayRender("Drawing the diagram"));
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const mermaid = (await import("mermaid")).default;
+        mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", fontFamily: p.font,
+          // the type is as big as the whole drawing can be scaled: a tall frame wants wide boxes with one line of text (a short chain), a wide frame narrow boxes with wrapped text (a short row)
+          flowchart: { useMaxWidth: false, htmlLabels: true, curve: "basis", padding: 24, nodeSpacing: portrait ? 60 : 52, rankSpacing: portrait ? 64 : 54, wrappingWidth: portrait ? 560 : 170 },
+          sequence: { useMaxWidth: false, mirrorActors: false, actorMargin: 90, messageMargin: 50, width: 200, height: 72, boxMargin: 14, noteMargin: 16 },
+          themeVariables: { fontFamily: p.font, fontSize: "30px" } });
+        const out = await mermaid.render("sf-mmd-" + Math.random().toString(36).slice(2, 9), code);
+        if (alive) setSvg(out.svg);
+      } catch (e) {
+        console.warn("[layout] the diagram could not be drawn: " + String(e).slice(0, 240));
+        if (alive) { setSvg(""); setFailed(true); }
+      } finally {
+        continueRender(handle);
+      }
+    })();
+    return () => { alive = false; };
+  }, [code]);
+  useLayoutEffect(() => {
+    const box = host.current;
+    const el = box?.querySelector("svg") as SVGSVGElement | null;
+    if (!box || !el) return;
+    // the drawing's own view box, remembered on the first pass (the camera changes it afterwards)
+    if (!el.dataset.nat) {
+      const vb = el.viewBox.baseVal;
+      const r = el.getBoundingClientRect();
+      el.dataset.nat = `${vb ? vb.x : 0} ${vb ? vb.y : 0} ${vb && vb.width ? vb.width : r.width || 1} ${vb && vb.height ? vb.height : r.height || 1}`;
+    }
+    const [nx, ny, nw, nh] = el.dataset.nat.split(" ").map(Number);
+    el.style.maxWidth = "none";
+    const nodes = Array.from(el.querySelectorAll<SVGGElement>("g.node, g.actor-man, rect.actor-top, g.mindmap-node, g.statediagram-state"));
+    const start = 0.8 * fps, end = Math.max(start + fps, frames - 2.5 * fps);
+    const at = (i: number) => start + ((end - start) * i) / Math.max(1, nodes.length - 1);
+    const shown = (i: number) => interpolate(frame, [at(i), at(i) + 10], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+    let current = -1;
+    nodes.forEach((_, i) => { if (shown(i) > 0.5) current = i; });
+
+    // The camera: a chain of more than CAMERA_WINDOW nodes is shown a few steps at a time, the view following the story (the step being told and the
+    // ones before it) and gliding as each new step appears, so the type stays large however long the chain is. Everything else is shown whole.
+    const camera = nodes.length > CAMERA_WINDOW && !!el.querySelector("g.node");
+    if (camera) {
+      const boxes = nodes.map((n) => {
+        const bb = n.getBBox();
+        const m = n.transform.baseVal.numberOfItems ? n.transform.baseVal.consolidate()?.matrix : null;
+        return { x0: bb.x + (m ? m.e : 0), y0: bb.y + (m ? m.f : 0), x1: bb.x + bb.width + (m ? m.e : 0), y1: bb.y + bb.height + (m ? m.f : 0) };
+      });
+      const win = (c: number) => {
+        const idx = boxes.map((_, i) => i).filter((i) => i <= c && i > c - CAMERA_WINDOW);
+        return { x0: Math.min(...idx.map((i) => boxes[i].x0)), y0: Math.min(...idx.map((i) => boxes[i].y0)), x1: Math.max(...idx.map((i) => boxes[i].x1)), y1: Math.max(...idx.map((i) => boxes[i].y1)) };
+      };
+      const c = Math.max(0, current);
+      const from = win(Math.max(0, c - 1)), to = win(c);
+      const t = c === 0 ? 1 : shown(c);
+      const lerp = (x: number, y: number) => x + (y - x) * t;
+      const x0 = lerp(from.x0, to.x0), x1 = lerp(from.x1, to.x1), y0 = lerp(from.y0, to.y0), y1 = lerp(from.y1, to.y1);
+      const pad = 36;
+      let w = x1 - x0 + 2 * pad, h = y1 - y0 + 2 * pad;
+      const aspect = box.clientWidth / Math.max(1, box.clientHeight);
+      if (w / h < aspect) w = h * aspect; else h = w / aspect;
+      const minW = box.clientWidth / MAX_GROW;                          // never zoom in so far that a single node becomes a giant
+      if (w < minW) { const f = minW / w; w *= f; h *= f; }
+      el.setAttribute("viewBox", `${(x0 + x1) / 2 - w / 2} ${(y0 + y1) / 2 - h / 2} ${w} ${h}`);
+      el.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      el.style.width = `${box.clientWidth}px`;
+      el.style.height = `${box.clientHeight}px`;
+    } else {
+      el.setAttribute("viewBox", `${nx} ${ny} ${nw} ${nh}`);
+      const k = Math.min(box.clientWidth / nw, box.clientHeight / nh, MAX_GROW);
+      el.style.width = `${nw * k}px`;
+      el.style.height = `${nh * k}px`;
+    }
+
+    // reveal: nodes in the order of the drawing, evenly across the section; an arrow appears with the node it points to
+    if (nodes.length < 2) return;
+    // Mermaid prefixes every id with a random render id ("t1eag7m-flowchart-A-0", "t1eag7m-L_A_B_0"), so names are read from the end of the id
+    const names = nodes.map((n) => ((n.id || "").match(/flowchart-(.+?)-\d+$/) || [])[1] || "");
+    // with the camera, a step fades out as the view moves past it (when the step CAMERA_WINDOW later appears), so nothing is ever half cut at the edge
+    const leaving = (i: number) => (camera && i + CAMERA_WINDOW < nodes.length ? 1 - shown(i + CAMERA_WINDOW) : 1);
+    nodes.forEach((n, i) => {
+      n.style.opacity = String(shown(i) * leaving(i) * (i === current ? 1 : 0.8));      // the step being told is fully lit, the earlier ones settle back
+      if (i === current) n.setAttribute("data-current", "1"); else n.removeAttribute("data-current");
+    });
+    const paths = Array.from(el.querySelectorAll<SVGElement>("g.edgePaths path, path.flowchart-link"));
+    const labels = Array.from(el.querySelectorAll<SVGElement>("g.edgeLabels > g.edgeLabel"));
+    paths.forEach((path, j) => {
+      const rest = ((path.id || "").match(/L[_-](.+?)[_-]\d+$/) || [])[1] || "";
+      let target = -1, best = 0;
+      names.forEach((name, i) => { if (name && rest.endsWith("_" + name) && name.length > best) { target = i; best = name.length; } });
+      // a diagram type whose ids carry no names (state diagrams): arrows come in the order they were written, each with the next node
+      if (target < 0) target = Math.min(j + 1, nodes.length - 1);
+      const o = shown(target) * (camera && target - 1 + CAMERA_WINDOW < nodes.length ? 1 - shown(target - 1 + CAMERA_WINDOW) : 1);
+      path.style.opacity = String(o);
+      if (labels[j]) labels[j].style.opacity = String(o);
+    });
+  });
+  if (failed) return <>{fallback}</>;       // a diagram that cannot be drawn must never leave an empty panel: the section shows its plain scene
+  const cardFill = p.light ? "#ffffff" : "rgba(9, 27, 46, 0.96)";
+  const css = `.sf-mmd .node rect, .sf-mmd .node polygon, .sf-mmd .node circle, .sf-mmd .node ellipse, .sf-mmd .node path { fill: ${cardFill} !important; stroke: ${accent} !important; stroke-width: 3px !important; }
+    .sf-mmd .node rect { rx: 18px; ry: 18px; }
+    .sf-mmd g.node { filter: drop-shadow(0 0 7px ${accent}55); }
+    .sf-mmd g.node[data-current="1"] { filter: drop-shadow(0 0 20px ${accent}); }
+    .sf-mmd g.node[data-current="1"] rect, .sf-mmd g.node[data-current="1"] polygon, .sf-mmd g.node[data-current="1"] circle { stroke-width: 5px !important; }
+    .sf-mmd .edgePath path, .sf-mmd path.flowchart-link, .sf-mmd .messageLine0, .sf-mmd .messageLine1 { stroke: ${accent} !important; stroke-opacity: 0.75; stroke-width: 4px !important; }
+    .sf-mmd marker path, .sf-mmd .arrowMarkerPath { fill: ${accent} !important; stroke: ${accent} !important; }
+    .sf-mmd text, .sf-mmd .nodeLabel, .sf-mmd .label, .sf-mmd .label div, .sf-mmd .nodeLabel p { fill: ${p.text} !important; color: ${p.text} !important; font-family: ${p.font} !important; font-size: 30px; }
+    .sf-mmd foreignObject { overflow: visible !important; }
+    .sf-mmd .labelBkg, .sf-mmd .edgeLabel p { background-color: transparent !important; color: ${p.text} !important; }
+    .sf-mmd .edgeLabel span { background-color: ${cardFill} !important; color: ${p.text} !important; padding: 2px 12px; border-radius: 10px; font-size: 24px; }
+    .sf-mmd .edgeLabel rect, .sf-mmd .edgeLabel .background { fill: transparent !important; opacity: 0 !important; }
+    .sf-mmd .cluster rect { fill: ${p.light ? "#00000010" : "#ffffff0a"} !important; stroke: ${p.dim} !important; rx: 18px; }
+    .sf-mmd rect.actor { fill: ${cardFill} !important; stroke: ${accent} !important; stroke-width: 3px !important; rx: 14px; }
+    .sf-mmd text.actor, .sf-mmd text.actor > tspan { fill: ${p.text} !important; font-size: 28px; }
+    .sf-mmd .messageText { fill: ${p.text} !important; font-size: 24px; }
+    .sf-mmd .actor-line { stroke: ${p.dim} !important; stroke-width: 2px !important; }
+    .sf-mmd text.noteText, .sf-mmd .noteText > tspan { fill: #0b1f33 !important; }`;
+  return (
+    <div style={{ width: "100%", height: "100%", boxSizing: "border-box", display: "flex", padding: 30 * u, borderRadius: 26 * u, overflow: "hidden", border: `2px solid ${accent}55`,
+      boxShadow: `0 0 ${50 * u}px ${accent}22`, background: p.card, backdropFilter: p.blur }}>
+      <div ref={host} className="sf-mmd" style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <style>{css}</style>
+        <div dangerouslySetInnerHTML={{ __html: svg }} style={{ display: "flex", alignItems: "center", justifyContent: "center" }} />
+      </div>
+    </div>
+  );
+};
+
+const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation, compare: Compare, chart: Chart, animation: Quote, diagram: Quote } as const;
 
 // one beat of stock footage: it punches in with a flash, drifts to one side, and repeats when the clip is shorter than the beat
 const BeatFootage: React.FC<{ src: string; seconds: number; kind?: "video" | "image"; index: number; frames: number; start: number; opacity: number }> = ({ src, seconds, kind, index, frames, start, opacity }) => {
@@ -599,7 +743,12 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
               <OffthreadVideo src={asset(section.clip)} muted transparent playbackRate={section.clipRate} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
           ) : (
-            <AutoFit><View labels={section.labels.length ? section.labels : [section.title]} cues={section.cues} p={p} accent={accent} frames={frames} /></AutoFit>
+            section.scene === "diagram" && section.diagram ? (
+              <MermaidDiagram code={section.diagram} p={p} accent={accent} frames={frames}
+                fallback={<AutoFit><Flow labels={section.labels.length ? section.labels : [section.title]} cues={section.cues} p={p} accent={accent} frames={frames} /></AutoFit>} />
+            ) : (
+              <AutoFit><View labels={section.labels.length ? section.labels : [section.title]} cues={section.cues} p={p} accent={accent} frames={frames} /></AutoFit>
+            )
           )}
         </div>
       </AbsoluteFill>

@@ -209,7 +209,7 @@ def source_label(ref):
 
 
 def build_props(script, timing, words_per_section, theme="dark", accent=None, intro=1.8, outro=2.5, audio_url=None, music_url=None,
-                music_volume=0.12, captions=True, clips=None, footage=None):
+                music_volume=0.12, captions=True, clips=None, footage=None, portrait=False):
     """The CaseVideo props: sections with their times, every word shifted to where its section starts. `clips` (from attach_clips)
     puts a rendered animation on a section."""
     sections, words = [], []
@@ -233,6 +233,9 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
             sections[-1]["clip"] = clip["path"]
             sections[-1]["clipRate"] = clip["rate"]
             sections[-1]["clipAspect"] = clip.get("aspect") or round(16 / 9, 3)
+        if sec.get("diagram"):
+            from engine import case_mermaid
+            sections[-1]["diagram"] = case_mermaid.orient(str(sec["diagram"]), portrait)       # Mermaid source drawn by the renderer
         sections[-1]["beats"] = beats_for(ws, end - start)
         if foot:
             sections[-1]["footage"] = [{"src": f["path"], "seconds": f.get("seconds") or 10.0, "kind": f.get("kind", "video")} for f in foot]

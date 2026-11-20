@@ -162,8 +162,11 @@ def test_write_script_takes_the_models_layouts_and_never_repeats_one():
     script = cs.write_script("T", template, [], lambda p: reply)
     scenes = [s["scene"] for s in script["sections"]]
     assert scenes[0] == "compare" and all(a != b for a, b in zip(scenes, scenes[1:]))
-    fixed = cs.write_script("T", template, [], lambda p: reply, layouts="template")
+    with_diagram = json.dumps({"title": "T", "sections": [dict(r, diagram="flowchart LR\n A[One] --> B[Two]") for r in rows]})
+    fixed = cs.write_script("T", template, [], lambda p: with_diagram, layouts="template", check_diagram=lambda c: (True, ""))
     assert [s["scene"] for s in fixed["sections"]] == [t["scene"] for t in template]
+    no_code = cs.write_script("T", template, [], lambda p: reply, layouts="template", check_diagram=lambda c: (True, ""))
+    assert [s["scene"] for s in no_code["sections"]] == ["timeline", "flow", "counters", "checklist"]       # a diagram section without code falls back to the flow
 
 
 def test_counters_without_numbers_become_a_checklist():

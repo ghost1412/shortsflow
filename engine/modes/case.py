@@ -150,7 +150,7 @@ def run(args, target_bitrate=None, target_preset=None):
                   f"see the lines above). The script and the narration are saved: run again with --case resume={session_dir}")
             sys.exit(1)
         footage = cr.backgrounds_for(script, session_dir, aspect, choice, has_pexels=bool(os.getenv("PEXELS_API_KEY")))
-        props = cr.build_props(script, timing, words, theme=theme, music_volume=0.2, clips=clips, footage=footage)
+        props = cr.build_props(script, timing, words, theme=theme, music_volume=0.2, clips=clips, footage=footage, portrait=portrait)
         voice_track = cr.join_audio(audios, timing, os.path.join(session_dir, f"voice_all_{tag}.mp3"),
                                     sfx=cr.sfx_for(props, os.path.join(session_dir, f"sfx_{tag}.wav")))
         name = f"case_draft_{tag}.mp4" if draft else f"case_{tag}.mp4"

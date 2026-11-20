@@ -11,12 +11,13 @@ import re
 
 MAX_COUNTERS = 4         # counter cards that fit a portrait frame above the caption
 MAX_CHECKLIST = 3        # checklist rows that fit above the caption bar
-SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation")
+SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation", "diagram")
 # the layouts the model may choose from by itself (terminal and formula only when a template asks for them: they suit few topics)
-AUTO_LAYOUTS = ("timeline", "flow", "counters", "checklist", "quote", "compare", "chart")
+AUTO_LAYOUTS = ("timeline", "flow", "counters", "checklist", "quote", "compare", "chart", "diagram")
 LAYOUT_HELP = {
     "timeline": "events in order of time; labels are short dated events",
     "flow": "the steps of one mechanism, one after another; labels are the steps",
+    "diagram": "how things connect or happen when a plain row of steps is not enough: a process with branches, who talks to whom, states over time, how ideas relate; write Mermaid source in the section's \"diagram\" field (the on_screen labels are then only a fallback)",
     "counters": "two to four big numbers; labels are 'number and what it counts', like '300,000 computers'",
     "checklist": "actions or conclusions; labels are short imperative lines",
     "compare": "two things side by side (before and after, A and B); each label is 'left | right', and the FIRST label holds the two headings like 'Before | After'",
@@ -32,13 +33,13 @@ PRESETS = {
     ],
     "case": [
         {"id": "what", "title": "What happened", "question": "What happened, when, to whom, in plain words?", "scene": "timeline"},
-        {"id": "how", "title": "How it happened", "question": "How did it work, step by step, explained simply for a non-expert?", "scene": "flow"},
+        {"id": "how", "title": "How it happened", "question": "How did it work, step by step, explained simply for a non-expert?", "scene": "diagram"},
         {"id": "impact", "title": "The impact", "question": "What was the damage: people, money, data, time?", "scene": "counters"},
         {"id": "prevent", "title": "What could change", "question": "What could have gone differently, or what should happen next?", "scene": "checklist"},
     ],
     "postmortem": [
         {"id": "what", "title": "What broke", "question": "What failed and what did people see?", "scene": "timeline"},
-        {"id": "why", "title": "Why it broke", "question": "What was the root cause, step by step?", "scene": "flow"},
+        {"id": "why", "title": "Why it broke", "question": "What was the root cause, step by step?", "scene": "diagram"},
         {"id": "impact", "title": "The cost", "question": "Who was affected, for how long, and what did it cost?", "scene": "counters"},
         {"id": "fix", "title": "What changed", "question": "What was fixed, and what should others do?", "scene": "checklist"},
     ],
@@ -50,7 +51,7 @@ PRESETS = {
     ],
     "explainer": [
         {"id": "what", "title": "What it is", "question": "What is it, in one clear idea?", "scene": "quote"},
-        {"id": "how", "title": "How it works", "question": "How does it work, step by step?", "scene": "flow"},
+        {"id": "how", "title": "How it works", "question": "How does it work, step by step?", "scene": "diagram"},
         {"id": "why", "title": "Why it matters", "question": "Why does it matter, with real numbers if the sources have them?", "scene": "counters"},
         {"id": "do", "title": "What to do", "question": "What should the viewer do or remember?", "scene": "checklist"},
     ],
@@ -210,9 +211,12 @@ def build_prompt(topic, template, sources, layouts="auto"):
               '{"title": "<plain title, no emoji>", "hook": "<12 words or fewer>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, concrete: who, what, when, how many, in order>", '
               '"scene": "<the layout you chose for this section>", '
               '"on_screen": ["<3-5 short labels, steps or figures shown on screen, never empty>"], "cites": ["S1"], '
-              '"footage": ["<3 or 4 different searches for stock video, 2-4 plain words each, one per step of this section: things a camera can film, no brand, person or place names>"]}]}',
+              '"footage": ["<3 or 4 different searches for stock video, 2-4 plain words each, one per step of this section: things a camera can film, no brand, person or place names>"], "diagram": "<Mermaid source, only when the layout is diagram>"}]}',
               'For a section whose scene kind is "equation", every on_screen item is one formula in LaTeX (for example "E = mc^2" or '
               '"\\\\frac{a}{b}"), built up step by step; it must come from the sources.',
+              'For a section whose layout is diagram, add the key "diagram" with Mermaid source: the first line names the type (flowchart LR, sequenceDiagram, '
+              'stateDiagram-v2, mindmap, timeline or pie); at most 6 nodes; labels of 1 to 4 words; every number and name taken from the sources; no styling lines '
+              '(classDef, style, linkStyle, init directives), no HTML. Mermaid places everything itself; a flowchart direction is changed to fit the video shape.',
               'For a section whose layout is animation, on_screen may be an empty list: the whole section is one animated picture, so write the narration '
               'as a walk through the idea in order, each sentence matching one thing that appears on screen.']
     return "\n".join(parts)
@@ -308,7 +312,49 @@ def parse_reply(reply):
     return None
 
 
-def write_script(topic, template, sources, ask, layouts="auto"):
+def resolve_diagram(raw, source_text, ask, title, check=None):
+    """The Mermaid source for a diagram section, or '' when none can be made: the model's text is cleaned, held to the sources (a number or name in
+    a label that no source holds), and parsed by Mermaid; a problem is sent back to the model once. `check(code)` returns (ok, reason)."""
+    from engine import case_mermaid
+    check = check or case_mermaid.check
+    code = case_mermaid.clean(raw)
+    for attempt in (1, 2):
+        problem = ""
+        if not code:
+            problem = "there is no Mermaid source (start with a line such as flowchart LR)"
+        else:
+            bad = case_mermaid.unsupported(code, source_text) if source_text else []
+            if bad:
+                problem = "these numbers or names are not in the sources, so remove them: " + ", ".join(bad[:4])
+            else:
+                ok, reason = check(code)
+                if ok:
+                    return code
+                problem = "Mermaid could not read it: " + reason
+        if attempt == 2:
+            break
+        try:
+            code = case_mermaid.clean(ask("Fix this Mermaid diagram for the section '" + str(title) + "'. Problem: " + problem
+                                          + "\n\nDiagram:\n" + str(raw or "")[:1500] + "\n\nReturn ONLY the corrected Mermaid source, no explanation, no code fence."))
+        except Exception:
+            return ""
+    return ""
+
+
+def diagram_for(section, topic, ask, source_text=None, check=None):
+    """Mermaid source for an existing section (its narration and labels in, a diagram out), or '' when none can be made valid and grounded. Used to turn a
+    section into a diagram after the script is written."""
+    labels = "; ".join(str(x) for x in section.get("on_screen") or [])
+    nl = "\n"
+    reply = ask("Draw ONE Mermaid diagram that explains this part of an explainer video about: " + str(topic) + nl + nl + "Section: " + str(section.get("title", ""))
+                + nl + "What the narrator says over it: " + str(section.get("narration", "")) + nl + "Key labels: " + labels
+                + nl + nl + "Rules: the first line names the type (flowchart LR, sequenceDiagram, stateDiagram-v2, mindmap or timeline); at most 6 nodes; labels of 1 to 4 words; "
+                "every number and name taken from the narration above; no styling lines (classDef, style, linkStyle, init directives), no HTML. "
+                "Return ONLY the Mermaid source, no explanation, no code fence.")
+    return resolve_diagram(reply, source_text, ask, section.get("title", ""), check)
+
+
+def write_script(topic, template, sources, ask, layouts="auto", check_diagram=None):
     """The script: {"title", "verified", "sources": [{id, ref}], "sections": [{id, title, scene, narration, on_screen, cites}],
     "dropped": [{section, sentence, unsupported}]}. `ask(prompt)` returns the model's text. Raises ValueError when the answer holds no
     usable section. With sources, a sentence holding a number or name no source contains is dropped; without, nothing can be checked
@@ -344,6 +390,11 @@ def write_script(topic, template, sources, ask, layouts="auto"):
         scene = pick_layout(sec["scene"], row.get("scene"), previous, layouts)
         if layouts == "auto":
             scene = fit_layout(scene, labels, previous)
+        diagram = ""
+        if scene == "diagram":
+            diagram = resolve_diagram(row.get("diagram"), source_text if sources else None, ask, sec["title"], check_diagram)
+            if not diagram:
+                scene = "flow"                     # the diagram could not be made valid and grounded: the plain row of steps shows the labels
         previous = scene
         if scene == "counters":
             labels = labels[:MAX_COUNTERS]
@@ -351,6 +402,8 @@ def write_script(topic, template, sources, ask, layouts="auto"):
             labels = labels[:MAX_CHECKLIST]       # more rows run into the caption bar
         sections.append({"id": sec["id"], "title": sec["title"], "scene": scene, "narration": narration,
                          "on_screen": labels, "cites": cites, "footage": footage})
+        if diagram:
+            sections[-1]["diagram"] = diagram
     if not sections:
         raise ValueError("Nothing usable was left in the script" + (" after the unsupported claims were removed." if dropped else "."))
     hook = " ".join(str(data.get("hook") or "").split())[:110]
@@ -379,6 +432,8 @@ def script_to_text(script):
         lines += [f"== {n}. {sec.get('title', '')} [{sec.get('scene', 'quote')}]", f"FOOTAGE: {'; '.join(footage)}", "NARRATION:",
                   str(sec.get("narration", "")).strip(), "LABELS:"]
         lines += [f"- {x}" for x in sec.get("on_screen") or []]
+        if sec.get("diagram"):
+            lines += ["DIAGRAM:", str(sec["diagram"]).strip()]
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -412,6 +467,13 @@ def script_from_text(text, base):
         sec["narration"] = " ".join((narration.group(1) if narration else "").split())
         if not sec["narration"]:
             raise ValueError(f"Section {m.group(1)} ('{sec.get('title', '')}') has no narration.")
+        diagram = re.search(r"(?ms)^DIAGRAM:[ \t]*\n(.*)\Z", rest)
+        if diagram:
+            from engine import case_mermaid
+            code = case_mermaid.clean(diagram.group(1))
+            if code:
+                sec["diagram"] = code
+            rest = rest[:diagram.start()]
         labels = re.search(r"(?ms)^LABELS:[ \t]*\n?(.*)\Z", rest)
         sec["on_screen"] = [x.strip()[:80] for x in re.findall(r"(?m)^\s*-\s*(.+)$", labels.group(1) if labels else "") if x.strip()][:6]
         sections.append(sec)
