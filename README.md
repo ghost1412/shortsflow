@@ -3,7 +3,7 @@
 # ShortsFlow
 
 > **Drop in a podcast or interview, get captioned vertical clips. No account, no API key, no upload.**
-> And it goes further: give it a web page, a PDF or an arXiv paper and it writes, animates and narrates a finished explainer video, then publishes it.
+> And it does much more: it **dubs** a video into another language, makes **recaps** of a trip, wedding or event, turns photos into reels, writes and animates **explainers** from a web page, PDF or arXiv paper, makes idea-to-video shorts, and **publishes** and schedules them.
 > Free and open source (MIT): no watermark, no credits, no subscription. Runs on your own PC.
 
 <p align="center">
@@ -29,8 +29,10 @@
 | A topic and sources (web page, PDF, arXiv paper, YouTube, audio) | **A sectioned explainer video** (16:9 and 9:16): the script is written only from your sources and its numbers are checked against them, with narration, Mermaid diagrams, Manim animation, stock footage, captions and music | `python main.py --mode CASE --prompt "The topic" --sources LINK` |
 | A topic | **One continuous animated explanation** (equations, processes, algorithms) | `python main.py --mode ANIMATE --prompt "How binary search halves the work"` |
 | One line of text | **Idea-to-video shorts**: facts, would-you-rather, stories, 30+ formats | `python main.py --mode FACTS --category "space mysteries"` |
-| Trip, wedding or event footage | **A recap** with day cards and an itinerary | `--mode TRIP` |
-| A video in one language | **A dub** in another | `--mode DUB` |
+| Trip, wedding, event or family footage | **A recap**: the best moments, a hook, day and stop cards, a closing card and an itinerary, in tall and wide versions, with the look matched to the footage | the **Recap** tab, or `--mode TRIP` |
+| A video in one language | **A dub** in another: transcribed, translated sentence by sentence, re-voiced, the original audio ducked, translated subtitles burned in (one synthetic voice, no lip-sync) | `python main.py --mode DUB --source_video talk.mp4 --target_lang es --dub_captions` |
+| 3 or more photos | **A photo reel** with music: memories, travel, product, then vs now, countdown or tribute; blurry and duplicate photos skipped | `python main.py --mode PHOTO_REEL --photos_dir photos --reel_type travel` |
+| A game recording | **Game moments** as shorts, keeping the whole picture and HUD in frame | `shortsflow clip gameplay.mp4 --content game` (see [docs/FEATURES.md](docs/FEATURES.md)) |
 | Any finished video | **Published** to YouTube, TikTok, Instagram, X and more, now or at a time you set | the **Publish videos** card in the app |
 
 <p align="center">
