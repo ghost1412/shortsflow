@@ -145,3 +145,10 @@ def test_build_props_hands_the_clip_aspect_to_the_renderer_and_defaults_to_16x9(
     clips = [{"path": "a.webm", "rate": 1.0, "aspect": 2.2}, {"path": "b.webm", "rate": 1.0}]       # the second one is an old clip without an aspect
     props = cr.build_props(script, timing, [[], []], clips=clips)
     assert props["sections"][0]["clipAspect"] == 2.2 and props["sections"][1]["clipAspect"] == round(16 / 9, 3)
+
+
+def test_build_props_carries_the_hook_to_the_cover():
+    script = dict(SCRIPT, hook="One bug, millions of servers")
+    props = cr.build_props(script, [(2.0, 12.0), (12.0, 20.0)], [[], []])
+    assert props["hook"] == "One bug, millions of servers"
+    assert cr.build_props(dict(SCRIPT), [(2.0, 12.0), (12.0, 20.0)], [[], []])["hook"] == ""

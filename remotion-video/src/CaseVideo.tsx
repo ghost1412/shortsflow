@@ -17,6 +17,7 @@ export const caseVideoSchema = z.object({
   bgMusicUrl: z.string().optional(),
   bgMusicVolume: z.number().default(0.12),
   introSeconds: z.number().default(2.5),
+  hook: z.string().default(""),               // one gripping line shown big on the cover card (the title becomes a small label above it)
   outroSeconds: z.number().default(3),
   verified: z.boolean().default(true),
   removedClaims: z.number().default(0),         // sentences the check removed because the sources do not hold them
@@ -617,7 +618,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
   );
 };
 
-const Cover: React.FC<{ title: string; p: Pal; accent: string; frames: number; sub?: string; lines?: string[] }> = ({ title, p, accent, frames, sub, lines }) => {
+const Cover: React.FC<{ title: string; p: Pal; accent: string; frames: number; sub?: string; lines?: string[]; hook?: string }> = ({ title, p, accent, frames, sub, lines, hook }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { u } = useUnit();
@@ -626,7 +627,14 @@ const Cover: React.FC<{ title: string; p: Pal; accent: string; frames: number; s
   return (
     <AbsoluteFill style={{ justifyContent: "center", padding: `0 ${80 * u}px`, opacity: fade }}>
       <div style={{ width: 120 * u * t, height: 8 * u, background: accent, borderRadius: 4, marginBottom: 40 * u, boxShadow: `0 0 ${24 * u}px ${accent}` }} />
-      <div style={{ fontFamily: FONT, fontSize: 92 * u, fontWeight: 800, color: p.text, lineHeight: 1.08, opacity: t, transform: `translateY(${(1 - t) * 40 * u}px)` }}>{title}</div>
+      {hook ? (
+        <>
+          <div style={{ fontFamily: MONO, fontSize: 36 * u, color: accent, letterSpacing: 2, textTransform: "uppercase", marginBottom: 26 * u, opacity: t }}>{title}</div>
+          <div style={{ fontFamily: FONT, fontSize: (hook.length > 60 ? 76 : 96) * u, fontWeight: 800, color: p.text, lineHeight: 1.08, opacity: t, transform: `translateY(${(1 - t) * 40 * u}px)` }}>{hook}</div>
+        </>
+      ) : (
+        <div style={{ fontFamily: FONT, fontSize: 92 * u, fontWeight: 800, color: p.text, lineHeight: 1.08, opacity: t, transform: `translateY(${(1 - t) * 40 * u}px)` }}>{title}</div>
+      )}
       {sub && <div style={{ fontFamily: MONO, fontSize: 34 * u, color: accent, marginTop: 36 * u, opacity: t }}>{sub}</div>}
       {lines && lines.map((l, i) => <div key={i} style={{ fontFamily: FONT, fontSize: 32 * u, color: p.dim, marginTop: 14 * u, opacity: t }}>{l}</div>)}
     </AbsoluteFill>
@@ -677,7 +685,7 @@ export const CaseVideo: React.FC<Props> = (props) => {
       {props.bgMusicUrl && <Audio src={asset(props.bgMusicUrl)} volume={() => props.bgMusicVolume} loop />}
       {introF > 0 && (
         <Sequence durationInFrames={introF}>
-          <Cover title={props.title} p={p} accent={accent} frames={introF} sub={props.verified ? undefined : "UNVERIFIED - no sources were given"} />
+          <Cover title={props.title} hook={props.hook} p={p} accent={accent} frames={introF} sub={props.verified ? undefined : "UNVERIFIED - no sources were given"} />
         </Sequence>
       )}
       {sections.map((s, i) => {

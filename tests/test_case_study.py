@@ -224,3 +224,27 @@ def test_recipe_template_and_counter_cap():
     script = cs.write_script("T", t, [], lambda p: json.dumps({"title": "T", "sections": rows}))
     counters = [s for s in script["sections"] if s["scene"] == "counters"]
     assert counters and all(len(s["on_screen"]) <= cs.MAX_COUNTERS for s in counters)
+
+
+def test_the_prompt_asks_for_a_hook_and_the_script_keeps_a_supported_one():
+    import json
+    from engine import case_study as cs
+    t = cs.load_template("case")
+    assert "HOOK:" in cs.build_prompt("T", t, []) and '"hook"' in cs.build_prompt("T", t, [])
+    rows = [{"id": s["id"], "narration": "A sentence.", "on_screen": ["a"], "scene": s["scene"]} for s in t]
+    src = [{"id": "S1", "ref": "x", "text": "The bug existed since 2013 in Log4j and put millions of servers at risk."}]
+    good = json.dumps({"title": "T", "hook": "One logging bug put millions of servers at risk", "sections": rows})
+    assert cs.write_script("T", t, src, lambda p: good)["hook"] == "One logging bug put millions of servers at risk"
+    bad = json.dumps({"title": "T", "hook": "It cost 99 billion dollars", "sections": rows})       # a figure no source holds
+    assert cs.write_script("T", t, src, lambda p: bad)["hook"] == ""
+    assert cs.write_script("T", t, [], lambda p: good)["hook"] != ""                                # no sources: nothing to check against
+    assert cs.write_script("T", t, src, lambda p: json.dumps({"title": "T", "sections": rows}))["hook"] == ""
+
+
+def test_the_hook_is_editable_in_the_review_text():
+    from engine import case_study as cs
+    base = {"title": "T", "hook": "Old hook", "sections": [{"id": "a", "title": "A", "scene": "quote", "narration": "n", "on_screen": [], "footage": []}], "sources": []}
+    text = cs.script_to_text(base)
+    assert "HOOK: Old hook" in text
+    assert cs.script_from_text(text.replace("HOOK: Old hook", "HOOK: A better, sharper hook"), base)["hook"] == "A better, sharper hook"
+    assert cs.script_from_text(text.replace("HOOK: Old hook\n", ""), base)["hook"] == "Old hook"          # a deleted line keeps the saved hook

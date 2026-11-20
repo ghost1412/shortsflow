@@ -224,7 +224,7 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
         if foot:
             sections[-1]["footage"] = [{"src": f["path"], "seconds": f.get("seconds") or 10.0, "kind": f.get("kind", "video")} for f in foot]
         words += [{"word": w["word"], "start": round(w["start"] + start, 3), "end": round(w["end"] + start, 3)} for w in ws]
-    props = {"title": script["title"], "theme": theme, "introSeconds": intro, "outroSeconds": outro, "verified": bool(script.get("verified")),
+    props = {"title": script["title"], "hook": str(script.get("hook") or ""), "theme": theme, "introSeconds": intro, "outroSeconds": outro, "verified": bool(script.get("verified")),
              "sources": [source_label(s["ref"]) for s in script.get("sources", [])], "removedClaims": len(script.get("dropped") or []),
              "captionsOff": not captions, "sections": sections, "words": words,
              "bgMusicVolume": music_volume}

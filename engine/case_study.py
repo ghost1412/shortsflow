@@ -194,6 +194,9 @@ def build_prompt(topic, template, sources, layouts="auto"):
     parts += ["", "Every section needs several specific sentences with the real names, dates and figures from the sources, not a summary of a summary. "
               "A section about results, impact or why it matters states what the sources report was found, measured or changed (the outcomes), "
               "not how the work was set up; if the sources hold no such outcomes, say what they do claim. "
+              "HOOK: the viewer decides in two seconds whether to keep watching. Give a top-level \"hook\": ONE line of 12 words or fewer, the most surprising or "
+              "highest-stakes fact the sources report, or a sharp question they answer; no greeting, no \"in this video\", no clickbait the sources do not back. "
+              "The first sentence of the first section's narration must also open with that kind of fact, not with background. "
               "When the work is a paper, name the institution or lab at most once and never read out a list of author names. "
               "Advice in the last section may be general, but must not add facts.", "", "One section per question, in this order:"]
     for s in template:
@@ -204,7 +207,7 @@ def build_prompt(topic, template, sources, layouts="auto"):
         parts += [f"  {name}: {LAYOUT_HELP[name]}" for name in AUTO_LAYOUTS]
         parts.append("  (a section whose default layout is terminal, equation or animation keeps it)")
     parts += ["", "Return raw JSON only:",
-              '{"title": "<plain title, no emoji>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, concrete: who, what, when, how many, in order>", '
+              '{"title": "<plain title, no emoji>", "hook": "<12 words or fewer>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, concrete: who, what, when, how many, in order>", '
               '"scene": "<the layout you chose for this section>", '
               '"on_screen": ["<3-5 short labels, steps or figures shown on screen, never empty>"], "cites": ["S1"], '
               '"footage": ["<3 or 4 different searches for stock video, 2-4 plain words each, one per step of this section: things a camera can film, no brand, person or place names>"]}]}',
@@ -350,7 +353,10 @@ def write_script(topic, template, sources, ask, layouts="auto"):
                          "on_screen": labels, "cites": cites, "footage": footage})
     if not sections:
         raise ValueError("Nothing usable was left in the script" + (" after the unsupported claims were removed." if dropped else "."))
-    return {"title": str(data.get("title") or topic).strip()[:120], "verified": bool(sources),
+    hook = " ".join(str(data.get("hook") or "").split())[:110]
+    if hook and sources and unsupported(hook, source_text):        # a hook is held to the same rule as every sentence: nothing the sources do not say
+        hook = ""
+    return {"title": str(data.get("title") or topic).strip()[:120], "hook": hook, "verified": bool(sources),
             "sources": [{"id": s["id"], "ref": s["ref"]} for s in sources], "sections": sections, "dropped": dropped}
 
 
@@ -366,7 +372,7 @@ def script_to_text(script):
         - first thing shown on screen
         - second thing
     """
-    lines = [f"TITLE: {script.get('title', '')}", ""]
+    lines = [f"TITLE: {script.get('title', '')}", f"HOOK: {script.get('hook', '')}", ""]
     for n, sec in enumerate(script["sections"], start=1):
         footage = sec.get("footage") or []
         footage = [footage] if isinstance(footage, str) else footage
@@ -386,6 +392,8 @@ def script_from_text(text, base):
     title = re.search(r"(?m)^TITLE:\s*(.+)$", head)
     out = dict(base)
     out["title"] = (title.group(1).strip() if title else str(base.get("title", "")))[:120]
+    hook = re.search(r"(?m)^HOOK:[ \t]*(.*)$", head)
+    out["hook"] = (" ".join(hook.group(1).split()) if hook else str(base.get("hook", "")))[:110]
     sections = []
     for block in blocks:
         first, _, rest = block.partition("\n")
