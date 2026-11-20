@@ -2,13 +2,14 @@
 
 # ShortsFlow
 
-> **Drop in a podcast or interview, get captioned vertical clips. No account, no API key, no upload.**
-> Free and open source (MIT): no watermark, no credits, no subscription. Runs on your own PC.
+> **Turn a long video, a web page, a PDF or an arXiv paper into finished videos, then publish them. On your own PC.**
+> Captioned vertical clips from a podcast or interview, or a narrated explainer with animated diagrams written only from your sources.
+> Free and open source (MIT): no watermark, no credits, no subscription, no account needed to clip.
 
 <p align="center">
   <!-- DEMO VIDEO: replace with the YouTube link / thumbnail, e.g. [![Watch the 90 s demo](docs/demo_thumb.png)](https://youtu.be/XXXX) -->
-  <img src="demos/demo_podcast_cuts.gif" width="260" alt="A podcast clip: the crop cuts to whoever is speaking, with word-by-word captions" />
-  <br/><sub>A real run: the 9:16 crop cuts to whoever is talking, with word-timed captions.</sub>
+  <img src="demos/demo_case_16x9.gif" width="520" alt="A case explainer made from one web page: an animated diagram over stock footage, a source chip and captions" />
+  <br/><sub>A real run of <code>--mode CASE</code>: one web page in, a narrated explainer with an animated diagram out. Clips from a podcast are further down.</sub>
 </p>
 
 <p align="center">
@@ -18,6 +19,31 @@
   <a href="https://github.com/ghost1412/shortsflow/actions/workflows/tests.yml"><img src="https://github.com/ghost1412/shortsflow/actions/workflows/tests.yml/badge.svg" alt="Tests" /></a>
   <a href="https://github.com/ghost1412/shortsflow/stargazers"><img src="https://img.shields.io/github/stars/ghost1412/shortsflow?style=flat&logo=github" alt="GitHub stars" /></a>
 </p>
+
+## What it makes
+
+| You give it | You get | One line |
+|---|---|---|
+| A long video, a YouTube link, a podcast | **Captioned 9:16 shorts**: moments picked on sentence boundaries, face-tracked crops, a cut to whoever speaks, word-by-word captions, silences removed | `shortsflow clip interview.mp4 --captions` |
+| A topic and sources (web page, PDF, arXiv paper, YouTube, audio) | **A sectioned explainer video** (16:9 and 9:16): the script is written only from your sources and its numbers are checked against them, with narration, Mermaid diagrams, Manim animation, stock footage, captions and music | `python main.py --mode CASE --prompt "The topic" --sources LINK` |
+| A topic | **One continuous animated explanation** (equations, processes, algorithms) | `python main.py --mode ANIMATE --prompt "How binary search halves the work"` |
+| One line of text | **Idea-to-video shorts**: facts, would-you-rather, stories, 30+ formats | `python main.py --mode FACTS --category "space mysteries"` |
+| Trip, wedding or event footage | **A recap** with day cards and an itinerary | `--mode TRIP` |
+| A video in one language | **A dub** in another | `--mode DUB` |
+| Any finished video | **Published** to YouTube, TikTok, Instagram, X and more, now or at a time you set | the **Publish videos** card in the app |
+
+<p align="center">
+  <img src="demos/demo_podcast_cuts.gif" width="150" alt="A podcast clip with a cut to the speaker and word-timed captions" />
+  <img src="demos/demo_case_9x16.gif" width="150" alt="A case explainer: an animated diagram over stock footage with a source chip and captions" />
+  <img src="demos/demo_explainer.gif" width="150" alt="A continuous Manim animation explaining an idea" />
+  <img src="demos/demo_facts.gif" width="150" alt="A facts short" />
+  <img src="demos/demo_recap.gif" width="150" alt="A trip recap" />
+  <br/><sub>Clips, a case explainer, an animated explainer, a facts short and a recap. All made by ShortsFlow from public-domain or Creative Commons material.</sub>
+</p>
+
+**Why it is different from a clipper.** Most tools stop at "cut a long video into shorts". ShortsFlow also writes the video: the case explainer reads your sources, drafts a script that only uses what they say (a number the source does not contain is rejected), draws each scene as a diagram, animation or footage, narrates it and renders both shapes. Everything runs on your PC with a local Whisper, a local FFmpeg and an optional local Ollama; a cloud AI key only makes the writing better and is never required to clip.
+
+**Built to be automated.** A browser app (a card per task, a Publish videos card, Settings for keys and your own YouTube channel), a desktop studio, a CLI, Docker, a REST API (`python -m shortsflow.api`, with an n8n flow), an MCP server for AI agents, a scheduler for posts, and a daily GitHub Action that makes and posts a short by itself. 1,300+ offline tests run on every push.
 
 ## Try it in two minutes
 
@@ -63,6 +89,19 @@ python main.py --source_video "https://www.youtube.com/watch?v=VIDEO_ID" --extra
   --clip_count 3 --layout auto --smart_crop --tighten --use_remotion --caption_style HORMOZI
 ```
 
+## The case explainer: videos written from your sources
+
+```bash
+python main.py --mode CASE --prompt "How the Heartbleed bug worked" --sources https://en.wikipedia.org/wiki/Heartbleed
+python main.py --mode CASE --prompt "The topic" --sources LINK --case plan_only     # write the script, edit script.json, then render
+python main.py --mode CASE --case help                                              # every option
+```
+
+- **Grounded.** Sources are read (web pages, including ones that need JavaScript, PDFs, arXiv, YouTube captions or local transcription, audio and video files). The script may only use what they say, and numbers, names and quotes are checked against the text.
+- **Drawn, not stock slides.** Each section picks a layout: Mermaid diagrams (flowcharts, sequence, state, mind maps, drawn large with a camera that follows long chains), Manim animation, timelines, counters, checklists, or footage. Layout is fitted by measurement, so nothing overlaps the captions.
+- **Templates.** case, postmortem, history, explainer, recipe, news and animation, with a hook for the first seconds.
+- **Local fallbacks.** Gemini, then other providers, then local Ollama if the cloud is rate-limited. The Edge voice takes over if ElevenLabs is out of credits.
+
 ## How good is it? We measure it
 
 Clip quality is checked on public-domain and Creative Commons videos with no AI key at all, with a benchmark that runs on GitHub's runners
@@ -90,14 +129,7 @@ The transcript of each video you process is also kept on your PC in `~/.shortsfl
 ## More than clips
 
 Browser app, desktop studio, CLI, Docker, REST API, an MCP server for AI agents, dubbing, trip and event recaps, photo reels, step-by-step videos,
-game moments, source-grounded explainers (`--mode CASE`: a topic plus a web page, PDF or arXiv paper, YouTube video or audio file in, a finished video out, with numbers checked against the source; `--mode ANIMATE`: one continuous animated explanation), a Settings page in the browser app for keys and publishing, and 30+ idea-to-video formats. They are documented in **[docs/FEATURES.md](docs/FEATURES.md)** (the full feature reference).
-
-<p align="center">
-  <img src="demos/demo_short.gif" width="200" alt="An idea-to-video short made from one line of text" />
-  <img src="demos/demo_spot_the_lie.gif" width="200" alt="A spot-the-lie facts short" />
-  <img src="demos/demo_case_9x16.gif" width="200" alt="A case explainer made from one Wikipedia page: an animated diagram over stock footage, a source chip and captions" />
-  <br/><sub>Idea-to-video: a short from one line of text, a "spot the lie" facts short, and a case explainer made from a single web page (<code>--mode CASE</code>).</sub>
-</p>
+game moments, source-grounded explainers (`--mode CASE`: a topic plus a web page, PDF or arXiv paper, YouTube video or audio file in, a finished video out, with numbers checked against the source; `--mode ANIMATE`: one continuous animated explanation), a Publish videos card and a Settings card in the browser app (keys, your own YouTube channel, scheduled posts), and 30+ idea-to-video formats. They are documented in **[docs/FEATURES.md](docs/FEATURES.md)** (the full feature reference).
 
 ## Help and contributing
 

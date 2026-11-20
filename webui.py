@@ -728,25 +728,73 @@ def youtube_disconnect(account):
     return ("✅ " if ok else "⚠️ ") + message, youtube_view(account)
 
 
-def publish_runs_update():
+def platform_choices():
+    """[(label, value)] for a Publish to box: the Upload-Post platforms say so, the direct route is the person's own channel."""
+    from engine.publish import PLATFORMS
     from shortsflow import settings
-    runs = settings.list_runs(ROOT)
-    return gr.update(choices=[(label, folder + "|" + kind) for label, folder, kind in runs], value=(runs[0][1] + "|" + runs[0][2]) if runs else None)
+    return [(f"{p} (via Upload-Post)", p) for p in PLATFORMS] + [("YouTube direct (your own channel)", settings.DIRECT)]
 
 
-def publish_selected(run, platforms, preview, again, privacy="private", account="1"):
-    """Publish (or preview) the chosen finished run to the chosen platforms. Returns a Markdown message."""
+SHAPE_LABELS = {"All formats": "all", "Tall 9:16": "tall", "Wide 16:9": "wide", "Square": "square"}
+
+
+def publisher_choices(shape_label="All formats"):
+    """The video dropdown: every finished video of the chosen format, newest first."""
     from shortsflow import settings
-    if not run or "|" not in run:
-        return "Choose a finished run first."
-    folder, kind = run.rsplit("|", 1)
-    norm = lambda p: os.path.normcase(os.path.abspath(p))
-    if not os.path.isdir(folder) or norm(os.path.dirname(folder)) != norm(os.path.join(ROOT, "sessions")):
-        return "That run is not in this app's sessions folder."
-    ok, lines = settings.publish_run(folder, kind, list(platforms or []), dry_run=bool(preview), env_path=ENV_PATH, again=bool(again),
-                                     direct={"home": ROOT, "privacy": privacy, "account": account})
+    videos = settings.list_videos(ROOT, shape=SHAPE_LABELS.get(shape_label, "all"))
+    return gr.update(choices=[(v["label"], v["path"]) for v in videos], value=(videos[0]["path"] if videos else None))
+
+
+def publisher_pick(path):
+    """What a chosen video fills in: the player, and a title, description and tags to start from."""
+    from shortsflow import settings
+    if not path or not os.path.isfile(path):
+        return None, "", "", ""
+    title, description, tags = settings.default_details(path)
+    return path, title, description, ", ".join(tags)
+
+
+def publisher_publish(path, upload, title, description, tags, platforms, privacy, account, again, preview):
+    """Publish (or preview) one chosen video. A video from the library must lie in the sessions folder; an uploaded one is the person's own file."""
+    from shortsflow import settings
+    source = upload or path
+    if not source:
+        return "Pick a video from the list, or add one from this PC."
+    if not upload:
+        norm = lambda q: os.path.normcase(os.path.abspath(q))
+        if not norm(source).startswith(norm(os.path.join(ROOT, "sessions")) + os.sep):
+            return "That video is not in this app's sessions folder."
+    ok, lines = settings.publish_file(source, title, description, tags, list(platforms or []), privacy=privacy, account=account, home=ROOT,
+                                      dry_run=bool(preview), again=bool(again), env_path=ENV_PATH)
     head = "Preview (nothing was sent):" if preview else ("Published:" if ok else "Not published:")
     return head + "\n\n" + "\n\n".join(lines)
+
+
+def publisher_schedule(path, upload, title, description, tags, platforms, privacy, account, when):
+    """Queue the chosen video to be published at a later time. An uploaded file is copied into the sessions folder first so it is still there then."""
+    from shortsflow import schedule
+    source = upload or path
+    if not source:
+        return "Pick a video from the list, or add one from this PC.", schedule.markdown(ROOT)
+    if upload:
+        import shutil
+        folder = os.path.join(ROOT, "sessions", "uploads")
+        os.makedirs(folder, exist_ok=True)
+        source = os.path.join(folder, os.path.basename(upload))
+        if os.path.abspath(upload) != os.path.abspath(source):
+            shutil.copy2(upload, source)
+    else:
+        norm = lambda q: os.path.normcase(os.path.abspath(q))
+        if not norm(source).startswith(norm(os.path.join(ROOT, "sessions")) + os.sep):
+            return "That video is not in this app's sessions folder.", schedule.markdown(ROOT)
+    ok, message, _ = schedule.add(ROOT, source, when, title, description, tags, list(platforms or []), privacy=privacy, account=account)
+    return message, schedule.markdown(ROOT)
+
+
+def schedule_cancel(job_id):
+    from shortsflow import schedule
+    done = schedule.cancel(ROOT, (job_id or "").strip())
+    return ("Cancelled." if done else "No waiting job has that id."), schedule.markdown(ROOT)
 
 
 def with_auto_publish(stream):
@@ -1385,13 +1433,13 @@ from shortsflow.ui.theme import EXTRA_CSS as _EXTRA_CSS      # the mode cards, h
 WORDS_CSS += "<style>" + _EXTRA_CSS + "</style>"
 
 
-MODE_KEYS = ["shorts", "clip", "dub", "recap", "reel", "idea", "case"]       # the columns; "highlights" shares the first one
+MODE_KEYS = ["shorts", "clip", "dub", "recap", "reel", "idea", "case", "publish", "settings"]       # the columns; "highlights" shares the first one
 
 
 def web_args_modes():
     """[(label, key)] of the things you can make: the first screen of the app."""
     return [("Shorts", "shorts"), ("Highlights video", "highlights"), ("Dub into another language", "dub"), ("Recap (trip, wedding, event)", "recap"),
-            ("Photo reel", "reel"), ("Video from an idea", "idea"), ("Case explainer", "case"), ("Clip tool (all options)", "clip")]
+            ("Photo reel", "reel"), ("Video from an idea", "idea"), ("Case explainer", "case"), ("Clip tool (all options)", "clip"), ("Publish videos", "publish"), ("Settings", "settings")]
 
 
 def pick_mode(mode):
@@ -1463,69 +1511,6 @@ def build_ui():
         gr.HTML(WORDS_CSS)
         from shortsflow.timeline import DRAG_JS
         demo.load(None, None, None, js=DRAG_JS)
-        with gr.Accordion("⚙️ Settings: keys and uploads", open=False):
-            from engine.publish import PLATFORMS as _PLATFORMS
-            from shortsflow import settings as _settings
-            _rows = _settings.key_rows(ENV_PATH)
-            gr.Markdown("### Keys\nA key is saved in this PC's `.env` file, used from the next run, and only its last four characters are ever shown here. "
-                        "Most things work without any key.")
-            s_table = gr.Markdown(_settings.rows_markdown(_rows))
-            with gr.Row():
-                s_name = gr.Dropdown(_settings.choices(_rows), label="Which key", value=None, scale=2)
-                s_value = gr.Textbox(label="The key (or profile name)", type="password", placeholder="paste it here", scale=3,
-                                     interactive=not _remote())
-            with gr.Row():
-                s_save = gr.Button("Save key", variant="primary", interactive=not _remote())
-                s_remove = gr.Button("Remove key", interactive=not _remote())
-            s_msg = gr.Markdown(REMOTE_KEYS_MESSAGE if _remote() else "")
-            gr.Markdown("### Uploads\nPublishing goes through [Upload-Post](https://upload-post.com): you connect YouTube, TikTok, Instagram and the rest there once, "
-                        "add its key and profile name above, and choose the platforms here. **The video and its title leave this PC when you publish.** "
-                        "Tall videos go to TikTok, Instagram, Pinterest and Threads, wide ones to LinkedIn, Facebook and X, and YouTube gets both.")
-            _prefs = _settings.load_prefs(ROOT)
-            s_platforms = gr.CheckboxGroup([(p, p) for p in _PLATFORMS] + [("YouTube direct (your own Google app: set it up below)", _settings.DIRECT)],
-                                           value=_prefs["platforms"], label="Publish to")
-            s_yt_privacy = gr.Radio(list(_settings.PRIVACY), value=_prefs["youtube_privacy"], label="A direct YouTube upload is",
-                                    info="Private is the safe start. A new Google app may be limited to private until Google reviews it.")
-            s_auto = gr.Checkbox(_prefs["auto_publish"], label="Publish automatically when a run finishes (clips and case videos)",
-                                 info="Off by default. A run is never published twice to the same place unless you ask for it below.")
-            with gr.Accordion("Connect YouTube directly (your own channel, no third party)", open=False):
-                gr.Markdown("Videos go **straight from this PC to your channel** through your own Google app, so nothing passes through another service. "
-                            "One-time setup: in [Google Cloud Console](https://console.cloud.google.com) make a project, enable **YouTube Data API v3**, "
-                            "set up the OAuth consent screen (add your own Google account as a test user), create an **OAuth client ID of type Desktop app**, "
-                            "and download its JSON. Then: choose the file below, **Save client file**, and **Connect YouTube** (your browser opens for the sign-in). "
-                            "The sign-in is kept in `token.json` on this PC. Google's daily quota allows only a few uploads a day, and while the app is in "
-                            "Testing mode the sign-in expires after about a week (connect again).")
-                s_yt_account = gr.Dropdown(["1", "2", "3", "4"], value=_prefs["youtube_account"], label="Channel slot",
-                                           info="Slot 1 uses client_secrets.json and token.json, slot 2 uses client_secrets_2.json and token_2.json, and so on.")
-                s_yt_status = gr.Markdown(_settings.youtube_status_markdown(ROOT, _prefs["youtube_account"]))
-                s_yt_file = gr.File(label="Google client file (the downloaded JSON)", file_types=[".json"], type="filepath", interactive=not _remote())
-                with gr.Row():
-                    s_yt_save = gr.Button("Save client file", interactive=not _remote())
-                    s_yt_connect = gr.Button("Connect YouTube (opens your browser)", variant="primary", interactive=not _remote())
-                    s_yt_disconnect = gr.Button("Disconnect", interactive=not _remote())
-                s_yt_msg = gr.Markdown(REMOTE_KEYS_MESSAGE if _remote() else "")
-                s_yt_account.change(youtube_view, [s_yt_account], s_yt_status)
-                s_yt_save.click(youtube_save_file, [s_yt_account, s_yt_file], [s_yt_msg, s_yt_status])
-                s_yt_connect.click(youtube_connect, [s_yt_account], [s_yt_msg, s_yt_status])
-                s_yt_disconnect.click(youtube_disconnect, [s_yt_account], [s_yt_msg, s_yt_status])
-            s_save_up = gr.Button("Save upload settings")
-            s_up_msg = gr.Markdown("")
-            gr.Markdown("### Publish a finished run now")
-            with gr.Row():
-                s_run = gr.Dropdown(label="Finished run", choices=[], scale=4)
-                s_refresh = gr.Button("Refresh the list", scale=1)
-            with gr.Row():
-                s_preview = gr.Button("Preview (sends nothing)")
-                s_publish = gr.Button("Publish now", variant="primary")
-                s_again = gr.Checkbox(False, label="Publish again even if already published")
-            s_pub_msg = gr.Markdown("")
-            s_save.click(settings_save_key, [s_name, s_value], [s_msg, s_table, s_name, s_value])
-            s_remove.click(settings_remove_key, [s_name], [s_msg, s_table, s_name])
-            s_save_up.click(settings_save_uploads, [s_auto, s_platforms, s_yt_privacy, s_yt_account], s_up_msg)
-            s_refresh.click(publish_runs_update, None, s_run)
-            s_preview.click(lambda r, p, a, v, acc: publish_selected(r, p, True, a, v, acc), [s_run, s_platforms, s_again, s_yt_privacy, s_yt_account], s_pub_msg)
-            s_publish.click(lambda r, p, a, v, acc: publish_selected(r, p, False, a, v, acc), [s_run, s_platforms, s_again, s_yt_privacy, s_yt_account], s_pub_msg)
-            demo.load(publish_runs_update, None, s_run)
         mode_card = gr.Radio(web_args_modes(), value="shorts", label="What do you want to make?",
                              info="Pick one. Only the steps for that appear below.", elem_id="sf-modes")
         with gr.Column():
@@ -2232,11 +2217,104 @@ def build_ui():
                                               [c_status, c_log, c_video])
                 c_stop.click(stop_jobs, None, c_status, cancels=[c_run, c_plan_run, c_render_run])
 
+        with gr.Column(visible=False) as mode_col_settings:
+            from engine.publish import PLATFORMS as _PLATFORMS
+            from shortsflow import settings as _settings
+            from shortsflow import schedule as _schedule
+            _rows = _settings.key_rows(ENV_PATH)
+            gr.Markdown("### Keys\nA key is saved in this PC's `.env` file, used from the next run, and only its last four characters are ever shown here. "
+                        "Most things work without any key.")
+            s_table = gr.Markdown(_settings.rows_markdown(_rows))
+            with gr.Row():
+                s_name = gr.Dropdown(_settings.choices(_rows), label="Which key", value=None, scale=2)
+                s_value = gr.Textbox(label="The key (or profile name)", type="password", placeholder="paste it here", scale=3,
+                                     interactive=not _remote())
+            with gr.Row():
+                s_save = gr.Button("Save key", variant="primary", interactive=not _remote())
+                s_remove = gr.Button("Remove key", interactive=not _remote())
+            s_msg = gr.Markdown(REMOTE_KEYS_MESSAGE if _remote() else "")
+            gr.Markdown("### Uploads\nPublishing goes through [Upload-Post](https://upload-post.com): you connect YouTube, TikTok, Instagram and the rest there once, "
+                        "add its key and profile name above, and choose the platforms here. **The video and its title leave this PC when you publish.** "
+                        "Tall videos go to TikTok, Instagram, Pinterest and Threads, wide ones to LinkedIn, Facebook and X, and YouTube gets both.")
+            _prefs = _settings.load_prefs(ROOT)
+            s_platforms = gr.CheckboxGroup(platform_choices(), value=_prefs["platforms"], label="Default places to publish to")
+            s_yt_privacy = gr.Radio(list(_settings.PRIVACY), value=_prefs["youtube_privacy"], label="A direct YouTube upload is",
+                                    info="Private is the safe start. A new Google app may be limited to private until Google reviews it.")
+            s_auto = gr.Checkbox(_prefs["auto_publish"], label="Publish automatically when a run finishes (clips and case videos)",
+                                 info="Off by default. A run is never published twice to the same place unless you ask for it below.")
+            with gr.Accordion("Connect YouTube directly (your own channel, no third party)", open=False):
+                gr.Markdown("Videos go **straight from this PC to your channel** through your own Google app, so nothing passes through another service. "
+                            "One-time setup: in [Google Cloud Console](https://console.cloud.google.com) make a project, enable **YouTube Data API v3**, "
+                            "set up the OAuth consent screen (add your own Google account as a test user), create an **OAuth client ID of type Desktop app**, "
+                            "and download its JSON. Then: choose the file below, **Save client file**, and **Connect YouTube** (your browser opens for the sign-in). "
+                            "The sign-in is kept in `token.json` on this PC. Google's daily quota allows only a few uploads a day, and while the app is in "
+                            "Testing mode the sign-in expires after about a week (connect again).")
+                s_yt_account = gr.Dropdown(["1", "2", "3", "4"], value=_prefs["youtube_account"], label="Channel slot",
+                                           info="Slot 1 uses client_secrets.json and token.json, slot 2 uses client_secrets_2.json and token_2.json, and so on.")
+                s_yt_status = gr.Markdown(_settings.youtube_status_markdown(ROOT, _prefs["youtube_account"]))
+                s_yt_file = gr.File(label="Google client file (the downloaded JSON)", file_types=[".json"], type="filepath", interactive=not _remote())
+                with gr.Row():
+                    s_yt_save = gr.Button("Save client file", interactive=not _remote())
+                    s_yt_connect = gr.Button("Connect YouTube (opens your browser)", variant="primary", interactive=not _remote())
+                    s_yt_disconnect = gr.Button("Disconnect", interactive=not _remote())
+                s_yt_msg = gr.Markdown(REMOTE_KEYS_MESSAGE if _remote() else "")
+                s_yt_account.change(youtube_view, [s_yt_account], s_yt_status)
+                s_yt_save.click(youtube_save_file, [s_yt_account, s_yt_file], [s_yt_msg, s_yt_status])
+                s_yt_connect.click(youtube_connect, [s_yt_account], [s_yt_msg, s_yt_status])
+                s_yt_disconnect.click(youtube_disconnect, [s_yt_account], [s_yt_msg, s_yt_status])
+            s_save_up = gr.Button("Save upload settings")
+            s_up_msg = gr.Markdown("")
+            gr.Markdown("To publish a video, use the **Publish videos** card: pick any finished video, edit its title, and choose where it goes.")
+            s_save.click(settings_save_key, [s_name, s_value], [s_msg, s_table, s_name, s_value])
+            s_remove.click(settings_remove_key, [s_name], [s_msg, s_table, s_name])
+            s_save_up.click(settings_save_uploads, [s_auto, s_platforms, s_yt_privacy, s_yt_account], s_up_msg)
+        with gr.Column(visible=False) as mode_col_publish:
+            gr.Markdown("### Publish a video\nPick any video you have made (every format of every kind of run), check its title and description, and choose where it goes. "
+                        "**The video and its title leave this PC when you publish.** Keys and your YouTube sign-in are in the Settings card.")
+            with gr.Row():
+                p_shape = gr.Radio(list(SHAPE_LABELS), value="All formats", label="Show", scale=4)
+                p_refresh = gr.Button("Refresh the list", scale=1)
+            p_video = gr.Dropdown(label="Video (newest first)", choices=[], value=None, filterable=True)
+            with gr.Row(equal_height=False):
+                p_player = gr.Video(label="Preview", interactive=False, height=380)
+                with gr.Column():
+                    p_title = gr.Textbox(label="Title", placeholder="the title shown on the platform")
+                    p_desc = gr.Textbox(label="Description", lines=5)
+                    p_tags = gr.Textbox(label="Tags (separated by commas)")
+            with gr.Accordion("Or use a video from this PC", open=False):
+                p_upload = gr.File(label="A video file (it is used instead of the one chosen above)", file_types=[".mp4", ".mov", ".mkv", ".webm"], type="filepath")
+            p_where = gr.CheckboxGroup(platform_choices(), value=_prefs["platforms"], label="Publish to")
+            with gr.Row():
+                p_privacy = gr.Radio(list(_settings.PRIVACY), value=_prefs["youtube_privacy"], label="A direct YouTube upload is", scale=3)
+                p_account = gr.Dropdown(["1", "2", "3", "4"], value=_prefs["youtube_account"], label="YouTube channel slot", scale=1)
+            p_again = gr.Checkbox(False, label="Publish again even if this video was already published there")
+            with gr.Row():
+                p_preview = gr.Button("Preview (sends nothing)")
+                p_go = gr.Button("Publish now", variant="primary")
+            p_msg = gr.Markdown("")
+            gr.Markdown("### Or publish later\nType a time such as `2026-11-22 09:00`, `09:00` or `in 2h`. The app has to be open at that time (a missed one is sent the next time it runs). "
+                        "**The video and its title leave this PC when the job is sent.**")
+            with gr.Row():
+                p_when = gr.Textbox(label="Post at (your PC's time)", placeholder="2026-11-22 09:00", scale=3)
+                p_sched = gr.Button("Schedule it", scale=1)
+            p_queue = gr.Markdown(_schedule.markdown(ROOT))
+            with gr.Row():
+                p_cancel_id = gr.Textbox(label="Cancel a waiting job (its id)", scale=3)
+                p_cancel = gr.Button("Cancel it", scale=1)
+            p_sched_msg = gr.Markdown("")
+            p_sched.click(publisher_schedule, [p_video, p_upload, p_title, p_desc, p_tags, p_where, p_privacy, p_account, p_when], [p_sched_msg, p_queue])
+            p_cancel.click(schedule_cancel, [p_cancel_id], [p_sched_msg, p_queue])
+            p_shape.change(publisher_choices, [p_shape], p_video)
+            p_refresh.click(publisher_choices, [p_shape], p_video)
+            p_video.change(publisher_pick, [p_video], [p_player, p_title, p_desc, p_tags])
+            p_preview.click(lambda *a: publisher_publish(*a, True), [p_video, p_upload, p_title, p_desc, p_tags, p_where, p_privacy, p_account, p_again], p_msg)
+            p_go.click(lambda *a: publisher_publish(*a, False), [p_video, p_upload, p_title, p_desc, p_tags, p_where, p_privacy, p_account, p_again], p_msg)
+            demo.load(publisher_choices, [p_shape], p_video)
         gr.Markdown("API keys are read from `.env` (`GEMINI_API_KEY`, `PEXELS_API_KEY`, ...). "
                     "See `env.example`. Your video files stay on this PC. Only what you switch on goes out: transcript text to an AI text provider when a key is set, "
                     "small frames to Gemini for `--visual_context` when a key is set, text to the voice service in the dub and idea-to-video modes, "
                     "stock-footage search words to Pexels, place names looked up on OpenStreetMap in trip recaps (turn it off with `--recap_no_geocode`), and any upload you ask for.")
-        mode_cols = [mode_col_shorts, mode_col_clip, mode_col_dub, mode_col_recap, mode_col_reel, mode_col_idea, mode_col_case]
+        mode_cols = [mode_col_shorts, mode_col_clip, mode_col_dub, mode_col_recap, mode_col_reel, mode_col_idea, mode_col_case, mode_col_publish, mode_col_settings]
         mode_card.change(pick_mode, mode_card, [*mode_cols, q_mode])
     return demo
 
@@ -2266,6 +2344,8 @@ def main(argv=None):
     creds = web_args.resolve_auth(cli.auth, cli.share, cli.host)
     if creds and not cli.auth:
         print(f"[Login] username: {creds[0]}   password: {creds[1]}   (new on every start; use --auth user:pass to choose your own)", flush=True)
+    from shortsflow import schedule
+    schedule.start_background(ROOT, ENV_PATH)       # sends scheduled videos when their time comes, while the app is open
     build_ui().queue(default_concurrency_limit=1).launch(
         server_name=cli.host, server_port=cli.port, share=cli.share, inbrowser=cli.open,
         **({"auth": creds} if creds else {}), **_launch_theme(), **_favicon()

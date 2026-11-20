@@ -10,6 +10,8 @@ YouTube, TikTok, Instagram, Facebook, LinkedIn, X, Threads and Pinterest. Say so
 import json
 import os
 import re
+import shutil
+import subprocess
 
 # (env name, label, group, what it is for, where to get it)
 KEYS = (
@@ -474,8 +476,6 @@ def publish_direct(folder, kind, privacy, account, home, dry_run=False, uploader
     """Upload a finished run to the person's own YouTube channel. A case video goes up once (the tall version when there is one, as a Short), a
     set of clips goes up clip by clip. `uploader` replaces engine.social_gen.YouTubeUploader (tests). Returns (ok, [message lines])."""
     import glob
-    from engine.platform_limits import LIMITS, truncate_words
-    privacy = privacy if privacy in PRIVACY else "private"
     items = []                                              # (path, title, description, tags)
     if kind == "case":
         videos = sorted(p for p in glob.glob(os.path.join(folder, "case_*.mp4")) if "draft" not in os.path.basename(p))
@@ -497,6 +497,14 @@ def publish_direct(folder, kind, privacy, account, home, dry_run=False, uploader
             return False, ["This run has no clips to upload."]
         if not items:
             return False, ["This run has no clips to upload."]
+    return upload_direct(items, privacy, account, home, dry_run=dry_run, uploader=uploader)
+
+
+def upload_direct(items, privacy, account, home, dry_run=False, uploader=None):
+    """Upload [(path, title, description, tags)] to the person's own YouTube channel. Never opens a browser: a sign-in that cannot be used is
+    reported. `uploader` replaces engine.social_gen.YouTubeUploader (tests). Returns (ok, [message lines])."""
+    from engine.platform_limits import LIMITS, truncate_words
+    privacy = privacy if privacy in PRIVACY else "private"
     if dry_run:
         return True, [f"✅ {os.path.basename(path)} → YouTube ({privacy}) as: {truncate_words(title, LIMITS['youtube']['title'])} (preview only, nothing sent)" for path, title, _d, _t in items]
     if home is None:
@@ -527,3 +535,194 @@ def publish_direct(folder, kind, privacy, account, home, dry_run=False, uploader
             lines.append(f"❌ {os.path.basename(path)} → YouTube: the upload did not return a video id")
             all_ok = False
     return all_ok, lines
+
+
+# ---- the video library: every finished video of every kind of run, and publishing one chosen file
+_INFO = {}
+LIBRARY_SKIP_WORDS = ("draft", "partial", "temp", "tmp", "voice", "sfx", "silence", "_raw", "preview")
+LIBRARY_SKIP_DIRS = ("manim_", "overlap_probe", "media", "node_modules", "check_frames", "remotion", "cache", "__pycache__")
+PLATFORM_SHAPES = {"tiktok": "tall", "instagram": "tall", "pinterest": "tall", "threads": "tall", "linkedin": "wide", "facebook": "wide", "x": "wide"}
+
+
+def video_info(path):
+    """{"width", "height", "seconds"} read from FFmpeg's description of a video (zeros when it cannot be read); remembered by file time."""
+    try:
+        key = (path, os.path.getmtime(path))
+    except OSError:
+        return {"width": 0, "height": 0, "seconds": 0.0}
+    if key in _INFO:
+        return _INFO[key]
+    info = {"width": 0, "height": 0, "seconds": 0.0}
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        try:
+            import imageio_ffmpeg
+            ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            ffmpeg = None
+    if ffmpeg:
+        try:
+            text = subprocess.run([ffmpeg, "-hide_banner", "-i", path], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30).stderr or ""
+            m = re.search(r"Video:.*?,\s*(\d{2,5})x(\d{2,5})", text)
+            d = re.search(r"Duration:\s*(\d+):(\d+):([\d.]+)", text)
+            if m:
+                info["width"], info["height"] = int(m.group(1)), int(m.group(2))
+            if d:
+                info["seconds"] = int(d.group(1)) * 3600 + int(d.group(2)) * 60 + float(d.group(3))
+        except (OSError, subprocess.SubprocessError, ValueError):
+            pass
+    _INFO[key] = info
+    return info
+
+
+def shape_of(path, info=None):
+    """"tall", "wide" or "square": from the picture size, else from the file name (9x16, 16x9, 1x1)."""
+    info = info or video_info(path)
+    w, h = info.get("width", 0), info.get("height", 0)
+    if w and h:
+        return "tall" if h > w * 1.15 else ("wide" if w > h * 1.15 else "square")
+    name = os.path.basename(path).lower()
+    return "tall" if ("9x16" in name or "4x5" in name) else ("wide" if "16x9" in name else "square")
+
+
+def default_details(path):
+    """(title, description, tags) to start from for a video: a case video's script, a clip's metadata entry, else the file name."""
+    folder, name = os.path.dirname(path), os.path.basename(path)
+    if name.lower().startswith("case_") and os.path.isfile(os.path.join(folder, "script.json")):
+        title, description = _case_title(folder)
+        return title, description, []
+    try:
+        with open(os.path.join(folder, "metadata.json"), encoding="utf-8") as f:
+            for it in json.load(f):
+                if os.path.basename(str(it.get("file", ""))) == name:
+                    return it.get("title") or os.path.splitext(name)[0], it.get("description") or "", list(it.get("tags") or [])
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return re.sub(r"[_-]+", " ", os.path.splitext(name)[0]).strip().capitalize() or "New video", "", []
+
+
+def list_videos(root, shape="all", limit=80, min_bytes=50_000):
+    """The finished videos in the sessions folder, newest first: [{path, label, shape, seconds, title, description, tags, folder}]. `shape` filters
+    ("all", "tall", "wide", "square"). Drafts, voice and sound files and the renderer's work folders are left out."""
+    candidates = []
+    base = os.path.join(root, "sessions")
+    for dirpath, dirnames, files in os.walk(base):
+        depth = os.path.relpath(dirpath, base).count(os.sep) + (0 if dirpath == base else 1)
+        dirnames[:] = [d for d in dirnames if not d.lower().startswith(LIBRARY_SKIP_DIRS)] if depth < 3 else []
+        for name in files:
+            low = name.lower()
+            if not low.endswith(".mp4") or any(w in low for w in LIBRARY_SKIP_WORDS):
+                continue
+            path = os.path.join(dirpath, name)
+            try:
+                if os.path.getsize(path) >= min_bytes:
+                    candidates.append((os.path.getmtime(path), path))
+            except OSError:
+                continue
+    out = []
+    for mtime, path in sorted(candidates, reverse=True)[: max(limit, 1) * 3]:
+        info = video_info(path)
+        kind = shape_of(path, info)
+        if shape not in ("all", kind):
+            continue
+        title, description, tags = default_details(path)
+        import time
+        mins, secs = divmod(int(info["seconds"]), 60)
+        label = (f"{title[:48]} · {'9:16 tall' if kind == 'tall' else '16:9 wide' if kind == 'wide' else 'square'}"
+                 + (f" · {mins}:{secs:02d}" if info["seconds"] else "") + f" · {os.path.getsize(path) / 1e6:.0f} MB · {time.strftime('%d %b %H:%M', time.localtime(mtime))}")
+        out.append({"path": path, "label": label, "shape": kind, "seconds": info["seconds"], "title": title, "description": description, "tags": tags,
+                    "folder": os.path.dirname(path)})
+        if len(out) >= limit:
+            break
+    return out
+
+
+FILES_RECORD = "published_files.json"
+
+
+def file_published_to(path):
+    """{platform: "date time"} of where one video file was already published (kept next to it)."""
+    try:
+        with open(os.path.join(os.path.dirname(path), FILES_RECORD), encoding="utf-8") as f:
+            data = json.load(f)
+        entry = data.get(os.path.basename(path)) if isinstance(data, dict) else None
+        return {str(k): str(v) for k, v in entry.items()} if isinstance(entry, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def record_file_published(path, platforms):
+    import time
+    record = os.path.join(os.path.dirname(path), FILES_RECORD)
+    try:
+        with open(record, encoding="utf-8") as f:
+            data = json.load(f)
+        data = data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        data = {}
+    entry = data.get(os.path.basename(path)) if isinstance(data.get(os.path.basename(path)), dict) else {}
+    stamp = time.strftime("%Y-%m-%d %H:%M")
+    for p in platforms:
+        entry[p] = stamp
+    data[os.path.basename(path)] = entry
+    with open(record, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(data, f, indent=1)
+
+
+def publish_file(path, title, description, tags, platforms, privacy="private", account="1", home=None, dry_run=False, again=False,
+                 env_path=None, environ=None, post=None, uploader=None):
+    """Publish ONE chosen video file with the title, description and tags the person settled on. The Upload-Post platforms and the direct YouTube
+    route are sent separately; a platform this file already went to is refused unless `again`. `post` replaces requests.post, `uploader`
+    replaces the YouTube uploader (tests). Returns (ok, [message lines])."""
+    platforms = [p for p in (platforms or []) if p in valid_platforms()]
+    if not platforms:
+        return False, ["Tick at least one place to publish to."]
+    if not os.path.isfile(path):
+        return False, ["That video file is no longer there."]
+    title = " ".join(str(title or "").split())[:200] or default_details(path)[0]
+    tags = [t.strip().lstrip("#") for t in (tags if isinstance(tags, (list, tuple)) else str(tags or "").replace("\n", ",").split(",")) if t.strip()]
+    if not dry_run and not again:
+        done = [p for p in platforms if p in file_published_to(path)]
+        if done:
+            return False, [f"This video was already published to {', '.join(done)} (on {file_published_to(path)[done[0]]}). Tick \"publish again\" to post it once more."]
+    shape = shape_of(path)
+    lines, advice = [], []
+    for p in platforms:
+        want = PLATFORM_SHAPES.get(p)
+        if want and shape in ("tall", "wide") and want != shape:
+            advice.append(f"⚠️ {p} works best with a {want} video; this one is {shape}.")
+    parts = []
+    others = [p for p in platforms if p != DIRECT]
+    if others:
+        parts.append((others,) + _send_upload_post(path, title, description, tags, others, dry_run, env_path, environ, post))
+    if DIRECT in platforms:
+        desc = description + ("\n\n#Shorts" if shape == "tall" and "#shorts" not in description.lower() and 0 < video_info(path)["seconds"] <= 180 else "")
+        parts.append(([DIRECT],) + upload_direct([(path, title, desc, tags)], privacy, account, home, dry_run=dry_run, uploader=uploader))
+    all_ok = True
+    for plats, ok, part_lines in parts:
+        all_ok = all_ok and ok
+        lines += part_lines
+        if ok and not dry_run:
+            record_file_published(path, plats)
+    return all_ok, lines + advice
+
+
+def _send_upload_post(path, title, description, tags, platforms, dry_run, env_path, environ, post):
+    """(ok, lines) for sending one file to Upload-Post platforms."""
+    from engine import publish
+    environ = os.environ if environ is None else environ
+    stored = read_env(env_path) if env_path else {}
+    api_key = stored.get("UPLOAD_POST_API_KEY") or environ.get("UPLOAD_POST_API_KEY") or ""
+    user = stored.get("UPLOAD_POST_USER") or environ.get("UPLOAD_POST_USER") or ""
+    name = os.path.basename(path)
+    if dry_run:
+        return True, [f"✅ {name} → {', '.join(platforms)} as: {title} (preview only, nothing sent)"]
+    if not (is_real(api_key) and is_real(user)):
+        return False, ["Add the Upload-Post key and profile in Settings first (made at upload-post.com, where you connect " + ", ".join(platforms) + ")."]
+    fields = publish.build_fields({"file": name, "title": title, "description": description, "tags": tags}, platforms, user)
+    try:
+        status, body = publish.publish_clip(path, fields, api_key, post or publish.requests.post)
+    except Exception as e:
+        return False, [f"❌ {name} → {', '.join(platforms)}: {str(e)[:140]}"]
+    ok = status in (200, 202) and body.get("success", True) is not False
+    return ok, [f"{'✅' if ok else '❌'} {name} → {', '.join(platforms)}" + ("" if ok else f": {body.get('error') or body}")]
