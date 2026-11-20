@@ -31,6 +31,7 @@ export const caseVideoSchema = z.object({
     beats: z.array(z.tuple([z.number(), z.number()])).default([]),                       // seconds after the section starts: a new picture at each
     clip: z.string().optional(),                // a rendered animation (Manim) drawn for this section, shown instead of the plain scene
     clipRate: z.number().default(1),
+    clipAspect: z.number().default(16 / 9),     // width / height of the clip: older clips are 16:9, the landscape panel clips are wider
     cues: z.array(z.number()).default([]),     // seconds after the section starts at which each label is spoken
     start: z.number(),
     end: z.number(),
@@ -591,7 +592,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
           {section.clip && whole ? (
             <OffthreadVideo src={asset(section.clip)} muted transparent playbackRate={section.clipRate} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
           ) : section.clip ? (
-            <div style={{ height: "100%", aspectRatio: portrait ? "4 / 5" : "16 / 9", maxWidth: "100%", borderRadius: 26 * u, overflow: "hidden", border: `2px solid ${accent}55`, boxShadow: `0 0 ${50 * u}px ${accent}22`, background: "rgba(4,10,22,0.45)", backdropFilter: "blur(14px)" }}>
+            <div style={{ height: "100%", aspectRatio: portrait ? "4 / 5" : String(section.clipAspect), maxWidth: "100%", borderRadius: 26 * u, overflow: "hidden", border: `2px solid ${accent}55`, boxShadow: `0 0 ${50 * u}px ${accent}22`, background: "rgba(4,10,22,0.45)", backdropFilter: "blur(14px)" }}>
               <OffthreadVideo src={asset(section.clip)} muted transparent playbackRate={section.clipRate} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
           ) : (

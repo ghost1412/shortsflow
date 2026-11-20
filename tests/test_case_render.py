@@ -65,7 +65,8 @@ def test_attach_clips_only_for_the_asked_scenes_and_sets_the_rate(tmp_path):
     script = dict(SCRIPT, sections=[dict(SCRIPT["sections"][0], scene="flow"), dict(SCRIPT["sections"][1], scene="flow"),
                                     dict(SCRIPT["sections"][1], id="c", scene="counters")])
     clips = cr.attach_clips(script, [(2.0, 12.0), (12.0, 20.0), (20.0, 25.0)], str(tmp_path), None, make=make, probe=lambda p: 15.0)
-    assert clips[0] == {"path": str(tmp_path / "a.mp4"), "rate": 1.5} and clips[1] is None and clips[2] is None
+    assert clips[0]["path"] == str(tmp_path / "a.mp4") and clips[0]["rate"] == 1.5 and clips[0]["aspect"] == round(16 / 9, 3)      # a clip that cannot be read counts as 16:9
+    assert clips[1] is None and clips[2] is None
     assert made == [("a", 10.0), ("b", 8.0)]
     props = cr.build_props(script, [(2.0, 12.0), (12.0, 20.0), (20.0, 25.0)], [[], [], []], clips=clips)
     assert props["sections"][0]["clip"].endswith("a.mp4") and props["sections"][0]["clipRate"] == 1.5
@@ -136,3 +137,11 @@ def test_compare_chart_and_quote_keep_the_authored_label_order_and_start_early()
     props = cr.build_props(script, [(2.0, 20.0), (20.0, 40.0)], [words, words])
     assert props["sections"][0]["labels"] == ["Before | After", "Open | Blocked"] and props["sections"][0]["cues"][0] <= 1.5
     assert props["sections"][1]["labels"] == ["After the patch", "Blocked ports"]                  # a timeline follows the narration
+
+
+def test_build_props_hands_the_clip_aspect_to_the_renderer_and_defaults_to_16x9():
+    script = dict(SCRIPT, sections=[dict(SCRIPT["sections"][0], scene="flow"), dict(SCRIPT["sections"][1], scene="flow")])
+    timing = [(2.0, 12.0), (12.0, 20.0)]
+    clips = [{"path": "a.webm", "rate": 1.0, "aspect": 2.2}, {"path": "b.webm", "rate": 1.0}]       # the second one is an old clip without an aspect
+    props = cr.build_props(script, timing, [[], []], clips=clips)
+    assert props["sections"][0]["clipAspect"] == 2.2 and props["sections"][1]["clipAspect"] == round(16 / 9, 3)

@@ -134,6 +134,27 @@ def spoken_order(labels, words, duration=None, first_by=1.5, gap=0.8):
     return ordered, cues
 
 
+def clip_aspect(path, default=16 / 9):
+    """Width / height of a clip, read from FFmpeg's description of the file (clips made before the wide panel are 16:9, newer ones 2.2);
+    `default` when it cannot be read."""
+    import re
+    import shutil
+    import subprocess
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        try:
+            import imageio_ffmpeg
+            ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            return round(default, 3)
+    try:
+        res = subprocess.run([ffmpeg, "-hide_banner", "-i", path], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+        m = re.search(r"Video:.*?,\s*(\d{2,5})x(\d{2,5})", res.stderr or "")
+        return round(int(m.group(1)) / int(m.group(2)), 3) if m and int(m.group(2)) else round(default, 3)
+    except Exception:
+        return round(default, 3)
+
+
 def attach_clips(script, timing, session_dir, ask, scenes=("flow",), portrait=False, accent="#00e5a8", make=None, probe=None,
                  tag="", reuse=False, generate=True):
     """Manim animations for the sections whose scene kind is in `scenes`: [None | {"path", "rate"}] per section. `rate` is the
@@ -162,7 +183,7 @@ def attach_clips(script, timing, session_dir, ask, scenes=("flow",), portrait=Fa
             continue
         length = float(probe(path) or 0.0)
         rate = max(0.6, min(1.6, length / (end - start))) if length > 0 else 1.0
-        out.append({"path": path, "rate": round(rate, 3)})
+        out.append({"path": path, "rate": round(rate, 3), "aspect": clip_aspect(path)})
     return out
 
 
@@ -198,6 +219,7 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
         if clip:
             sections[-1]["clip"] = clip["path"]
             sections[-1]["clipRate"] = clip["rate"]
+            sections[-1]["clipAspect"] = clip.get("aspect") or round(16 / 9, 3)
         sections[-1]["beats"] = beats_for(ws, end - start)
         if foot:
             sections[-1]["footage"] = [{"src": f["path"], "seconds": f.get("seconds") or 10.0, "kind": f.get("kind", "video")} for f in foot]

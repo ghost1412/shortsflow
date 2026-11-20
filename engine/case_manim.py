@@ -15,10 +15,14 @@ BACKGROUND = "#05070d"
 MAX_TRIES = 3
 
 
+WIDE_ASPECT = 2.2      # width / height of the panel clip of a landscape section (1980 x 900 px); a whole-frame animation stays 16:9
+
+
 def manim_prompt(section, seconds, topic="", portrait=False, accent="#00e5a8", error=None, full=False):
     """The model prompt for one section's Manim scene."""
     bounds = ("x in [-3.4, 3.4], y in [-6.0, 6.0] (a tall frame: stack things downwards, use the whole height)" if full else
-              "x in [-3.4, 3.4], y in [-4.2, 4.2] (a tall frame: stack things downwards)") if portrait else "x in [-4.2, 4.2], y in [-2.3, 2.3]"
+              "x in [-3.4, 3.4], y in [-4.2, 4.2] (a tall frame: stack things downwards)") if portrait else (
+                  "x in [-4.2, 4.2], y in [-2.3, 2.3]" if full else "x in [-4.2, 4.2], y in [-1.8, 1.8] (a wide, short frame: spread things sideways and use the whole width)")
     labels = "; ".join(str(x) for x in section.get("on_screen") or [])
     text = f"""Write ONE Manim Community Edition scene that visually explains this part of a video, in about {int(seconds)} seconds of animation.
 
@@ -100,7 +104,7 @@ def code_problem(code):
     return None
 
 
-def frame_problems(alphas, portrait=False):
+def frame_problems(alphas, portrait=False, wide=False):
     """What is wrong with a rendered scene, from the alpha channel of sample frames (2-D uint8 arrays, 0 = nothing drawn): a list of plain
     sentences, empty when it looks fine. Checks: drawing cut off at an edge, almost nothing drawn, drawing confined to a small part of the frame."""
     import numpy as np
@@ -130,14 +134,14 @@ def frame_problems(alphas, portrait=False):
         out.append(f"drawing is cut off at the {', '.join(sorted(cut))} edge; keep everything inside the frame (use the kit blocks or fit(group))")
     if (x1 - x0) < w * 0.42 and (y1 - y0) < h * 0.42:
         out.append("everything sits in a small part of the frame; make it larger and centre it")
-    elif (y1 - y0) < h * 0.36 and not portrait:
+    elif (y1 - y0) < h * (0.28 if wide else 0.36) and not portrait:
         out.append("the drawing is a thin strip; use more of the frame height")
     elif portrait and (y1 - y0) < h * 0.45:
         out.append("the drawing fills only part of the height of the tall frame; stack things downwards and use the whole height")
     return out
 
 
-def check_clip(mov, portrait=False, ffmpeg=None, every=2.5):
+def check_clip(mov, portrait=False, ffmpeg=None, every=2.5, wide=False):
     """Sample frames of the transparent .mov (one every `every` seconds, saved small next to it in check_frames/) and return frame_problems."""
     import shutil
     import subprocess
@@ -161,7 +165,7 @@ def check_clip(mov, portrait=False, ffmpeg=None, every=2.5):
         if name.startswith("f_") and name.endswith(".png"):
             im = Image.open(os.path.join(folder, name)).convert("RGBA")
             alphas.append(np.asarray(im)[:, :, 3])
-    return frame_problems(alphas, portrait) if alphas else []
+    return frame_problems(alphas, portrait, wide) if alphas else []
 
 
 def render_scene(code, out_dir, portrait=False, fps=30, timeout=900, check=True, full=False):
@@ -178,8 +182,10 @@ def render_scene(code, out_dir, portrait=False, fps=30, timeout=900, check=True,
     # a smaller frame makes everything drawn in it larger on screen: 9 x 5.06 units for 16:9, 7.2 x 9 for the 4:5 portrait panel
     if portrait:
         frame = "config.frame_width = 7.2\nconfig.frame_height = 12.8" if full else "config.frame_width = 7.2\nconfig.frame_height = 9"
-    else:
+    elif full:
         frame = "config.frame_width = 9\nconfig.frame_height = 5.0625"
+    else:                                   # a wide, short frame for the panel of a landscape section (WIDE_ASPECT): the drawing can use the width
+        frame = f"config.frame_width = 9\nconfig.frame_height = {9 / WIDE_ASPECT:.6f}"
     code = code.replace("from manim import *", "from manim import *\n" + frame, 1)
     with open(script, "w", encoding="utf-8") as f:
         f.write(code)
@@ -188,7 +194,7 @@ def render_scene(code, out_dir, portrait=False, fps=30, timeout=900, check=True,
         crowded = manim_overlap.overlap_problems(code, out_dir, portrait)      # texts on top of each other, found from where Manim puts them
         if crowded:
             raise RuntimeError("The picture was checked and is not good enough yet: " + "; ".join(crowded))
-    size = ("1080,1920" if full else "1080,1350") if portrait else "1920,1080"
+    size = ("1080,1920" if full else "1080,1350") if portrait else ("1920,1080" if full else "1980,900")
     cmd = [sys.executable, "-m", "manim", "-ql", "-t", "--fps", str(fps), "-r", size, "--media_dir", out_dir, script, "ExplainerScene"]
     res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     if res.returncode != 0:
@@ -198,7 +204,7 @@ def render_scene(code, out_dir, portrait=False, fps=30, timeout=900, check=True,
         raise RuntimeError("Manim finished but no ExplainerScene.mov was written.")
     mov = max(found, key=os.path.getmtime)
     if check:
-        problems = check_clip(mov, portrait)
+        problems = check_clip(mov, portrait, wide=not portrait and not full)
         if problems:
             raise RuntimeError("The picture was checked and is not good enough yet: " + "; ".join(problems))
     return to_alpha_webm(mov)

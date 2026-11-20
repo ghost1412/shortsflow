@@ -59,7 +59,7 @@ def test_render_scene_asks_for_a_transparent_clip_and_returns_the_webm(tmp_path,
             open(cmd[-1], "wb").write(b"webm")
         return R()
     monkeypatch.setattr("subprocess.run", fake_run)
-    monkeypatch.setattr(cm, "check_clip", lambda mov, portrait=False: [])
+    monkeypatch.setattr(cm, "check_clip", lambda mov, portrait=False, wide=False: [])
     monkeypatch.setattr("engine.manim_overlap.overlap_problems", lambda code, d, portrait=False: [])
     out = cm.render_scene(GOOD, str(tmp_path), portrait=False)
     assert out.endswith("ExplainerScene.webm")
@@ -104,11 +104,11 @@ def test_the_kit_is_copied_next_to_the_scene_and_a_failed_check_raises(tmp_path,
             open(cmd[-1], "wb").write(b"webm")
         return R()
     monkeypatch.setattr("subprocess.run", fake_run)
-    monkeypatch.setattr(cm, "check_clip", lambda mov, portrait=False: ["everything sits in a small part of the frame; make it larger"])
+    monkeypatch.setattr(cm, "check_clip", lambda mov, portrait=False, wide=False: ["everything sits in a small part of the frame; make it larger"])
     with pytest.raises(RuntimeError) as e:
         cm.render_scene(GOOD, str(tmp_path), portrait=False)
     assert "small part" in str(e.value) and os.path.isfile(tmp_path / "manim_kit.py")
-    monkeypatch.setattr(cm, "check_clip", lambda mov, portrait=False: [])
+    monkeypatch.setattr(cm, "check_clip", lambda mov, portrait=False, wide=False: [])
     assert cm.render_scene(GOOD, str(tmp_path), portrait=False).endswith(".webm")
     assert cm.render_scene(GOOD, str(tmp_path), portrait=False, check=False).endswith(".webm")
 
@@ -274,3 +274,31 @@ def test_a_wide_chain_of_four_or_more_steps_is_two_rows_inside_the_frame():
     assert len(wide[1]) == 4                                           # an arrow between each pair of steps
     three = kit.chain(labels[:3])
     assert len({round(float(b.get_center()[1]), 1) for b in three.parts}) == 1           # a short chain stays in one row
+
+
+def test_landscape_panel_prompt_asks_for_a_wide_short_frame_but_a_whole_frame_animation_does_not():
+    section = {"title": "A", "narration": "n", "on_screen": []}
+    assert "y in [-1.8, 1.8]" in cm.manim_prompt(section, 20) and "use the whole width" in cm.manim_prompt(section, 20)
+    assert "y in [-2.3, 2.3]" in cm.manim_prompt(section, 20, full=True)
+    assert cm.WIDE_ASPECT == 2.2
+
+
+def test_a_one_row_diagram_is_not_a_thin_strip_in_the_wide_panel():
+    import numpy as np
+    frame = np.zeros((900, 1980), dtype="uint8")
+    frame[300:610, 200:1780] = 255                      # a row of boxes: about a third of the height
+    assert any("thin strip" in p for p in cm.frame_problems([frame]))
+    assert not any("thin strip" in p for p in cm.frame_problems([frame], wide=True))
+
+
+def test_clip_aspect_reads_the_size_of_a_clip_and_falls_back(tmp_path):
+    import shutil
+    import subprocess
+    from engine import case_render as cr
+    assert cr.clip_aspect(str(tmp_path / "missing.webm")) == round(16 / 9, 3)
+    ff = shutil.which("ffmpeg")
+    if not ff:
+        pytest.skip("ffmpeg not installed")
+    out = tmp_path / "wide.mp4"
+    subprocess.run([ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=1980x900:d=0.2:r=10", str(out)], check=True)
+    assert cr.clip_aspect(str(out)) == 2.2
