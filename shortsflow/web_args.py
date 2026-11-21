@@ -243,8 +243,13 @@ DUB_DELIVERY_CHOICES = [("Neutral (the voice's own delivery)", "neutral"), ("Exc
                         ("Calm (slower, softer)", "calm"), ("Serious (slower, lower)", "serious")]
 
 
+DUB_SPEAKER_CHOICES = [("One voice for everyone", "off"), ("Tell the voices apart (up to 4, by pitch)", "auto"),
+                       ("Two speakers", "2"), ("Three speakers", "3")]
+
+
 def dub_args(source, target_lang, spoken="auto", burn_captions=False, session_dir=None, tts_provider="auto", voice="auto",
-             original="music", tone="faithful", delivery="neutral", llm_provider="auto", caption_size="default", caption_position="bottom"):
+             original="music", tone="faithful", delivery="neutral", llm_provider="auto", caption_size="default", caption_position="bottom",
+             speakers="off"):
     """Arguments (after the pipeline command) for `--mode DUB`. 'auto' voice / provider leave the flags out."""
     args = ["--mode", "DUB", "--source_video", source, "--target_lang", target_lang,
             "--language", (spoken or "auto")]
@@ -260,6 +265,8 @@ def dub_args(source, target_lang, spoken="auto", burn_captions=False, session_di
         args += ["--dub_tone", tone]                      # "faithful" is the command line's default
     if delivery in ("excited", "calm", "serious"):
         args += ["--dub_delivery", delivery]              # "neutral" is the command line's default
+    if speakers in ("auto", "2", "3", "4"):
+        args += ["--dub_speakers", speakers]              # "off" is the command line's default
     if caption_size in ("small", "large", "xlarge"):
         args += ["--dub_caption_size", caption_size]      # "default" is the command line's default
     if caption_position in ("above", "middle", "top"):

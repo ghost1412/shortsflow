@@ -254,7 +254,7 @@ def clip_video(url, upload, clip_count, target_duration, layout, smart_crop, tig
     yield from with_auto_publish(_run(cmd))
 
 
-def dub_video(upload, url, target_lang, spoken="auto", burn_captions=False, tts_provider="auto", voice="auto", original="music", resume=None, tone="faithful", delivery="neutral", llm_provider="auto", caption_size="default", caption_position="bottom"):
+def dub_video(upload, url, target_lang, spoken="auto", burn_captions=False, tts_provider="auto", voice="auto", original="music", resume=None, tone="faithful", delivery="neutral", llm_provider="auto", caption_size="default", caption_position="bottom", speakers="off"):
     """Dub tab: translate a video's speech and re-voice it. Yields (status, log, video, srt)."""
     import time
     from shortsflow import onboarding
@@ -273,7 +273,7 @@ def dub_video(upload, url, target_lang, spoken="auto", burn_captions=False, tts_
             raise gr.Error("Choose the language to dub into.")
         session = os.path.join(ROOT, "sessions", time.strftime("dub_%Y%m%d_%H%M%S"))
     os.makedirs(session, exist_ok=True)
-    cmd = [*_pipeline_cmd(), *web_args.dub_args(source, target_lang, spoken, burn_captions, session, tts_provider, voice, original, tone, delivery, llm_provider, caption_size, caption_position)]
+    cmd = [*_pipeline_cmd(), *web_args.dub_args(source, target_lang, spoken, burn_captions, session, tts_provider, voice, original, tone, delivery, llm_provider, caption_size, caption_position, speakers)]
     progress, seen = onboarding.Progress(steps=onboarding.DUB_STEPS), 0
     status = progress.message
     yield status, "", None, None
@@ -2100,6 +2100,8 @@ def build_ui():
                                                      info="Faithful keeps the speaker's own tone. The others make the AI rewrite each line (funny, sarcastic...) and keep the meaning; it can change what is said, so check the saved .json before you publish.")
                                 d_delivery = gr.Dropdown(web_args.DUB_DELIVERY_CHOICES, value="neutral", label="How the voice speaks",
                                                          info="Speed and pitch of the computer voice, not real emotions.")
+                            d_speakers = gr.Dropdown(web_args.DUB_SPEAKER_CHOICES, value="off", label="Several people talking",
+                                                     info="Gives each voice its own voice in the dub (a man and a woman get a male and a female voice). It tells them apart by pitch only, so two voices of the same pitch count as one. Runs on this PC.")
                             d_llm = _ai_provider_dropdown()
                         with gr.Accordion("Sound and subtitles", open=False):
                             d_original = gr.Dropdown(web_args.DUB_ORIGINAL_CHOICES, value="music", label="The video's own sound",
@@ -2120,7 +2122,7 @@ def build_ui():
                         d_srt = gr.File(label="Translated subtitles (.srt)", interactive=False, height=110)
                 with gr.Accordion("Technical details", open=False):
                     d_log = gr.Textbox(label="Full log", lines=14, max_lines=14, autoscroll=True)
-                d_run = d_btn.click(dub_video, [d_upload, d_url, d_lang, d_spoken, d_burn, d_tts, d_voice, d_original, d_resume, d_tone, d_delivery, d_llm, d_cap_size, d_cap_pos], [d_status, d_log, d_video, d_srt])
+                d_run = d_btn.click(dub_video, [d_upload, d_url, d_lang, d_spoken, d_burn, d_tts, d_voice, d_original, d_resume, d_tone, d_delivery, d_llm, d_cap_size, d_cap_pos, d_speakers], [d_status, d_log, d_video, d_srt])
                 d_stop.click(stop_jobs, None, d_status, cancels=[d_run])
                 demo.load(lambda: gr.update(choices=web_args.unfinished_dubs(ROOT)), None, d_resume)
 

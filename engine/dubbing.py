@@ -148,7 +148,8 @@ def merge_short_segments(segments, want=3.0, max_len=7.0, max_gap=0.6):
             length = cur["end"] - cur["start"]
             gap = seg["start"] - cur["end"]
             ended = cur["text"].rstrip().endswith((".", "?", "!", "…", "।", "。"))
-            if length < want and gap <= max_gap and (seg["end"] - cur["start"]) <= max_len and not (ended and length >= 2.0):
+            same_voice = cur.get("speaker") == seg.get("speaker")      # never join two speakers into one line
+            if same_voice and length < want and gap <= max_gap and (seg["end"] - cur["start"]) <= max_len and not (ended and length >= 2.0):
                 cur["end"] = seg["end"]
                 cur["text"] = cur["text"].rstrip() + " " + seg["text"].lstrip()
                 continue
@@ -294,6 +295,27 @@ def plan_fit(tts_dur, preferred, hard):
     return {"tempo": round(tempo, 3), "duration": final, "trim": hard if final > hard + 0.05 else None}
 
 
+def parse_speakers(value):
+    """The most speakers to look for: 1 = off ("off", "", None), 4 = "auto", else the number given (2-4). Bad text raises ValueError."""
+    text = str(value if value is not None else "off").strip().lower()
+    if text in ("", "off", "no", "false", "0", "1"):
+        return 1
+    if text in ("auto", "on", "true"):
+        return 4
+    try:
+        n = int(text)
+    except ValueError:
+        raise ValueError(f"Unknown speakers setting '{value}'. Use off, auto or a number from 2 to 4.") from None
+    if not 2 <= n <= 4:
+        raise ValueError(f"Speakers must be off, auto or a number from 2 to 4 (got {value}).")
+    return n
+
+
+def _label_speakers(source_video, segments, max_speakers):
+    from engine.speakers import label_segments
+    return label_segments(source_video, segments, max_speakers)
+
+
 def media_duration(path):
     import imageio_ffmpeg
     err = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-i", path], capture_output=True, text=True).stderr
@@ -380,8 +402,9 @@ def has_audio(path):
     return bool(re.search(r"Stream #.*Audio", err))
 
 
-def synthesize(text, lang, out_path, provider="auto", voice=None, delivery="neutral"):
-    """Speak `text` to an audio file. edge-tts by default; local Kokoro (English only) when asked for or as fallback."""
+def synthesize(text, lang, out_path, provider="auto", voice=None, delivery="neutral", pitch_hz=0):
+    """Speak `text` to an audio file. edge-tts by default; local Kokoro (English only) when asked for or as fallback.
+    pitch_hz: extra pitch shift on top of the delivery's (used to tell two speakers of the same gender apart)."""
     lang = normalize_lang(lang)
     if provider == "kokoro" and lang == "en":
         from engine import kokoro_tts
@@ -395,6 +418,9 @@ def synthesize(text, lang, out_path, provider="auto", voice=None, delivery="neut
         import asyncio
         import edge_tts
         speed = DELIVERIES.get((delivery or "neutral").lower())
+        if pitch_hz:
+            rate, base = speed or ("+0%", "+0Hz")
+            speed = (rate, f"{int(base[:-2]) + int(pitch_hz):+d}Hz")
         talk = edge_tts.Communicate(text, voice_name, rate=speed[0], pitch=speed[1]) if speed else edge_tts.Communicate(text, voice_name)
         asyncio.run(talk.save(out_path))
         if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
@@ -568,12 +594,16 @@ def _mix_batch(ffmpeg, source_video, clips, total, session_dir, number):
 
 def dub_video(source_video, target_lang, session_dir, output_path=None, language="en", provider="auto",
               captions=False, transcribe=None, llm=None, synth=None, mixer=None, workers=4, voice=None, original="music", about=None,
-              tone="faithful", delivery="neutral", caption_size="default", caption_position="bottom", fit="classic"):
+              tone="faithful", delivery="neutral", caption_size="default", caption_position="bottom", fit="classic",
+              speakers="off", label_speakers=None):
     """Full pipeline. Returns {"video", "srt", "json", "segments", "failed_translations", "failed_voices"}.
     transcribe/llm/synth/mixer can be replaced (tests, custom backends).
     fit: "classic" (the original behaviour: every transcript line voiced on its own, clips cut when too long) or "smart" (short lines
     joined into sentences, silence trimmed off the voice clips, a language-aware length limit for the translation, and a clip that is
-    too long runs a little into the next gap instead of being cut; the subtitles follow the voice)."""
+    too long runs a little into the next gap instead of being cut; the subtitles follow the voice).
+    speakers: "off" (default, one voice), "auto" or a number 2-4 (the most speakers to look for): lines are grouped by the pitch of
+    the voice (engine.speakers) and each group gets its own voice; only one group found = the dub is exactly as without it.
+    label_speakers can replace the labelling step (tests): (source_video, segments, max) -> (segments, typical Hz per speaker)."""
     target = normalize_lang(target_lang)
     if target not in EDGE_VOICES:
         raise ValueError(f"Unsupported dub language '{target_lang}'. Supported: {', '.join(supported_languages())}")
@@ -590,6 +620,20 @@ def dub_video(source_video, target_lang, session_dir, output_path=None, language
     segments = segments_from_transcript(data)
     if not segments:
         raise ValueError("No speech found in the video, nothing to dub.")
+    speaker_plan = None
+    max_speakers = parse_speakers(speakers)
+    if max_speakers > 1 and voice and VOICE_NAME_RE.match(str(voice).strip()):
+        print(f"[Warning] A full voice name was chosen ({voice}), so every speaker keeps that voice (speaker voices are off).")
+        max_speakers = 1
+    if max_speakers > 1:
+        segments, hz = (label_speakers or _label_speakers)(source_video, segments, max_speakers)
+        if len(hz) > 1:
+            from engine.speakers import voice_plan
+            speaker_plan = voice_plan(hz, target)
+            print(f"[Log] Found {len(hz)} voices (by pitch, not by who they are): "
+                  + ", ".join(f"{p['gender']} {int(h)} Hz" for p, h in zip(speaker_plan, hz)) + ". Each gets its own voice in the dub.")
+        else:
+            print("[Log] Only one voice was found in the video, so the dub uses a single voice.")
     smart = (fit or "classic") == "smart"
     if smart:
         before = len(segments)
@@ -619,6 +663,11 @@ def dub_video(source_video, target_lang, session_dir, output_path=None, language
         json.dump({"target_lang": target, "source_lang": source_lang, "tone": tone or "faithful", "delivery": delivery or "neutral",
                    "segments": translated}, f, ensure_ascii=False, indent=2)
 
+    def _speaker_synth(i):                               # speaker voices: the synth for line i's speaker
+        p = speaker_plan[min(segments[i].get("speaker", 0), len(speaker_plan) - 1)]
+        return lambda text, out: synthesize(text, target, out, "edge", p["voice"], delivery, p["pitch_hz"])  # noqa: E731
+
+    synth_for = _speaker_synth if (speaker_plan and not synth) else None
     if not synth:
         if (delivery or "neutral") == "neutral":       # the default keeps the exact old call (custom backends may not take `delivery`)
             synth = lambda text, out: synthesize(text, target, out, provider, voice)  # noqa: E731
@@ -632,12 +681,15 @@ def dub_video(source_video, target_lang, session_dir, output_path=None, language
     def make(i):
         path = os.path.join(clips_dir, f"seg_{i:04d}.mp3")
         tag = f"{delivery or 'neutral'}\n{texts[i]}"      # what this clip was voiced from, kept next to it
+        if synth_for:
+            p = speaker_plan[min(segments[i].get("speaker", 0), len(speaker_plan) - 1)]
+            tag = f"{p['voice']} {p['pitch_hz']}\n{tag}"  # another speaker setting must not reuse an old clip
         if saved and os.path.exists(path) and os.path.getsize(path) > 200 and _voice_matches(path + ".voice", tag):
             return path                                  # voiced by an earlier run on this same translation and delivery: keep it
         try:
             for attempt in range(VOICE_RETRIES + 1):
                 try:
-                    synth(texts[i], path)
+                    (synth_for(i) if synth_for else synth)(texts[i], path)
                     break
                 except Exception as e:
                     # the online voice service sometimes returns nothing for a request when several arrive together: ask again

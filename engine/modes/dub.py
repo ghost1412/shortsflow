@@ -35,6 +35,7 @@ def run(args, target_bitrate=None, target_preset=None):
             fit=getattr(args, "dub_fit", "smart") or "smart",
             caption_size=getattr(args, "dub_caption_size", "default") or "default",
             caption_position=getattr(args, "dub_caption_position", "bottom") or "bottom",
+            speakers=getattr(args, "dub_speakers", "off") or "off",
         )
     except (ValueError, RuntimeError) as e:
         print(f"[Error] {e}")
