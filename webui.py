@@ -547,7 +547,7 @@ def case_plan(topic, sources, template):
            "then press **Render this script**." + note), log, case_study.script_to_text(script), session
 
 
-def case_render_script(script_text, session, theme_label, formats, no_manim, background_label, background_file, draft):
+def case_render_script(script_text, session, theme_label, formats, no_manim, background_label, background_file, draft, avatar="off"):
     """Case explainer tab, review step: save the edited script and render it (the narration is made from the edited text)."""
     from engine import case_study
     if not session or not os.path.isfile(os.path.join(session, "script.json")):
@@ -564,11 +564,11 @@ def case_render_script(script_text, session, theme_label, formats, no_manim, bac
             json.dump(base, f, indent=1, ensure_ascii=False)
     with open(os.path.join(session, "script.json"), "w", encoding="utf-8") as f:
         json.dump(script, f, indent=1, ensure_ascii=False)
-    yield from case_video("", "", "case", theme_label, formats, no_manim, background_label, background_file, "", draft, resume_path=session)
+    yield from case_video("", "", "case", theme_label, formats, no_manim, background_label, background_file, "", draft, resume_path=session, avatar=avatar)
 
 
 def case_video(topic, sources, template, theme_label, formats, no_manim, background_label, background_file, resume_label="", draft=False, layouts="auto",
-               resume_path=None):
+               resume_path=None, avatar="off"):
     """Case explainer tab: a topic and sources in, a sectioned explainer video out. Yields (status, log, videos)."""
     import time
     old = resume_path or dict(web_args.list_case_sessions(ROOT, limit=50)).get(resume_label or "")
@@ -579,7 +579,7 @@ def case_video(topic, sources, template, theme_label, formats, no_manim, backgro
         if background == "file" and not background_file:
             raise ValueError("Add an image or video file, or choose another background.")
         args = web_args.case_args(topic, sources, template, theme, formats, no_manim, False, session, background, background_file,
-                                  resume=old, draft=bool(draft), layouts=layouts)
+                                  resume=old, draft=bool(draft), layouts=layouts, avatar=avatar)
     except ValueError as e:
         raise gr.Error(str(e))
     cmd = [*_pipeline_cmd(), *args]
@@ -1433,13 +1433,84 @@ from shortsflow.ui.theme import EXTRA_CSS as _EXTRA_CSS      # the mode cards, h
 WORDS_CSS += "<style>" + _EXTRA_CSS + "</style>"
 
 
-MODE_KEYS = ["shorts", "clip", "dub", "recap", "reel", "idea", "case", "publish", "settings"]       # the columns; "highlights" shares the first one
+PRESENTER_KINDS = {"Person": "human", "Cat": "cat", "Dog": "dog", "Robot": "robot"}
+
+
+def case_video_ui(*a):
+    """The case card's Make button: the form values, the presenter last."""
+    yield from case_video(*a[:11], avatar=a[11])
+
+
+def presenter_spec(kind_label, name, skin, hair, hair_color, eye_color, beard, glasses, lashes, lips, outfit, pattern, fur_light):
+    from engine import avatars
+    return avatars.clean({"kind": PRESENTER_KINDS.get(kind_label, "human"), "name": name, "skin": skin, "hair": hair, "hairColor": hair_color,
+                          "eyeColor": eye_color, "beard": beard, "glasses": glasses, "lashes": bool(lashes), "lips": lips, "outfit": outfit,
+                          "pattern": pattern, "furLight": fur_light})
+
+
+def presenter_fields(spec):
+    """The builder's field values for a spec (the order of PRESENTER_FIELDS)."""
+    kind = next((k for k, v in PRESENTER_KINDS.items() if v == spec["kind"]), "Person")
+    return [kind, spec["name"], spec["skin"], spec["hair"], spec["hairColor"], spec["eyeColor"], spec["beard"], spec["glasses"], spec["lashes"],
+            spec["lips"], spec["outfit"], spec["pattern"], spec["furLight"]]
+
+
+def presenter_start_from(name):
+    from engine import avatars
+    try:
+        spec = avatars.load(name, ROOT) or avatars.clean(avatars.PRESETS["alex"])
+    except ValueError as e:
+        raise gr.Error(str(e))
+    return presenter_fields(spec) + [presenter_kind_view(presenter_fields(spec)[0])[0], presenter_kind_view(presenter_fields(spec)[0])[1]]
+
+
+def presenter_kind_view(kind_label):
+    """Show the person parts for a person, the fur parts for an animal (the robot uses the colour of its body and its eye light)."""
+    person = kind_label == "Person"
+    return gr.update(visible=person), gr.update(visible=kind_label in ("Cat", "Dog"))
+
+
+def presenter_preview(*fields):
+    from engine import avatars
+    import time
+    out = os.path.join(ROOT, "sessions", "presenter_previews", time.strftime("preview_%H%M%S.mp4"))
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    try:
+        return avatars.render_preview(presenter_spec(*fields), out), "Drawn. Change anything and press Preview again."
+    except RuntimeError as e:
+        return None, str(e)
+
+
+def presenter_save(save_name, *fields):
+    from engine import avatars
+    try:
+        key, _ = avatars.save(ROOT, save_name or fields[1], presenter_spec(*fields))
+    except ValueError as e:
+        return str(e), gr.update(), gr.update()
+    picks = avatars.choices(ROOT)
+    return (f"Saved as **{key}**. Choose it under Presenter on the Case explainer card (or `--case avatar={key}`).",
+            gr.update(choices=picks, value=key), gr.update(choices=[c for c in picks if c[1] != "off"], value=key))
+
+
+def presenter_from_photo(photo, use_label, consent, *fields):
+    from engine import avatars
+    if not consent:
+        return ["Tick the box first: only use your own face, or the face of someone who agreed."] + [gr.update()] * len(fields)
+    try:
+        spec, msg = avatars.suggest_from_photo(photo, "gemini" if use_label.startswith("Gemini") else "local", base=presenter_spec(*fields))
+    except ValueError as e:
+        return [str(e)] + [gr.update()] * len(fields)
+    spec["name"] = fields[1] or spec["name"]
+    return [msg] + presenter_fields(spec)
+
+
+MODE_KEYS = ["shorts", "clip", "dub", "recap", "reel", "idea", "case", "publish", "settings", "presenter"]       # the columns; "highlights" shares the first one
 
 
 def web_args_modes():
     """[(label, key)] of the things you can make: the first screen of the app."""
     return [("Shorts", "shorts"), ("Highlights video", "highlights"), ("Dub into another language", "dub"), ("Recap (trip, wedding, event)", "recap"),
-            ("Photo reel", "reel"), ("Video from an idea", "idea"), ("Case explainer", "case"), ("Clip tool (all options)", "clip"), ("Publish videos", "publish"), ("Settings", "settings")]
+            ("Photo reel", "reel"), ("Video from an idea", "idea"), ("Case explainer", "case"), ("Clip tool (all options)", "clip"), ("Publish videos", "publish"), ("Settings", "settings"), ("Presenters", "presenter")]
 
 
 def pick_mode(mode):
@@ -2188,6 +2259,9 @@ def build_ui():
                         c_layouts = gr.Dropdown(["auto", "template"], value="auto", label="Layouts",
                                                 info="auto: the model picks the best layout for each section (timeline, flow, counters, checklist, compare, chart, quote). template: the sections' own.")
                         c_theme = gr.Dropdown(list(web_args.CASE_THEME_LABELS.values()), value=web_args.CASE_THEME_LABELS["dark"], label="Look")
+                        from engine import avatars as _avatars
+                        c_avatar = gr.Dropdown(_avatars.choices(ROOT), value="off", label="Presenter",
+                                               info="A drawn host (a person, a cat, a dog or a robot) in the corner who talks with the narration. Make your own on the Presenters card.")
                         c_formats = gr.CheckboxGroup(["16:9", "9:16"], value=["16:9", "9:16"], label="Shapes",
                                                      info="16:9 for YouTube and LinkedIn, 9:16 for Reels and Shorts. Each shape takes its own render time.")
                         c_bg = gr.Dropdown(list(web_args.CASE_BACKGROUNDS), value="Stock video", label="Behind the scenes",
@@ -2211,9 +2285,9 @@ def build_ui():
                     c_render = gr.Button("🎬 Render this script", variant="primary")
                 with gr.Accordion("Technical details", open=False):
                     c_log = gr.Textbox(label="Full log", lines=14, max_lines=14, autoscroll=True)
-                c_run = c_btn.click(case_video, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_resume, c_draft, c_layouts], [c_status, c_log, c_video])
+                c_run = c_btn.click(case_video_ui, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_resume, c_draft, c_layouts, c_avatar], [c_status, c_log, c_video])
                 c_plan_run = c_plan.click(case_plan, [c_topic, c_sources, c_template], [c_status, c_log, c_script, c_session])
-                c_render_run = c_render.click(case_render_script, [c_script, c_session, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_draft],
+                c_render_run = c_render.click(case_render_script, [c_script, c_session, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_draft, c_avatar],
                                               [c_status, c_log, c_video])
                 c_stop.click(stop_jobs, None, c_status, cancels=[c_run, c_plan_run, c_render_run])
 
@@ -2268,6 +2342,57 @@ def build_ui():
             s_save.click(settings_save_key, [s_name, s_value], [s_msg, s_table, s_name, s_value])
             s_remove.click(settings_remove_key, [s_name], [s_msg, s_table, s_name])
             s_save_up.click(settings_save_uploads, [s_auto, s_platforms, s_yt_privacy, s_yt_account], s_up_msg)
+        with gr.Column(visible=False) as mode_col_presenter:
+            from engine import avatars as _av
+            gr.Markdown("### Presenters\nA drawn host who talks with the narration of a case explainer: a person (any look), a cat, a dog or a robot. "
+                        "Start from a ready-made one, change the parts, press **Preview**, then **Save** it under a name.")
+            with gr.Row():
+                pr_start = gr.Dropdown([c for c in _av.choices(ROOT) if c[1] != "off"], value="alex", label="Start from", scale=3)
+                pr_kind = gr.Radio(list(PRESENTER_KINDS), value="Person", label="Kind", scale=3)
+                pr_name = gr.Textbox(label="Name on the card", value="Alex", scale=2)
+            with gr.Row(equal_height=False):
+                with gr.Column(scale=3):
+                    with gr.Row():
+                        pr_skin = gr.ColorPicker("#f1c3a0", label="Skin, fur or body colour")
+                        pr_eyes = gr.ColorPicker("#3b6fd8", label="Eyes (the robot: its eye light)")
+                    with gr.Group(visible=True) as pr_person:
+                        with gr.Row():
+                            pr_tone = gr.Dropdown(list(_av.SKIN_TONES), value=None, label="Quick skin tone")
+                            pr_hair = gr.Dropdown(list(_av.HAIR), value="short", label="Hair")
+                            pr_hair_color = gr.ColorPicker("#2b1d15", label="Hair colour")
+                        with gr.Row():
+                            pr_beard = gr.Dropdown(list(_av.BEARD), value="none", label="Beard")
+                            pr_glasses = gr.Dropdown(list(_av.GLASSES), value="none", label="Glasses")
+                            pr_lashes = gr.Checkbox(False, label="Eyelashes")
+                        with gr.Row():
+                            pr_lips = gr.ColorPicker("#b0505a", label="Lips")
+                            pr_outfit = gr.ColorPicker("#ff8a3d", label="Top")
+                    with gr.Group(visible=False) as pr_animal:
+                        with gr.Row():
+                            pr_pattern = gr.Dropdown(list(_av.PATTERN), value="plain", label="Pattern")
+                            pr_fur_light = gr.ColorPicker("#fff4e8", label="Muzzle and chest")
+                    with gr.Accordion("Make it look like someone (from a photo)", open=False):
+                        gr.Markdown("A vision model reads the photo and fills in skin tone, hair, eyes, beard and glasses; you can change anything after. "
+                                    "**Only use your own face, or the face of someone who agreed.** With *this PC* the photo stays here (needs a local "
+                                    "vision model such as `ollama pull gemma3:12b`); with *Gemini* the photo is sent to Google.")
+                        pr_photo = gr.Image(type="filepath", label="A clear, front-facing photo", height=220)
+                        pr_use = gr.Radio(["This PC (the photo stays here)", "Gemini (the photo is sent to Google)"], value="This PC (the photo stays here)", label="Read it with")
+                        pr_consent = gr.Checkbox(False, label="This is my face, or the person agreed to it")
+                        pr_suggest = gr.Button("Suggest from the photo")
+                with gr.Column(scale=2):
+                    pr_video = gr.Video(label="Preview (no sound)", interactive=False, height=400, autoplay=True, loop=True)
+                    pr_preview = gr.Button("Preview", variant="primary")
+                    with gr.Row():
+                        pr_save_name = gr.Textbox(label="Save as", placeholder="my_host", scale=2)
+                        pr_save = gr.Button("Save", scale=1)
+                    pr_msg = gr.Markdown("")
+            pr_fields = [pr_kind, pr_name, pr_skin, pr_hair, pr_hair_color, pr_eyes, pr_beard, pr_glasses, pr_lashes, pr_lips, pr_outfit, pr_pattern, pr_fur_light]
+            pr_start.change(presenter_start_from, [pr_start], pr_fields + [pr_person, pr_animal])
+            pr_kind.change(presenter_kind_view, [pr_kind], [pr_person, pr_animal])
+            pr_tone.change(lambda t: _av.SKIN_TONES.get(t, gr.update()) if t else gr.update(), [pr_tone], pr_skin)
+            pr_preview.click(presenter_preview, pr_fields, [pr_video, pr_msg])
+            pr_save.click(presenter_save, [pr_save_name] + pr_fields, [pr_msg, c_avatar, pr_start])
+            pr_suggest.click(presenter_from_photo, [pr_photo, pr_use, pr_consent] + pr_fields, [pr_msg] + pr_fields)
         with gr.Column(visible=False) as mode_col_publish:
             gr.Markdown("### Publish a video\nPick any video you have made (every format of every kind of run), check its title and description, and choose where it goes. "
                         "**The video and its title leave this PC when you publish.** Keys and your YouTube sign-in are in the Settings card.")
@@ -2314,7 +2439,7 @@ def build_ui():
                     "See `env.example`. Your video files stay on this PC. Only what you switch on goes out: transcript text to an AI text provider when a key is set, "
                     "small frames to Gemini for `--visual_context` when a key is set, text to the voice service in the dub and idea-to-video modes, "
                     "stock-footage search words to Pexels, place names looked up on OpenStreetMap in trip recaps (turn it off with `--recap_no_geocode`), and any upload you ask for.")
-        mode_cols = [mode_col_shorts, mode_col_clip, mode_col_dub, mode_col_recap, mode_col_reel, mode_col_idea, mode_col_case, mode_col_publish, mode_col_settings]
+        mode_cols = [mode_col_shorts, mode_col_clip, mode_col_dub, mode_col_recap, mode_col_reel, mode_col_idea, mode_col_case, mode_col_publish, mode_col_settings, mode_col_presenter]
         mode_card.change(pick_mode, mode_card, [*mode_cols, q_mode])
     return demo
 

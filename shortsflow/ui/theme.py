@@ -22,6 +22,7 @@ MODES = [
     ("Case explainer", "<path d='M6 2h8l4 4v16H6z'/><path d='M14 2v4h4M9 12h6M9 16h6'/>", "A topic and sources into a video"),
     ("Publish videos", "<path d='M12 16V4M7 9l5-5 5 5'/><path d='M4 17v3h16v-3'/>", "Post any finished video"),
     ("Settings", "<circle cx='12' cy='12' r='3'/><path d='M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1'/>", "Keys, uploads, YouTube"),
+    ("Presenters", "<circle cx='12' cy='9' r='4'/><path d='M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6'/><path d='M10 10.5q2 1.5 4 0'/>", "A drawn host that talks"),
     ("Clip tool (all options)", "<circle cx='6' cy='6' r='3'/><circle cx='6' cy='18' r='3'/><path d='M20 4L8.12 15.88M14.47 14.48L20 20M8.12 8.12L12 12'/>",
      "Every setting, one screen"),
 ]

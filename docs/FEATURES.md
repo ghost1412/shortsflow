@@ -560,3 +560,18 @@ The optional animated-caption renderer uses [Remotion](https://www.remotion.dev)
 ## Publish videos, Settings and scheduled posts (browser app)
 
 **Publish videos** lists every finished video of every run (case videos in both shapes, each clip), filtered by *Tall 9:16 / Wide 16:9 / Square*. Pick one, watch it, edit the **title, description and tags**, choose where it goes (Upload-Post platforms, or *YouTube direct* to your own channel as private, unlisted or public) and **Preview (sends nothing)** or **Publish now**. A video is not sent twice to the same place unless you tick *Publish again*. **Publish later**: type a time (`2026-11-22 09:00`, `09:00`, `in 2h`) and press *Schedule it*; the queue is `schedule.json` in the workspace, is checked once a minute while the app is open, a missed job is sent when the app next runs, and a failed job is shown and not retried by itself. **Settings** holds the keys, the default upload places and the YouTube connect. The video and its title leave this PC when a post is sent.
+
+
+## Presenters (case explainer)
+
+A drawn host in the corner of a case or animated explainer who talks with the narration: the mouth follows the words' timings, it blinks, lifts its brows on long words, nods while talking and sways when quiet. Ready-made: **alex, maya, priya, sam, leo, nora** (people of different looks), **miso** and **luna** (cats), **biscuit** (a dog) and **bolt** (a robot).
+
+```bash
+python main.py --mode CASE --prompt "The topic" --sources LINK --case avatar=maya
+```
+
+In the app, pick one under **Presenter** on the Case explainer card, or open the **Presenters** card to make your own: start from a ready-made one, change the kind (person, cat, dog, robot), skin or fur colour, hair style and colour, eyes, beard, glasses, eyelashes, lips and top (pattern and a lighter fur colour for animals), press **Preview** for a short talking clip, and **Save** it under a name (it is stored as `presenters/NAME.json` in the workspace and works with `--case avatar=NAME`).
+
+**From a photo:** a vision model reads a photo and fills in skin tone, hair, eyes, beard and glasses as a starting point. With *this PC* (the default) a local Ollama vision model reads it and the photo stays on the PC (`ollama pull gemma3:12b`); with *Gemini* the photo is sent to Google. Only use your own face or the face of someone who agreed. The result is a cartoon look-alike, not a copy of the face.
+
+The card sits on the right in 16:9 and in the bottom-right corner in 9:16, always above the captions; the scenes and the cover give up exactly that room, so nothing runs under it. The mouth shapes come from the spelling of each word, so a few shapes are approximate.

@@ -5,6 +5,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AbsoluteFill, Audio, Img, Loop, OffthreadVideo, Sequence, continueRender, delayRender, interpolate, random, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import katex from "katex";
 import { z } from "zod";
+import { Presenter, PresenterRoom, avatarSchema, presenterRect, usePresenterRoom } from "./Presenter";
 
 export const CASE_THEMES = ["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"] as const;
 export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation", "diagram"] as const;
@@ -39,6 +40,7 @@ export const caseVideoSchema = z.object({
     end: z.number(),
   })).default([]),
   words: z.array(z.object({ word: z.string(), start: z.number(), end: z.number() })).default([]),
+  avatar: avatarSchema.optional(),             // a drawn presenter in the corner who talks with the narration (engine/avatars.py)
 });
 type Props = z.infer<typeof caseVideoSchema>;
 
@@ -236,7 +238,8 @@ const Timeline: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => 
   const { u, portrait } = useUnit();
   const at = cueFrames(labels.length, cues, frames, fps);
   const act = activeIndex(frame, at);
-  const aw = width - 140 * u, ah = portrait ? height * 0.6 : height * 0.5;
+  const room = usePresenterRoom();               // the width and height the scene really has (the presenter card's room is not)
+  const aw = width - 140 * u - room.right, ah = (portrait ? height * 0.6 : height * 0.5) - room.bottom * 0.6;
   const pos = (i: number) => (portrait ? { x: 90 * u, y: (ah * (i + 0.5)) / labels.length } : { x: (aw * (i + 0.5)) / labels.length, y: ah / 2 });
   // the line is drawn up to the node being spoken, and keeps travelling toward the next one
   const lineEnd = act < 0 ? 0 : act + (act + 1 < labels.length ? interpolate(frame, [at[act], Math.max(at[act] + 1, at[act + 1])], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : 0);
@@ -273,7 +276,8 @@ const Flow: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
   const n = labels.length;
   const at = cueFrames(n, cues, frames, fps);
   const act = activeIndex(frame, at);
-  const aw = width - 140 * u, ah = portrait ? height * 0.62 : height * 0.5;
+  const room = usePresenterRoom();
+  const aw = width - 140 * u - room.right, ah = (portrait ? height * 0.62 : height * 0.5) - room.bottom * 0.6;
   const nw = portrait ? Math.min(820 * u, aw) : Math.min(400 * u, aw / n - 70 * u), nh = portrait ? Math.min(140 * u, ah / n - 50 * u) : 190 * u;
   const c = (i: number) => (portrait ? { x: aw / 2, y: (ah * (i + 0.5)) / n } : { x: (aw * (i + 0.5)) / n, y: ah / 2 });
   return (
@@ -714,6 +718,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { u, h, portrait } = useUnit();
+  const room = usePresenterRoom();               // the presenter card's corner, kept free
   const View = SCENE_VIEWS[section.scene];
   const fade = Math.min(interpolate(frame, [0, 10], [0, 1], { extrapolateRight: "clamp" }), interpolate(frame, [frames - 10, frames], [1, 0], { extrapolateLeft: "clamp" }));
   const footage = section.footage ?? [];                 // the renderer may hand over props without the schema defaults
@@ -743,7 +748,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
           <AbsoluteFill style={{ background: "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)" }} />
         </AbsoluteFill>
       )}
-      <AbsoluteFill style={{ padding: whole ? `${50 * u}px ${50 * u}px ${Math.max(270 * u, h * (portrait ? 0.2 : 0.15))}px` : `${80 * u}px ${70 * u}px ${Math.max(300 * u, h * (portrait ? 0.22 : 0.16), captionZone(u, h))}px`, transform: `scale(${whole ? 1 : push})`, transformOrigin: "50% 45%" }}>
+      <AbsoluteFill style={{ padding: whole ? `${50 * u}px ${50 * u + room.right}px ${Math.max(270 * u, h * (portrait ? 0.2 : 0.15)) + room.bottom}px ${50 * u}px` : `${80 * u}px ${70 * u + room.right}px ${Math.max(300 * u, h * (portrait ? 0.22 : 0.16), captionZone(u, h)) + room.bottom}px ${70 * u}px`, transform: `scale(${whole ? 1 : push})`, transformOrigin: "50% 45%" }}>
         {!whole && <div style={{ marginBottom: 36 * u }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 24 * u }}>
             <div style={{ fontFamily: MONO, fontSize: 34 * u, color: accent, letterSpacing: 2 }}>{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</div>
@@ -789,10 +794,11 @@ const Cover: React.FC<{ title: string; p: Pal; accent: string; frames: number; s
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { u } = useUnit();
+  const room = usePresenterRoom();
   const t = enter(frame, 2, fps);
   const fade = Math.min(1, interpolate(frame, [frames - 10, frames], [1, 0], { extrapolateLeft: "clamp" }));
   return (
-    <AbsoluteFill style={{ justifyContent: "center", padding: `0 ${80 * u}px`, opacity: fade }}>
+    <AbsoluteFill style={{ justifyContent: "center", padding: `0 ${80 * u + room.right}px ${room.bottom}px ${80 * u}px`, opacity: fade }}>
       <div style={{ width: 120 * u * t, height: 8 * u, background: accent, borderRadius: 4, marginBottom: 40 * u, boxShadow: `0 0 ${24 * u}px ${accent}` }} />
       {hook ? (
         <>
@@ -822,7 +828,9 @@ const AutoFit: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   useLayoutEffect(() => {
     const o = outer.current, i = inner.current;
     if (!o || !i) return;
-    const fit = Math.min(1, o.clientHeight / Math.max(1, i.offsetHeight), o.clientWidth / Math.max(1, i.offsetWidth));
+    const child = i.firstElementChild as HTMLElement | null;      // a scene with a fixed size (Flow, Timeline) is measured itself: centred overflow is not in scrollWidth
+    const natW = Math.max(i.scrollWidth, child ? child.offsetWidth : 0), natH = Math.max(i.scrollHeight, child ? child.offsetHeight : 0);
+    const fit = Math.min(1, o.clientHeight / Math.max(1, natH), o.clientWidth / Math.max(1, natW));
     const next = Math.max(0.3, fit);          // a floor keeps absurd content from vanishing; real content (a handful of short labels) is never near it
     if (Math.abs(next - k) > 0.004) setK(next);
   });
@@ -850,13 +858,24 @@ const Captions: React.FC<{ words: Props["words"]; accent: string; pill: string }
   });
   if (cur.length) chunks.push(cur);
   const chunk = chunks.find((c) => now >= c[0].start - 0.05 && now <= c[c.length - 1].end + 0.25);
+  // the caption zone holds two lines of 62-unit type (captionZone): a chunk that would wrap to more shrinks its type until it fits
+  const box = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState(62);
+  const key = chunk ? chunk.map((w) => w.word).join(" ") : "";
+  useLayoutEffect(() => { setSize(62); }, [key]);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const lines = (el.clientHeight - 44 * u) / (size * 1.25 * u);
+    if (lines > 2.15 && size > 34) setSize(Math.max(34, Math.floor(size * 0.9)));
+  });
   if (!chunk) return null;
   return (
     <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "center", paddingBottom: captionPad(u, h) }}>
-      <div style={{ background: pill, borderRadius: 22 * u, padding: `${22 * u}px ${38 * u}px`, maxWidth: "88%", textAlign: "center" }}>
+      <div ref={box} style={{ background: pill, borderRadius: 22 * u, padding: `${22 * u}px ${38 * u}px`, maxWidth: "88%", textAlign: "center", lineHeight: 1.25 }}>
         {chunk.map((w, i) => {
           const active = now >= w.start && now <= w.end + 0.05;
-          return <span key={i} style={{ fontFamily: FONT, fontSize: 62 * u, fontWeight: 800, color: active ? accent : "#ffffff", marginRight: 16 * u, display: "inline-block" }}>{w.word}</span>;
+          return <span key={i} style={{ fontFamily: FONT, fontSize: size * u, fontWeight: 800, color: active ? accent : "#ffffff", marginRight: 16 * u, display: "inline-block" }}>{w.word}</span>;
         })}
       </div>
     </AbsoluteFill>
@@ -872,7 +891,10 @@ export const CaseVideo: React.FC<Props> = (props) => {
   const introF = Math.round(props.introSeconds * fps);
   const lastEnd = sections.length ? Math.max(...sections.map((s) => s.end)) : 0;
   const outroStart = Math.round(lastEnd * fps);
+  const { u, w, h } = useUnit();
+  const rect = props.avatar ? presenterRect(u, w, h, captionZone(u, h)) : null;
   return (
+    <PresenterRoom.Provider value={rect ? rect.room : { right: 0, bottom: 0 }}>
     <AbsoluteFill style={{ backgroundColor: p.bg1, color: p.text, ...({ "--font": p.font, "--mono": p.mono } as React.CSSProperties) }}>
       <Backdrop p={p} accent={accent} />
       {props.audioUrl && <Audio src={asset(props.audioUrl)} />}
@@ -899,7 +921,9 @@ export const CaseVideo: React.FC<Props> = (props) => {
               : ["No sources were given. Check the facts before you rely on them."]} />
         </Sequence>
       )}
+      {props.avatar && rect && <Presenter avatar={props.avatar} words={props.words} rect={rect} accent={accent} card={p.card} line={p.line} font={p.font} />}
       {!props.captionsOff && <Captions words={props.words} accent={p.cap && !props.accent ? p.cap : accent} pill={p.light ? "rgba(10,10,14,0.86)" : "rgba(0,0,0,0.62)"} />}
     </AbsoluteFill>
+    </PresenterRoom.Provider>
   );
 };

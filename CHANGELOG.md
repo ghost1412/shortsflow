@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: **presenters**. A drawn host in the corner who talks with the narration: the mouth follows the words, it blinks, lifts its brows on long words and nods. Ready-made people of different looks (Alex, Maya, Priya, Sam, Leo, Nora), two cats (Miso, Luna), a dog (Biscuit) and a robot (Bolt), or your own: the new **Presenters** card in the app builds one from parts (skin, hair, eyes, beard, glasses, lashes, colours; fur and pattern for animals) with a talking preview, and can suggest the parts from a photo (a local vision model by default, so the photo stays on the PC; Gemini only if you choose it, which sends the photo to Google). `--case avatar=NAME`; saved ones live in `presenters/` in the workspace. The scenes and the cover keep out of the card in both shapes.
+
 ## 0.9.2 (2026-11-21)
 - MCP server: four new tools. `create_explainer` (a case explainer from a topic and sources, or one continuous animation), `dub_video`, `list_videos` and `publish_video` (previews by default; it posts only when `dry_run` is false, to your Upload-Post account or your own YouTube channel). The MCP server could only clip and make idea shorts before.
 - Browser app: a **Publish videos** card (pick any finished video of any run, filter by tall, wide or square, preview it, edit title, description and tags, publish through Upload-Post or direct to your own YouTube channel, or use a file from this PC), a **Settings** card (keys, upload defaults, YouTube connect) instead of the accordion, and **Publish later**: queue a video for a time you type; the app sends it while open.

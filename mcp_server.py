@@ -8,6 +8,7 @@ to trigger AI Shorts generation, clipping, and social metadata creation autonomo
 import sys
 import os
 import json
+import re
 import subprocess
 import threading
 import time
@@ -210,6 +211,9 @@ TOOLS_DEFINITIONS = [
                             "description": "Video shapes to render, comma separated: 16:9, 9:16 (and 1:1 or 4:5). One shape renders faster."},
                 "draft": {"type": "boolean", "default": False,
                           "description": "A quick, small render to check the result before the full one."},
+                "avatar": {"type": "string", "default": "off",
+                           "description": ("A drawn presenter in the corner who talks with the narration: off, alex, maya, priya, sam, leo, nora (people), "
+                                           "miso, luna (cats), biscuit (a dog), bolt (a robot), or the name of one saved in the ShortsFlow app.")},
             },
             "required": ["topic"],
         },
@@ -399,6 +403,9 @@ def _create_explainer(job_id, args):
         cli += ["--case", f"formats={formats}"]
     if args.get("draft"):
         cli += ["--case", "draft"]
+    avatar = re.sub(r"[^a-z0-9_-]", "", str(args.get("avatar") or "").lower())
+    if avatar and avatar != "off":
+        cli += ["--case", f"avatar={avatar}"]
     return _start_job(job_id, cli, f"Explainer video ({kind}) started for '{topic}'.")
 
 

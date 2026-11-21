@@ -159,6 +159,8 @@ def test_create_explainer_builds_the_case_command_and_asks_for_a_source(monkeypa
     a = seen["args"]
     assert a[:4] == ["--mode", "CASE", "--prompt", "How X works"] and ["--sources", "https://example.com/a"] == a[4:6]
     assert "theme=neon" in a and "template=postmortem" in a and "formats=9:16" in a and "draft" in a
+    mcp_server.handle_tool_call("create_explainer", {"topic": "T", "sources": ["s"], "avatar": "Miso"})
+    assert "avatar=miso" in seen["args"]
     mcp_server.handle_tool_call("create_explainer", {"topic": "Binary search", "kind": "animate"})
     assert seen["args"][:2] == ["--mode", "ANIMATE"] and "--sources" not in seen["args"]
 

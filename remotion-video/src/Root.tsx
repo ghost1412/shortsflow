@@ -3,6 +3,7 @@ import { Composition } from "remotion";
 import { ShortFlow, shortFlowSchema } from "./ShortFlow";
 import { OverlayOnly, overlaySchema } from "./overlay";
 import { CaseVideo, caseVideoSchema } from "./CaseVideo";
+import { PresenterCard, presenterCardSchema } from "./Presenter";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -91,6 +92,18 @@ export const RemotionRoot: React.FC = () => {
           ],
           words: [],
         }}
+      />
+      <Composition
+        id="PresenterCard"
+        component={PresenterCard}
+        fps={30}
+        width={340}
+        height={400}
+        durationInFrames={90}
+        schema={presenterCardSchema}
+        defaultProps={{ avatar: { kind: "human" as const, name: "Alex", skin: "#f1c3a0", hair: "short" as const, hairColor: "#2b1d15", eyeColor: "#3b6fd8",
+                                  beard: "none" as const, glasses: "none" as const, lashes: false, lips: "#b0505a", outfit: "#ff8a3d", pattern: "plain" as const,
+                                  furLight: "#fff4e8" }, words: [], accent: "#00e5a8" }}
       />
     </>
   );

@@ -30,6 +30,15 @@ def _background(raw):
     raise OptionError(f"'background' must be {', '.join(BACKGROUND_KINDS)}, or the path of an existing image or video file (got '{raw}').")
 
 
+def _avatar(raw):
+    from engine import avatars
+    try:
+        avatars.load(raw, os.getcwd())          # the pipeline runs in the workspace, where saved presenters live
+    except ValueError as e:
+        raise OptionError(str(e))
+    return avatars.slug(raw) or "off"
+
+
 OPTIONS = (
     Option("template", "text", "case", "the sections of the video: " + ", ".join(TEMPLATES) + ", or the path of a JSON file of {id, title, question, scene}"),
     Option("theme", "choice", "dark", "the whole look", THEMES),
@@ -38,6 +47,8 @@ OPTIONS = (
            "or the path of your own image or video", check=_background),
     Option("layouts", "choice", "auto", "who picks the layout of each section: auto (the model, from timeline, flow, counters, checklist, compare, chart, quote) or template (the template's own)", ("auto", "template")),
     Option("llm", "choice", "auto", "the text model: auto (cloud chain, then the model on this PC when the cloud is rate-limited or down), local (this PC only, nothing leaves it), cloud (no local fallback)", ("auto", "local", "cloud")),
+    Option("avatar", "text", "off", "a drawn presenter in the corner who talks with the narration: off, a ready-made one (alex, maya, priya, sam, leo, nora, "
+           "miso and luna the cats, biscuit the dog, bolt the robot) or one you saved in the app (presenters/NAME.json)", check=_avatar),
     Option("manim", "switch", True, "draw a Manim animation for the explaining sections (manim=off to skip: faster)"),
     Option("draft", "switch", False, "a small, fast render (half size, no new animations) to judge the look and pacing"),
     Option("plan_only", "switch", False, "write the script (script.json) and stop, so it can be edited"),

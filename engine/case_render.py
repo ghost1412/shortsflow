@@ -209,7 +209,7 @@ def source_label(ref):
 
 
 def build_props(script, timing, words_per_section, theme="dark", accent=None, intro=1.8, outro=2.5, audio_url=None, music_url=None,
-                music_volume=0.12, captions=True, clips=None, footage=None, portrait=False):
+                music_volume=0.12, captions=True, clips=None, footage=None, portrait=False, avatar=None):
     """The CaseVideo props: sections with their times, every word shifted to where its section starts. `clips` (from attach_clips)
     puts a rendered animation on a section."""
     sections, words = [], []
@@ -244,6 +244,8 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
              "sources": [source_label(s["ref"]) for s in script.get("sources", [])], "removedClaims": len(script.get("dropped") or []),
              "captionsOff": not captions, "sections": sections, "words": words,
              "bgMusicVolume": music_volume}
+    if avatar:
+        props["avatar"] = avatar             # a clean spec from engine/avatars.load: the drawn presenter
     if accent:
         props["accent"] = accent
     if audio_url:
