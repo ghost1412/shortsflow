@@ -257,7 +257,7 @@ def build_prompt(topic, template, sources, layouts="auto"):
         parts.append("  (a section whose default layout is terminal, equation or animation keeps it)")
     parts += ["", "Return raw JSON only:",
               '{"title": "<plain title, no emoji>", "hook": "<12 words or fewer>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, told like a presenter talking (see VOICE), concrete: who, what, when, how many, in order>", '
-              '"scene": "<the layout you chose for this section>", '
+              '"scene": "<the layout you chose for this section>", "mood": "<how the narrator should sound here: tense, excited, serious, warm or calm>", '
               '"on_screen": ["<3-5 short labels, steps or figures shown on screen, never empty>"], "cites": ["S1"], '
               '"footage": ["<3 or 4 different searches for stock video, 2-4 plain words each, one per step of this section: things a camera can film, no brand, person or place names>"], "diagram": "<Mermaid source, only when the layout is diagram>"}]}',
               'For a section whose scene kind is "equation", every on_screen item is one formula in LaTeX (for example "E = mc^2" or '
@@ -474,8 +474,11 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
             labels = labels[:MAX_COUNTERS]
         if scene == "checklist":
             labels = labels[:MAX_CHECKLIST]       # more rows run into the caption bar
+        mood = str(row.get("mood") or "").strip().lower()
         sections.append({"id": sec["id"], "title": sec["title"], "scene": scene, "narration": narration,
                          "on_screen": labels, "cites": cites, "footage": footage})
+        if mood in MOODS:
+            sections[-1]["mood"] = mood             # how the expressive narrator should sound (engine/expressive_voice.py)
         if diagram:
             sections[-1]["diagram"] = diagram
     if not sections:
@@ -486,6 +489,7 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
 
 
 HOOK_WORDS = 14
+MOODS = ("tense", "excited", "serious", "warm", "calm")
 
 
 def check_hook(text, source_text=None):

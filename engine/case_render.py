@@ -331,7 +331,7 @@ def speak_elevenlabs(text, audio, subs, voice_id=None, model=None, previous_text
     return audio, subs
 
 
-def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=None, generate=None, edge_voice=None):
+def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=None, generate=None, edge_voice=None, expressive=None):
     """Speak every section. Returns ([audio paths], [word lists]). `voice` is the ElevenLabs voice id (or the voice of another provider);
     `edge_voice` is the Edge voice used when ElevenLabs is not used or fails (a presenter's own voice). `generate` replaces
     engine.voice_gen.generate_voice (tests)."""
@@ -340,12 +340,20 @@ def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=N
         from engine.voice_gen import generate_voice as generate
     audios, words = [], []
     sections = script["sections"]
+    narrator_used = "voice_server" if expressive else "standard"
     eleven_failed = False        # after one failure (no credits left, a bad key) the rest of the run goes straight to the fallback voice
     for i, sec in enumerate(sections, start=1):
         audio = os.path.join(session_dir, f"voice_{i:02d}.mp3")
         subs = os.path.join(session_dir, f"subs_{i:02d}.json")
         result_audio = result_subs = None
-        if provider == "elevenlabs" and generate_is_default and os.getenv("ELEVENLABS_API_KEY") and not eleven_failed:
+        if expressive:               # {"speak": fn, "sample": wav}: the local voice server, each section in its mood
+            try:
+                result_audio, result_subs = expressive["speak"](sec["narration"], audio, subs, sample=expressive.get("sample"), mood=sec.get("mood"),
+                                                                first=i == 1)
+            except Exception as e:
+                expressive, narrator_used = None, "standard"            # a redo with narrator=voice_server speaks it again
+                print(f"[Warning] The voice server failed for '{sec['title']}' ({str(e)[:120]}); the rest of this video uses the standard voice.")
+        if not result_audio and provider == "elevenlabs" and generate_is_default and os.getenv("ELEVENLABS_API_KEY") and not eleven_failed:
             try:
                 result_audio, result_subs = speak_elevenlabs(
                     sec["narration"], audio, subs, voice_id=voice,
@@ -377,7 +385,7 @@ def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=N
         words.append(read_words(result_subs or subs))
     try:
         with open(os.path.join(session_dir, "voice_cache.json"), "w", encoding="utf-8") as f:
-            json.dump({"narration": _narration_hashes(script)}, f)
+            json.dump({"narration": _narration_hashes(script), "narrator": narrator_used}, f)
     except OSError:
         pass
     return audios, words
@@ -492,13 +500,16 @@ def _narration_hashes(script):
     return [hashlib.sha1(str(s.get("narration", "")).encode("utf-8")).hexdigest()[:12] for s in script["sections"]]
 
 
-def cached_voice(script, session_dir):
+def cached_voice(script, session_dir, narrator=None):
     """([audio paths], [word lists]) of a session whose narration was already made (voice_NN.mp3 and subs_NN.json for every section),
     None when any piece is missing, has no words, or was spoken from a narration that has since been edited."""
     try:
         with open(os.path.join(session_dir, "voice_cache.json"), encoding="utf-8") as f:
-            if json.load(f).get("narration") != _narration_hashes(script):
-                return None
+            cache = json.load(f)
+        if cache.get("narration") != _narration_hashes(script):
+            return None
+        if narrator and cache.get("narrator", "standard") != narrator:      # another narrator was asked for: speak it again
+            return None
     except (OSError, ValueError, AttributeError):
         pass                                          # a session from before the check: the files are taken as they are
     audios, words = [], []

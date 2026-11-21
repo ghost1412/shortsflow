@@ -4,6 +4,7 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: **expressive narration** (optional). With `--case narrator=voice_server` ("Expressive" on the Case card) the narration is spoken by the local Chatterbox voice server set up on the Voice-over card, if it is running: each section in its mood (the script now gives every section one: tense, excited, serious, warm or calm), in the presenter's voice, with captions timed from the audio by Whisper on the CPU. Everything stays on this PC; it uses the GPU while it speaks. Without a running server the standard voice is used, and a server failure mid-way switches the rest to the standard voice.
 - Case explainer: **choose the transition** between sections (`--case transition=number|fade|slide|zoom|wipe|cut`, a dropdown on the Case card). To compare, redo an earlier run as a quick draft with another transition: the script and voice are reused, so it takes about a minute.
 - Case explainer: **the narration sounds less read-out**. The script is asked to be spoken like a presenter talking (short sentences, contractions, "you", a question now and then, terms explained, linked as a story); the free Edge voice reads it at a normal pace with the more expressive voice, without the shorts-style "..." pause after every sentence; Edge gets one retry before another voice takes over.
 ## 0.9.3 (2026-11-21)

@@ -46,6 +46,9 @@ OPTIONS = (
     Option("formats", "text", "16:9,9:16", "video shapes to make, comma separated (" + ", ".join(SHAPES) + ")", check=_formats),
     Option("background", "text", "footage", "what is behind the scenes: footage (stock video), images (stock photos), none (the look's own background), "
            "or the path of your own image or video", check=_background),
+    Option("narrator", "choice", "standard", "who speaks the narration: standard (ElevenLabs with credits, else the free Edge voice), or voice_server: the "
+           "local voice server (Chatterbox, set up on the Voice-over card) if it is running, each section in its mood and in the presenter's voice; "
+           "it uses the GPU while it speaks", ("standard", "voice_server")),
     Option("transition", "choice", "number", "how one section gives way to the next: number (a big section number and title), fade, slide, zoom, wipe "
            "or cut. Try another on an earlier run with resume=FOLDER draft (the script and voice are reused)", TRANSITIONS),
     Option("layouts", "choice", "auto", "who picks the layout of each section: auto (the model, from timeline, flow, counters, checklist, compare, chart, quote) or template (the template's own)", ("auto", "template")),
