@@ -209,7 +209,7 @@ def source_label(ref):
 
 
 def build_props(script, timing, words_per_section, theme="dark", accent=None, intro=1.8, outro=2.5, audio_url=None, music_url=None,
-                music_volume=0.12, captions=True, clips=None, footage=None, portrait=False, avatar=None):
+                music_volume=0.12, captions=True, clips=None, footage=None, portrait=False, avatar=None, transition="number"):
     """The CaseVideo props: sections with their times, every word shifted to where its section starts. `clips` (from attach_clips)
     puts a rendered animation on a section."""
     sections, words = [], []
@@ -243,7 +243,7 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
     props = {"title": script["title"], "hook": str(script.get("hook") or ""), "theme": theme, "introSeconds": intro, "outroSeconds": outro, "verified": bool(script.get("verified")),
              "sources": [source_label(s["ref"]) for s in script.get("sources", [])], "removedClaims": len(script.get("dropped") or []),
              "captionsOff": not captions, "sections": sections, "words": words,
-             "bgMusicVolume": music_volume}
+             "bgMusicVolume": music_volume, "transition": transition}
     if avatar:
         props["avatar"] = avatar             # a clean spec from engine/avatars.load: the drawn presenter
     if accent:
@@ -265,6 +265,7 @@ def _ffmpeg():
 
 
 # A calm, authoritative narrator and the more natural of the two ElevenLabs models. Both can be changed with the environment.
+NARRATOR_VOICE = "en-US-AvaMultilingualNeural"   # the free Edge voice of a case video without a presenter: the expressive one, not the older flat "Ava"
 DEFAULT_VOICE_ID = "onwK4e9ZLuTAKqWW03F9"      # premade "Daniel": steady British broadcaster
 DEFAULT_VOICE_MODEL = "eleven_multilingual_v2"
 VOICE_SETTINGS = {"stability": 0.42, "similarity_boost": 0.8, "style": 0.3, "use_speaker_boost": True}
@@ -366,6 +367,9 @@ def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=N
                 kwargs["voice_name"] = edge_voice
             if clone_voice:
                 kwargs["clone_voice"] = clone_voice
+            if generate_is_default:
+                kwargs.update(style="narration", rate="+0%")            # told at a natural pace, not the fast shorts style
+                kwargs.setdefault("voice_name", NARRATOR_VOICE)
             result_audio, result_subs = generate(sec["narration"], **kwargs)
         if not result_audio or not os.path.exists(result_audio):
             raise RuntimeError(f"No voice was produced for section '{sec['title']}'.")

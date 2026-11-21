@@ -91,6 +91,7 @@ export const RemotionRoot: React.FC = () => {
             { title: "What happened", scene: "timeline" as const, labels: ["First", "Second", "Third"], cues: [], clipRate: 1, clipAspect: 16 / 9, sourceLabels: [], footage: [], beats: [], start: 2.5, end: 8 },
           ],
           words: [],
+          transition: "number" as const,
         }}
       />
       <Composition

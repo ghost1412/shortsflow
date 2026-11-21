@@ -458,7 +458,7 @@ CASE_BACKGROUNDS = {"Stock video": "footage", "Stock photos": "images", "Style o
 
 
 def case_args(topic, sources_text="", template="case", theme="dark", formats=("16:9", "9:16"), no_manim=False, no_footage=False, session_dir=None,
-              background="footage", background_file=None, resume=None, draft=False, plan_only=False, layouts="auto", avatar="off"):
+              background="footage", background_file=None, resume=None, draft=False, plan_only=False, layouts="auto", avatar="off", transition="number"):
     """Command-line arguments for a case explainer (--mode CASE). The options travel as `--case KEY=VALUE` pairs built from the shared schema
     (engine/case_options.py). Raises ValueError with a plain message when the topic is empty."""
     topic = (topic or "").strip()
@@ -470,6 +470,8 @@ def case_args(topic, sources_text="", template="case", theme="dark", formats=("1
     values = {"template": (template or "case").strip() or "case", "theme": theme if theme in CASE_THEMES else "dark", "formats": ",".join(shapes),
               "manim": not no_manim, "draft": bool(draft), "plan_only": bool(plan_only), "resume": str(resume or ""),
               "layouts": layouts if layouts in ("auto", "template") else "auto"}
+    if transition in _case_options.TRANSITIONS and transition != "number":
+        values["transition"] = transition
     avatar = re.sub(r"[^a-z0-9_-]", "", str(avatar or "").lower())
     if avatar and avatar != "off":
         values["avatar"] = avatar                  # a drawn presenter (engine/avatars.py); checked by the pipeline

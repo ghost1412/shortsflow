@@ -14,6 +14,7 @@ THEMES = ("dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", 
 TEMPLATES = ("case", "postmortem", "history", "explainer", "recipe", "news", "animation")
 SHAPES = ("16:9", "9:16", "1:1", "4:5")
 BACKGROUND_KINDS = ("footage", "images", "none")
+TRANSITIONS = ("number", "fade", "slide", "zoom", "wipe", "cut")
 
 
 def _formats(raw):
@@ -45,6 +46,8 @@ OPTIONS = (
     Option("formats", "text", "16:9,9:16", "video shapes to make, comma separated (" + ", ".join(SHAPES) + ")", check=_formats),
     Option("background", "text", "footage", "what is behind the scenes: footage (stock video), images (stock photos), none (the look's own background), "
            "or the path of your own image or video", check=_background),
+    Option("transition", "choice", "number", "how one section gives way to the next: number (a big section number and title), fade, slide, zoom, wipe "
+           "or cut. Try another on an earlier run with resume=FOLDER draft (the script and voice are reused)", TRANSITIONS),
     Option("layouts", "choice", "auto", "who picks the layout of each section: auto (the model, from timeline, flow, counters, checklist, compare, chart, quote) or template (the template's own)", ("auto", "template")),
     Option("llm", "choice", "auto", "the text model: auto (cloud chain, then the model on this PC when the cloud is rate-limited or down), local (this PC only, nothing leaves it), cloud (no local fallback)", ("auto", "local", "cloud")),
     Option("avatar", "text", "off", "a drawn presenter in the corner who talks with the narration: off, a ready-made one (alex, maya, priya, sam, leo, nora, "

@@ -547,7 +547,7 @@ def case_plan(topic, sources, template):
            "then press **Render this script**." + note), log, case_study.script_to_text(script), session
 
 
-def case_render_script(script_text, session, theme_label, formats, no_manim, background_label, background_file, draft, avatar="off"):
+def case_render_script(script_text, session, theme_label, formats, no_manim, background_label, background_file, draft, avatar="off", transition="number"):
     """Case explainer tab, review step: save the edited script and render it (the narration is made from the edited text)."""
     from engine import case_study
     if not session or not os.path.isfile(os.path.join(session, "script.json")):
@@ -564,11 +564,12 @@ def case_render_script(script_text, session, theme_label, formats, no_manim, bac
             json.dump(base, f, indent=1, ensure_ascii=False)
     with open(os.path.join(session, "script.json"), "w", encoding="utf-8") as f:
         json.dump(script, f, indent=1, ensure_ascii=False)
-    yield from case_video("", "", "case", theme_label, formats, no_manim, background_label, background_file, "", draft, resume_path=session, avatar=avatar)
+    yield from case_video("", "", "case", theme_label, formats, no_manim, background_label, background_file, "", draft, resume_path=session, avatar=avatar,
+                          transition=transition)
 
 
 def case_video(topic, sources, template, theme_label, formats, no_manim, background_label, background_file, resume_label="", draft=False, layouts="auto",
-               resume_path=None, avatar="off"):
+               resume_path=None, avatar="off", transition="number"):
     """Case explainer tab: a topic and sources in, a sectioned explainer video out. Yields (status, log, videos)."""
     import time
     old = resume_path or dict(web_args.list_case_sessions(ROOT, limit=50)).get(resume_label or "")
@@ -579,7 +580,7 @@ def case_video(topic, sources, template, theme_label, formats, no_manim, backgro
         if background == "file" and not background_file:
             raise ValueError("Add an image or video file, or choose another background.")
         args = web_args.case_args(topic, sources, template, theme, formats, no_manim, False, session, background, background_file,
-                                  resume=old, draft=bool(draft), layouts=layouts, avatar=avatar)
+                                  resume=old, draft=bool(draft), layouts=layouts, avatar=avatar, transition=transition)
     except ValueError as e:
         raise gr.Error(str(e))
     cmd = [*_pipeline_cmd(), *args]
@@ -1438,7 +1439,7 @@ PRESENTER_KINDS = {"Person": "human", "Cat": "cat", "Dog": "dog", "Robot": "robo
 
 def case_video_ui(*a):
     """The case card's Make button: the form values, the presenter last."""
-    yield from case_video(*a[:11], avatar=a[11])
+    yield from case_video(*a[:11], avatar=a[11], transition=a[12])
 
 
 def presenter_spec(kind_label, name, skin, hair, hair_color, eye_color, beard, glasses, lashes, lips, outfit, pattern, fur_light, voice=None):
@@ -2346,6 +2347,9 @@ def build_ui():
                         c_layouts = gr.Dropdown(["auto", "template"], value="auto", label="Layouts",
                                                 info="auto: the model picks the best layout for each section (timeline, flow, counters, checklist, compare, chart, quote). template: the sections' own.")
                         c_theme = gr.Dropdown(list(web_args.CASE_THEME_LABELS.values()), value=web_args.CASE_THEME_LABELS["dark"], label="Look")
+                        c_transition = gr.Dropdown([("Big section number", "number"), ("Fade", "fade"), ("Slide", "slide"), ("Zoom", "zoom"), ("Wipe", "wipe"), ("Cut", "cut")],
+                                                   value="number", label="Transition between sections",
+                                                   info="To compare: render once, then pick another here, choose the run under 'Or redo an earlier run', tick Quick draft and press Make (about a minute: the script and voice are reused).")
                         from engine import avatars as _avatars
                         with gr.Row(equal_height=False):
                             c_avatar = gr.Dropdown(_avatars.choices(ROOT), value="off", label="Presenter", scale=3,
@@ -2378,9 +2382,9 @@ def build_ui():
                     c_render = gr.Button("🎬 Render this script", variant="primary")
                 with gr.Accordion("Technical details", open=False):
                     c_log = gr.Textbox(label="Full log", lines=14, max_lines=14, autoscroll=True)
-                c_run = c_btn.click(case_video_ui, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_resume, c_draft, c_layouts, c_avatar], [c_status, c_log, c_video])
+                c_run = c_btn.click(case_video_ui, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_resume, c_draft, c_layouts, c_avatar, c_transition], [c_status, c_log, c_video])
                 c_plan_run = c_plan.click(case_plan, [c_topic, c_sources, c_template], [c_status, c_log, c_script, c_session])
-                c_render_run = c_render.click(case_render_script, [c_script, c_session, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_draft, c_avatar],
+                c_render_run = c_render.click(case_render_script, [c_script, c_session, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_draft, c_avatar, c_transition],
                                               [c_status, c_log, c_video])
                 c_stop.click(stop_jobs, None, c_status, cancels=[c_run, c_plan_run, c_render_run])
 

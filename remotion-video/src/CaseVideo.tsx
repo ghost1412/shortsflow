@@ -8,6 +8,7 @@ import { z } from "zod";
 import { Presenter, PresenterRoom, avatarSchema, presenterRect, usePresenterRoom } from "./Presenter";
 
 export const CASE_THEMES = ["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"] as const;
+export const CASE_TRANSITIONS = ["number", "fade", "slide", "zoom", "wipe", "cut"] as const;   // how one section gives way to the next
 export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation", "diagram"] as const;
 
 export const caseVideoSchema = z.object({
@@ -40,7 +41,8 @@ export const caseVideoSchema = z.object({
     end: z.number(),
   })).default([]),
   words: z.array(z.object({ word: z.string(), start: z.number(), end: z.number() })).default([]),
-  avatar: avatarSchema.optional(),             // a drawn presenter in the corner who talks with the narration (engine/avatars.py)
+  avatar: avatarSchema.optional(),
+  transition: z.enum(CASE_TRANSITIONS).default("number"),   // number: a big section number and title; fade; slide; zoom; wipe; cut             // a drawn presenter in the corner who talks with the narration (engine/avatars.py)
 });
 type Props = z.infer<typeof caseVideoSchema>;
 
@@ -760,7 +762,21 @@ const BeatFootage: React.FC<{ src: string; seconds: number; kind?: "video" | "im
   );
 };
 
-const SectionScene: React.FC<{ index: number; total: number; section: Props["sections"][number]; p: Pal; accent: string; frames: number }> = ({ index, total, section, p, accent, frames }) => {
+// How a section comes in and goes out. Every kind moves the whole section (its footage, heading and scene) together.
+const sectionMotion = (kind: string, frame: number, frames: number, fade: number): React.CSSProperties => {
+  const ease = (x: number) => 1 - Math.pow(1 - x, 3);
+  const inK = ease(interpolate(frame, [0, 14], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }));
+  const outK = ease(interpolate(frame, [frames - 12, frames], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }));
+  switch (kind) {
+    case "slide": return { transform: `translateX(${(1 - inK) * 100 - outK * 100}%)` };
+    case "zoom": return { opacity: fade, transform: `scale(${1.14 - 0.14 * inK + 0.08 * outK})`, filter: `blur(${(1 - inK) * 10 + outK * 8}px)` };
+    case "wipe": return { clipPath: `inset(0 ${(1 - inK) * 100}% 0 ${outK * 100}%)` };
+    case "cut": return {};
+    default: return { opacity: fade };          // number and fade
+  }
+};
+
+const SectionScene: React.FC<{ index: number; total: number; section: Props["sections"][number]; p: Pal; accent: string; frames: number; transition?: Props["transition"] }> = ({ index, total, section, p, accent, frames, transition = "number" }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const { u, h, portrait } = useUnit();
@@ -776,7 +792,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
   const wipe = interpolate(frame, [0, 18], [-30, 115], { extrapolateRight: "clamp" });
   const underline = interpolate(frame, [4, 24], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
-    <AbsoluteFill style={{ opacity: fade }}>
+    <AbsoluteFill style={sectionMotion(transition, frame, frames, fade)}>
       {footage.length > 0 && (
         <AbsoluteFill>
           {beats.map((b, i) => {
@@ -825,13 +841,14 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
           <span style={{ fontFamily: FONT, fontSize: 24 * u, color: p.text }}>{(section.sourceLabels ?? []).join(" · ")}</span>
         </div>
       )}
-      {frame < 42 && !whole && (
+      {frame < 42 && !whole && transition === "number" && (
         <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", background: `${p.bg1}${frame < 30 ? "d9" : "99"}`, opacity: interpolate(frame, [0, 6, 30, 42], [0, 1, 1, 0], { extrapolateRight: "clamp" }) }}>
           <div style={{ fontFamily: FONT, fontSize: 340 * u, fontWeight: 900, color: "transparent", WebkitTextStroke: `${4 * u}px ${accent}`, lineHeight: 1, transform: `scale(${1 + 0.08 * (frame / 42)})` }}>{String(index + 1).padStart(2, "0")}</div>
           <div style={{ fontFamily: FONT, fontSize: 74 * u, fontWeight: 800, color: p.text, textTransform: "uppercase", letterSpacing: 4 * u, marginTop: 8 * u }}>{section.title}</div>
         </AbsoluteFill>
       )}
-      <div style={{ position: "absolute", top: 0, bottom: 0, left: `${wipe}%`, width: "24%", background: `linear-gradient(90deg, transparent, ${accent}40, transparent)`, transform: "skewX(-12deg)", pointerEvents: "none" }} />
+      {transition === "wipe" && frame < 16 && <div style={{ position: "absolute", top: 0, bottom: 0, left: `${interpolate(frame, [0, 14], [0, 100], { extrapolateRight: "clamp" })}%`, width: 10, marginLeft: -5, background: accent, boxShadow: `0 0 40px ${accent}`, pointerEvents: "none" }} />}
+      {transition === "number" && <div style={{ position: "absolute", top: 0, bottom: 0, left: `${wipe}%`, width: "24%", background: `linear-gradient(90deg, transparent, ${accent}40, transparent)`, transform: "skewX(-12deg)", pointerEvents: "none" }} />}
     </AbsoluteFill>
   );
 };
@@ -955,7 +972,7 @@ export const CaseVideo: React.FC<Props> = (props) => {
         const frames = Math.max(15, Math.round(s.end * fps) - from);
         return (
           <Sequence key={i} from={from} durationInFrames={frames}>
-            <SectionScene index={i} total={sections.length} section={s} p={p} accent={accent} frames={frames} />
+            <SectionScene index={i} total={sections.length} section={s} p={p} accent={accent} frames={frames} transition={props.transition} />
           </Sequence>
         );
       })}

@@ -240,7 +240,7 @@ def generate_voice_voicestudio(text, output_audio="assets/voice.mp3", output_sub
     return output_audio, output_subs
 
 
-def generate_voice(text, output_audio="assets/voice.mp3", output_subs="assets/subs.json", voice_name="en-US-AvaNeural", rate="+15%", pitch="+0Hz", add_cta=True, group=False, provider=None, clone_voice=None):
+def generate_voice(text, output_audio="assets/voice.mp3", output_subs="assets/subs.json", voice_name="en-US-AvaNeural", rate="+15%", pitch="+0Hz", add_cta=True, group=False, provider=None, clone_voice=None, style="shorts"):
     """
     Generates voice with cinematic pacing and word-level subtitle timestamps.
     Supports ElevenLabs, VoiceStudio (local voice cloning / Kokoro), and EdgeTTS.
@@ -282,11 +282,15 @@ def generate_voice(text, output_audio="assets/voice.mp3", output_subs="assets/su
             print(f"[Warning] ElevenLabs failed ({e}). Falling back to edge-tts.")
 
     raw_text = clean_for_tts(text)
-    
-    hook, rest = split_hook(raw_text)
-    processed_rest = add_dramatic_pauses(rest or "")
-    
-    final_text = f"{hook} ... {processed_rest}"
+
+    if style == "narration":
+        # an explainer is told, not announced: the text as written, at a normal speed, with the voice's own pauses (no "..." after every
+        # sentence and no split after the first one, which made it sound like a list being read out)
+        final_text = raw_text
+    else:
+        hook, rest = split_hook(raw_text)
+        processed_rest = add_dramatic_pauses(rest or "")
+        final_text = f"{hook} ... {processed_rest}"
     if add_cta:
         final_text += " ... Comment your answer now."
 
@@ -366,11 +370,16 @@ def generate_voice(text, output_audio="assets/voice.mp3", output_subs="assets/su
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            a, s = loop.run_until_complete(amain())
-            result["audio"] = a
-            result["subs"] = s
-        except Exception as e:
-            result["error"] = e
+            for attempt in range(2):        # the Edge service now and then answers "No audio was received" once: a second try nearly always works
+                try:
+                    a, s = loop.run_until_complete(amain())
+                    result["audio"], result["subs"], result["error"] = a, s, None
+                    break
+                except Exception as e:
+                    result["error"] = e
+                    if attempt == 0:
+                        import time
+                        time.sleep(1.5)
         finally:
             loop.close()
             

@@ -163,3 +163,33 @@ def test_a_timeline_keeps_the_order_of_time_and_spreads_its_events():
     props = cr.build_props(script, [(2.0, 32.0), (32.0, 40.0)], [[{"word": "Fixed", "start": 0.0, "end": 0.4}], []])
     assert props["sections"][0]["labels"] == ["2013: bug", "2021: found", "2022: fixed"]          # not re-ordered by the narration
     assert props["sections"][0]["cues"] == cr.even_cues(3, 30.0)
+
+
+def test_transitions_travel_to_the_props_and_the_narration_is_told_naturally(tmp_path):
+    from engine import case_options, case_render
+    from shortsflow import web_args
+    assert case_options.parse(["transition=slide"])["transition"] == "slide" and case_options.parse([])["transition"] == "number"
+    assert "transition=zoom" in web_args.case_args("Topic", transition="zoom") and not any("transition" in a for a in web_args.case_args("Topic"))
+    script = {"title": "T", "sections": [{"title": "A", "scene": "quote", "on_screen": ["x"], "narration": "x"}], "sources": []}
+    assert case_render.build_props(script, [(1.8, 5.0)], [[]], transition="wipe")["transition"] == "wipe"
+    import os
+    tsx = open(os.path.join(os.path.dirname(__file__), "..", "remotion-video", "src", "CaseVideo.tsx"), encoding="utf-8").read()
+    assert all(f'"{t}"' in tsx.split("CASE_TRANSITIONS = [")[1].split("]")[0] for t in case_options.TRANSITIONS)
+    import engine.voice_gen as vg
+    seen = {}
+
+    class Com:
+        def __init__(self, text, voice, rate=None, pitch=None):
+            seen.update(text=text, voice=voice, rate=rate)
+
+        async def stream(self):
+            yield {"type": "audio", "data": b"x"}
+            yield {"type": "WordBoundary", "offset": 0, "duration": 1000000, "text": "Hi"}
+    old = vg.edge_tts.Communicate
+    vg.edge_tts.Communicate = Com
+    try:
+        vg.generate_voice("First point. Second point.", str(tmp_path / "a.mp3"), str(tmp_path / "a.json"), voice_name="en-US-AvaMultilingualNeural",
+                          rate="+0%", add_cta=False, provider="edgetts", style="narration")
+    finally:
+        vg.edge_tts.Communicate = old
+    assert seen["text"] == "First point. Second point." and seen["rate"] == "+0%"          # no "..." pauses, no hook split, normal pace

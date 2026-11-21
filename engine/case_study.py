@@ -242,7 +242,12 @@ def build_prompt(topic, template, sources, layouts="auto"):
               "highest-stakes fact the sources report, or a sharp question they answer; no greeting, no \"in this video\", no clickbait the sources do not back. "
               "The first sentence of the first section's narration must also open with that kind of fact, not with background. "
               "When the work is a paper, name the institution or lab at most once and never read out a list of author names. "
-              "Advice in the last section may be general, but must not add facts.", "", "One section per question, in this order:"]
+              "Advice in the last section may be general, but must not add facts. "
+              "VOICE: the narration is SPOKEN by a narrator talking to one viewer, not read from a report. Write the way a good presenter talks: short "
+              "sentences of 8 to 16 words, one idea each; contractions (it's, didn't, that's); speak to the viewer as \"you\" now and then; turn a "
+              "surprising point into a quick question and answer it (\"So what went wrong? ...\"); say what a term means the first time in plain words "
+              "instead of stacking jargon; link the sentences (so, but, then, that's why) so it flows as a story. Never start two sentences in a row the "
+              "same way, and no bullet-point phrasing.", "", "One section per question, in this order:"]
     for s in template:
         parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  " + (f"Default layout: {s['scene']}" if layouts == "auto" else f"Scene kind: {s['scene']}")
                      + (f"  Narration length: {s['sentences']} short sentences." if s.get("sentences") else ""))
@@ -251,7 +256,7 @@ def build_prompt(topic, template, sources, layouts="auto"):
         parts += [f"  {name}: {LAYOUT_HELP[name]}" for name in AUTO_LAYOUTS]
         parts.append("  (a section whose default layout is terminal, equation or animation keeps it)")
     parts += ["", "Return raw JSON only:",
-              '{"title": "<plain title, no emoji>", "hook": "<12 words or fewer>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, concrete: who, what, when, how many, in order>", '
+              '{"title": "<plain title, no emoji>", "hook": "<12 words or fewer>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, told like a presenter talking (see VOICE), concrete: who, what, when, how many, in order>", '
               '"scene": "<the layout you chose for this section>", '
               '"on_screen": ["<3-5 short labels, steps or figures shown on screen, never empty>"], "cites": ["S1"], '
               '"footage": ["<3 or 4 different searches for stock video, 2-4 plain words each, one per step of this section: things a camera can film, no brand, person or place names>"], "diagram": "<Mermaid source, only when the layout is diagram>"}]}',
