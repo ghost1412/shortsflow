@@ -117,8 +117,8 @@ def test_the_preview_command_and_its_failure(tmp_path):
 
 def test_pictures_of_presenters(tmp_path):
     for name in av.PRESETS:
-        assert os.path.isfile(os.path.join(av.THUMBS, name + ".png")), name
-        assert av.thumbnail(name).endswith(name + ".png")
+        assert os.path.isfile(os.path.join(av.THUMBS, name + ".jpg")), name
+        assert av.thumbnail(name).endswith(name + ".jpg")
     assert av.thumbnail("off") is None and av.thumbnail("nobody") is None
     home = str(tmp_path)
     key, _ = av.save_photo(home, "Me", _jpg(tmp_path))

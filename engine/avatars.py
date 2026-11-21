@@ -315,11 +315,11 @@ def thumbnail(name, home=None):
         return None
     key = slug(name)
     if key in PRESETS and not (home and os.path.isfile(os.path.join(folder(home), key + ".json"))):
-        path = os.path.join(_base(os.path.join("assets", "presenters"), home), key + ".png")
+        path = os.path.join(_base(os.path.join("assets", "presenters"), home), key + ".jpg")
         return path if os.path.isfile(path) else None
     if spec["kind"] == "photo":
         return photo_path(spec, home)
-    path = os.path.join(folder(home), key + ".png")
+    path = os.path.join(folder(home), key + "_card.jpg")
     if not os.path.isfile(path):
         try:
             render_still(spec, path)
