@@ -523,6 +523,15 @@ def render_case(props, audio_path, output_path, music_path=None, aspect="16:9", 
         if music_path:
             props["bgMusicUrl"] = copy_to_public(music_path, assets)
         props["sections"] = [dict(s) for s in props["sections"]]
+        if props.get("avatar"):
+            props["avatar"] = dict(props["avatar"])
+            for key in ("image", "video"):           # a realistic presenter: its photo (draft) or its talking video (full render)
+                if props["avatar"].get(key):
+                    rel = copy_to_public(props["avatar"][key], assets)
+                    if rel:
+                        props["avatar"][key] = rel
+                    else:
+                        props["avatar"].pop(key)
         for s in props["sections"]:
             if s.get("clip"):
                 s["clip"] = copy_to_public(s["clip"], assets) or None

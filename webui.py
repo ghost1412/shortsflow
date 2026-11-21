@@ -1504,6 +1504,69 @@ def presenter_from_photo(photo, use_label, consent, *fields):
     return [msg] + presenter_fields(spec)
 
 
+def real_presenter_install():
+    """Install the talking-head add-on, streaming its log."""
+    from engine import talking_head
+    import threading
+    import queue
+    q, done = queue.Queue(), {}
+
+    def work():
+        try:
+            done["ok"] = talking_head.install(log=q.put)
+        except Exception as e:
+            q.put(f"[Error] {e}")
+            done["ok"] = False
+        q.put(None)
+    threading.Thread(target=work, daemon=True).start()
+    lines = []
+    while True:
+        line = q.get()
+        if line is None:
+            break
+        lines.append(str(line))
+        yield chr(10).join(lines[-40:]), talking_head.status()[1]
+    yield chr(10).join(lines[-40:]), talking_head.status()[1]
+
+
+def real_presenter_preview(photo, consent):
+    """The photo saying one sentence (the sentence goes to the Edge voice service; the photo stays on this PC)."""
+    from engine import talking_head
+    import asyncio
+    import time
+    if not consent:
+        return None, "Tick the box first: only use your own face, or the face of someone who agreed."
+    if not photo:
+        return None, "Choose a photo first."
+    if not talking_head.installed():
+        return None, talking_head.status()[1]
+    folder = os.path.join(ROOT, "sessions", "presenter_previews")
+    os.makedirs(folder, exist_ok=True)
+    voice = os.path.join(folder, "real_preview_voice.mp3")
+    if not os.path.isfile(voice):
+        import edge_tts
+        asyncio.run(edge_tts.Communicate("Hi there. I am your host, and I will walk you through it.", "en-US-AndrewMultilingualNeural").save(voice))
+    out = os.path.join(folder, time.strftime("real_%H%M%S.mp4"))
+    try:
+        talking_head.make(photo, voice, out)
+    except Exception as e:
+        return None, f"Not made: {str(e)[:400]}"
+    return out, "Made on this PC. Save it below to use it in a case explainer."
+
+
+def real_presenter_save(name, photo, consent):
+    from engine import avatars
+    if not consent:
+        return "Tick the box first: only use your own face, or the face of someone who agreed.", gr.update(), gr.update()
+    try:
+        key, _ = avatars.save_photo(ROOT, name, photo)
+    except ValueError as e:
+        return str(e), gr.update(), gr.update()
+    picks = avatars.choices(ROOT)
+    return (f"Saved as **{key}**. Choose it under Presenter on the Case explainer card. A full render makes the face talk (GPU minutes); a draft shows the photo still.",
+            gr.update(choices=picks, value=key), gr.update(choices=[c for c in picks if c[1] != "off"]))
+
+
 MODE_KEYS = ["shorts", "clip", "dub", "recap", "reel", "idea", "case", "publish", "settings", "presenter"]       # the columns; "highlights" shares the first one
 
 
@@ -2386,6 +2449,26 @@ def build_ui():
                         pr_save_name = gr.Textbox(label="Save as", placeholder="my_host", scale=2)
                         pr_save = gr.Button("Save", scale=1)
                     pr_msg = gr.Markdown("")
+            with gr.Accordion("Realistic: your photo talks (optional add-on)", open=False):
+                from engine import talking_head as _th
+                gr.Markdown("A real face from a photo talks with the narration, made on this PC with SadTalker. It is an add-on: about **5 GB** to install "
+                            "(an NVIDIA GPU is needed) and a few GPU minutes per video. The photo and the voice stay on this PC. "
+                            "**Only use your own face, or the face of someone who agreed:** a talking face of another person can be used to fake them.")
+                rp_status = gr.Markdown(_th.status()[1])
+                with gr.Accordion("Install the add-on", open=False):
+                    rp_install = gr.Button("Install now (about 5 GB, takes a while)")
+                    rp_log = gr.Textbox(label="Install log", lines=8, max_lines=8, autoscroll=True)
+                with gr.Row(equal_height=False):
+                    with gr.Column():
+                        rp_photo = gr.Image(type="filepath", label="A clear, front-facing photo (face and shoulders)", height=260)
+                        rp_consent = gr.Checkbox(False, label="This is my face, or the person agreed to it")
+                        with gr.Row():
+                            rp_name = gr.Textbox(label="Save as", placeholder="me", scale=2)
+                            rp_save = gr.Button("Save", scale=1)
+                    with gr.Column():
+                        rp_video = gr.Video(label="Preview", interactive=False, height=300)
+                        rp_preview = gr.Button("Preview (the photo says one sentence)")
+                rp_msg = gr.Markdown("")
             pr_fields = [pr_kind, pr_name, pr_skin, pr_hair, pr_hair_color, pr_eyes, pr_beard, pr_glasses, pr_lashes, pr_lips, pr_outfit, pr_pattern, pr_fur_light]
             pr_start.change(presenter_start_from, [pr_start], pr_fields + [pr_person, pr_animal])
             pr_kind.change(presenter_kind_view, [pr_kind], [pr_person, pr_animal])
@@ -2393,6 +2476,9 @@ def build_ui():
             pr_preview.click(presenter_preview, pr_fields, [pr_video, pr_msg])
             pr_save.click(presenter_save, [pr_save_name] + pr_fields, [pr_msg, c_avatar, pr_start])
             pr_suggest.click(presenter_from_photo, [pr_photo, pr_use, pr_consent] + pr_fields, [pr_msg] + pr_fields)
+            rp_install.click(real_presenter_install, None, [rp_log, rp_status])
+            rp_preview.click(real_presenter_preview, [rp_photo, rp_consent], [rp_video, rp_msg])
+            rp_save.click(real_presenter_save, [rp_name, rp_photo, rp_consent], [rp_msg, c_avatar, pr_start])
         with gr.Column(visible=False) as mode_col_publish:
             gr.Markdown("### Publish a video\nPick any video you have made (every format of every kind of run), check its title and description, and choose where it goes. "
                         "**The video and its title leave this PC when you publish.** Keys and your YouTube sign-in are in the Settings card.")

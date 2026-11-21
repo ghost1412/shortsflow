@@ -96,6 +96,30 @@ def missing_animations(script, clips):
     return [str(s.get("title", "")) for s, c in zip(script["sections"], clips) if s.get("scene") == "animation" and not c]
 
 
+def _photo_presenter(avatar, audios, timing, session_dir, draft):
+    """{image} or {video} for a realistic presenter: the still photo in a draft, the photo talking with the narration in a full render (made once
+    per run with the optional talking-head add-on; without it, or if it fails, the still photo is shown and the run goes on)."""
+    from engine import avatars, talking_head
+    photo = avatars.photo_path(avatar, os.getcwd())
+    if not photo:
+        print(f"[Warning] The presenter's photo is missing (presenters/{avatar.get('photo')}); no presenter is shown.")
+        return {}
+    if draft:
+        return {"image": photo}
+    if not talking_head.installed():
+        print("[Warning] The realistic presenter needs the talking-head add-on (python -m engine.talking_head install); the photo is shown still.")
+        return {"image": photo}
+    out = os.path.join(session_dir, "presenter_talking.mp4")
+    if not os.path.isfile(out):
+        voice = cr.join_audio(audios, timing, os.path.join(session_dir, "presenter_voice.mp3"))     # the narration alone, on the video's clock
+        try:
+            talking_head.make(photo, voice, out)
+        except Exception as e:                       # the video still renders, with the still photo
+            print(f"[Warning] The talking face could not be made ({str(e)[:200]}); the photo is shown still.")
+            return {"image": photo}
+    return {"video": out}
+
+
 def run(args, target_bitrate=None, target_preset=None):
     from engine import case_render as cr
 
@@ -155,6 +179,8 @@ def run(args, target_bitrate=None, target_preset=None):
         props = cr.build_props(script, timing, words, theme=theme, music_volume=0.2, clips=clips, footage=footage, portrait=portrait, avatar=avatar)
         voice_track = cr.join_audio(audios, timing, os.path.join(session_dir, f"voice_all_{tag}.mp3"),
                                     sfx=cr.sfx_for(props, os.path.join(session_dir, f"sfx_{tag}.wav")))
+        if avatar and avatar["kind"] == "photo":
+            props["avatar"] = dict(props["avatar"], **_photo_presenter(avatar, audios, timing, session_dir, draft))
         name = f"case_draft_{tag}.mp4" if draft else f"case_{tag}.mp4"
         out = cr.render_case(props, voice_track, os.path.join(session_dir, name), music_path=music, aspect=aspect,
                              scale=DRAFT_SCALE if draft else 1.0)

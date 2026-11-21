@@ -4,6 +4,7 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Presenters, optional add-on: **a real face that talks**. Save a photo on the Presenters card (your own face, or someone who agreed) and a full render makes it talk with the narration, on this PC with SadTalker (`python -m engine.talking_head install`, about 5 GB, NVIDIA GPU; or the Install button in the app). A draft shows the photo still, and so does a run without the add-on. The photo and the voice stay on the PC.
 - Case explainer: **presenters**. A drawn host in the corner who talks with the narration: the mouth follows the words, it blinks, lifts its brows on long words and nods. Ready-made people of different looks (Alex, Maya, Priya, Sam, Leo, Nora), two cats (Miso, Luna), a dog (Biscuit) and a robot (Bolt), or your own: the new **Presenters** card in the app builds one from parts (skin, hair, eyes, beard, glasses, lashes, colours; fur and pattern for animals) with a talking preview, and can suggest the parts from a photo (a local vision model by default, so the photo stays on the PC; Gemini only if you choose it, which sends the photo to Google). `--case avatar=NAME`; saved ones live in `presenters/` in the workspace. The scenes and the cover keep out of the card in both shapes.
 
 ## 0.9.2 (2026-11-21)

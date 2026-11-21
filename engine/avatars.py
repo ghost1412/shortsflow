@@ -9,7 +9,7 @@ import json
 import os
 import re
 
-KINDS = ("human", "cat", "dog", "robot")
+KINDS = ("human", "cat", "dog", "robot", "photo")       # photo: a real face that talks (engine/talking_head.py, optional add-on)
 HAIR = ("short", "side", "long", "bob", "bun", "curly", "ponytail", "bald")
 BEARD = ("none", "stubble", "full", "moustache")
 GLASSES = ("none", "round", "square")
@@ -58,6 +58,11 @@ def clean(spec):
         if isinstance(spec.get(key), str) and re.fullmatch(r"#[0-9a-fA-F]{6}", spec[key]):
             out[key] = spec[key].lower()
     out["lashes"] = bool(spec.get("lashes", False))
+    if out["kind"] == "photo":
+        photo = str(spec.get("photo") or "")
+        if not re.fullmatch(r"[a-z0-9_-]{1,30}\.(jpg|png)", photo):
+            raise ValueError("A photo presenter needs its photo saved with it (save it from the Presenters card).")
+        out["photo"] = photo
     out["name"] = re.sub(r"[^\w .'-]", "", str(spec.get("name") or ""))[:20].strip()
     return out
 
@@ -220,7 +225,36 @@ def render_preview(spec, out_path, accent="#00e5a8", remotion_dir=None, run=None
     return out_path
 
 
-KIND_LABELS = {"human": "person", "cat": "cat", "dog": "dog", "robot": "robot"}
+KIND_LABELS = {"human": "person", "cat": "cat", "dog": "dog", "robot": "robot", "photo": "real photo"}
+
+
+def save_photo(home, name, photo_path):
+    """Save a realistic presenter: the photo (resized, EXIF turned upright) as presenters/<name>.jpg and its JSON. Returns (slug, path)."""
+    from PIL import Image, ImageOps
+    key = slug(name)
+    if not key:
+        raise ValueError("Give the presenter a name (letters and numbers).")
+    if key in PRESETS:
+        raise ValueError(f"'{key}' is a ready-made presenter: pick another name.")
+    if not photo_path or not os.path.isfile(photo_path):
+        raise ValueError("Choose a photo first.")
+    os.makedirs(folder(home), exist_ok=True)
+    with Image.open(photo_path) as im:
+        im = ImageOps.exif_transpose(im).convert("RGB")
+        im.thumbnail((1024, 1024))
+        im.save(os.path.join(folder(home), key + ".jpg"), "JPEG", quality=92)
+    path = os.path.join(folder(home), key + ".json")
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(clean({"kind": "photo", "name": name, "photo": key + ".jpg"}), f, indent=1)
+    return key, path
+
+
+def photo_path(spec, home):
+    """The full path of a photo presenter's picture, or None."""
+    if spec and spec.get("kind") == "photo" and home:
+        path = os.path.join(folder(home), spec["photo"])
+        return path if os.path.isfile(path) else None
+    return None
 
 
 def choices(home=None):

@@ -3,12 +3,12 @@
 // brows on long words, nods while talking and sways when quiet. `presenterRect` is the ONE place that says where the card sits, so the scenes
 // and the cover can keep out of it (they read it through `usePresenterRoom`).
 import React, { createContext, useContext, useMemo } from "react";
-import { AbsoluteFill, interpolate, random, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Img, OffthreadVideo, interpolate, random, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { z } from "zod";
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 export const avatarSchema = z.object({
-  kind: z.enum(["human", "cat", "dog", "robot"]).default("human"),
+  kind: z.enum(["human", "cat", "dog", "robot", "photo"]).default("human"),
   name: z.string().default(""),                     // shown on the card's tag; empty shows no tag
   skin: hex.default("#f1c3a0"),                     // skin, fur or the robot's body
   hair: z.enum(["short", "side", "long", "bob", "bun", "curly", "ponytail", "bald"]).default("short"),
@@ -21,6 +21,9 @@ export const avatarSchema = z.object({
   outfit: hex.default("#ff8a3d"),
   pattern: z.enum(["plain", "tabby", "patch"]).default("plain"),   // animals: stripes or an eye patch
   furLight: hex.default("#fff4e8"),                 // animals: muzzle, chest and inner ears
+  photo: z.string().optional(),                     // photo kind: the saved picture's file name (the pipeline turns it into image or video)
+  image: z.string().optional(),                     // photo kind: the still picture (a draft, or when the talking video could not be made)
+  video: z.string().optional(),                     // photo kind: the face talking with the narration, on the video's clock (engine/talking_head.py)
 });
 export type Avatar = z.infer<typeof avatarSchema>;
 type Word = { word: string; start: number; end: number };
@@ -274,12 +277,16 @@ export const Presenter: React.FC<{ avatar: Avatar; words: Word[]; rect: Presente
   const enterK = interpolate(frame, [0, 14], [0, 1], { extrapolateRight: "clamp" });
   const outfit = a.kind === "robot" ? shade(a.skin, -0.2) : a.kind === "human" ? a.outfit : a.skin;
   const s = rect.width / 330;
+  const media = (url: string) => (/^(https?:|data:)/.test(url) ? url : staticFile(url));
+  if (a.kind === "photo" && !a.image && !a.video) return null;
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
       <div style={{ position: "absolute", left: rect.left, top: rect.top, width: rect.width, height: rect.height, borderRadius: 28 * s, overflow: "hidden",
                     background: `linear-gradient(180deg, ${accent}2e 0%, ${card} 70%)`, border: `1px solid ${line}`, boxShadow: `0 ${18 * s}px ${50 * s}px rgba(0,0,0,0.35)`,
                     opacity: enterK, transform: `translateY(${(1 - enterK) * 30 * s}px)` }}>
-        <svg width={rect.width} height={rect.height * 0.97} viewBox="0 0 300 354" style={{ position: "absolute", left: 0, bottom: 0 }}>
+        {a.kind === "photo" && a.video && <OffthreadVideo src={media(a.video)} muted style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+        {a.kind === "photo" && !a.video && a.image && <Img src={media(a.image)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+        {a.kind !== "photo" && <svg width={rect.width} height={rect.height * 0.97} viewBox="0 0 300 354" style={{ position: "absolute", left: 0, bottom: 0 }}>
           <g transform={`translate(0 ${Math.sin(t * 1.1) * 1.4})`}>
             <path d="M40 354 C48 290 96 262 150 262 C204 262 252 290 260 354 Z" fill={outfit} />
             {a.kind === "human" && <path d="M122 262 L150 300 L178 262 Z" fill="#fff" opacity={0.9} />}
@@ -293,7 +300,7 @@ export const Presenter: React.FC<{ avatar: Avatar; words: Word[]; rect: Presente
             {a.kind === "dog" && <Dog a={a} m={m} blink={blink} look={look} lift={lift} twitch={twitch} id={id} />}
             {a.kind === "robot" && <Robot a={a} m={m} blink={blink} look={look} t={t} accent={accent} />}
           </g>
-        </svg>
+        </svg>}
         {a.name && <div style={{ position: "absolute", left: 16 * s, bottom: 14 * s, fontFamily: font, fontSize: 15 * s, fontWeight: 800, letterSpacing: 1.2 * s,
                                  background: accent, color: "#111", padding: `${5 * s}px ${11 * s}px`, borderRadius: 8 * s, textTransform: "uppercase" }}>{a.name}</div>}
       </div>

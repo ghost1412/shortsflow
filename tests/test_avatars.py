@@ -15,7 +15,7 @@ def test_every_ready_made_presenter_is_clean_and_there_are_people_cats_a_dog_and
         cleaned = av.clean(spec)
         assert cleaned["name"] and av.load(name) == cleaned
         kinds.add(cleaned["kind"])
-    assert kinds == set(av.KINDS)
+    assert kinds == set(av.KINDS) - {"photo"}                                                    # photo ones are only made from your own picture
     people = [av.clean(s) for s in av.PRESETS.values() if s["kind"] == "human"]
     assert any(p["lashes"] for p in people) and any(p["beard"] != "none" for p in people)      # looks of more than one gender
     assert len({p["skin"] for p in people}) >= 4                                                # and a range of skin tones
