@@ -537,6 +537,27 @@ const Chart: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
 // coloured like the chosen look, and revealed step by step: nodes in order of the drawing, each arrow with the node it points to. The step being
 // spoken glows, the earlier ones settle back. A diagram type without nodes is simply shown whole. If Mermaid cannot draw it, `fallback` is shown.
 const MAX_GROW = 1.7;
+const SEQ_WINDOW = 3;         // a sequence diagram shows the participants and this many messages at a time
+// the messages of a sequence diagram in order, each its text followed by its line(s)
+const seqSteps = (el: SVGSVGElement) => {
+  const parts = Array.from(el.querySelectorAll<SVGElement>("text.messageText, line.messageLine0, line.messageLine1, path.messageLine0, path.messageLine1"));
+  const steps: SVGElement[][] = [];
+  // a wrapped message is several text elements in a row: a new message starts at a text that follows a line (or at the very first element)
+  parts.forEach((q) => {
+    const last = steps.length ? steps[steps.length - 1][steps[steps.length - 1].length - 1] : null;
+    if (!last || (q.matches("text.messageText") && !last.matches("text.messageText"))) steps.push([q]); else steps[steps.length - 1].push(q);
+  });
+  return steps;
+};
+const seqShown = (i: number, n: number, frame: number, start: number, end: number) => {
+  const at = start + ((end - start) * i) / Math.max(1, n - 1);
+  return interpolate(frame, [at, at + 10], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+};
+const seqNow = (n: number, frame: number, start: number, end: number) => {
+  let now = -1;
+  for (let i = 0; i < n; i++) if (seqShown(i, n, frame, start, end) > 0.5) now = i;
+  return now;
+};
 const CAMERA_WINDOW = 4;      // a chain longer than this is shown this many steps at a time, the view following the story
 const MermaidDiagram: React.FC<{ code: string; p: Pal; accent: string; frames: number; fallback: React.ReactNode }> = ({ code, p, accent, frames, fallback }) => {
   const frame = useCurrentFrame();
@@ -554,7 +575,7 @@ const MermaidDiagram: React.FC<{ code: string; p: Pal; accent: string; frames: n
         mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", fontFamily: p.font,
           // the type is as big as the whole drawing can be scaled: a tall frame wants wide boxes with one line of text (a short chain), a wide frame narrow boxes with wrapped text (a short row)
           flowchart: { useMaxWidth: false, htmlLabels: true, curve: "basis", padding: 24, nodeSpacing: portrait ? 60 : 52, rankSpacing: portrait ? 64 : 54, wrappingWidth: portrait ? 560 : 170 },
-          sequence: { useMaxWidth: false, mirrorActors: false, actorMargin: 100, messageMargin: 26, width: 300, height: 54, boxMargin: 8, noteMargin: 12, actorFontSize: 40, messageFontSize: 40, noteFontSize: 40 },
+          sequence: { useMaxWidth: false, mirrorActors: false, wrap: portrait, actorMargin: portrait ? 70 : 160, messageMargin: 8, width: portrait ? 230 : 300, height: 54, boxMargin: 6, noteMargin: 8, actorFontSize: 40, messageFontSize: 40, noteFontSize: 40 },   // tight rows: the panel is wider than tall, so the height decides how big the type can be
           fontSize: 30,
           themeVariables: { fontFamily: p.font, fontSize: "30px" } });
         const out = await mermaid.render("sf-mmd-" + Math.random().toString(36).slice(2, 9), code);
@@ -616,6 +637,36 @@ const MermaidDiagram: React.FC<{ code: string; p: Pal; accent: string; frames: n
       el.setAttribute("preserveAspectRatio", "xMidYMid meet");
       el.style.width = `${box.clientWidth}px`;
       el.style.height = `${box.clientHeight}px`;
+    } else if (isSequence) {
+      // A sequence diagram: the participants and the last SEQ_WINDOW messages fill the panel, the view sliding down as each new message is told
+      // (the participant names travel along so they stay in sight). Mermaid draws the participant lines on far below the last message; the view
+      // never shows that empty tail.
+      const msgs = seqSteps(el);
+      const box3 = (qs: SVGElement[]) => { const bs = qs.map((q) => (q as SVGGraphicsElement).getBBox()); return { y0: Math.min(...bs.map((b) => b.y)), y1: Math.max(...bs.map((b) => b.y + b.height)), x0: Math.min(...bs.map((b) => b.x)), x1: Math.max(...bs.map((b) => b.x + b.width)) }; };
+      const actors = Array.from(el.querySelectorAll<SVGGraphicsElement>("rect.actor, text.actor"));
+      const all = Array.from(el.querySelectorAll<SVGGraphicsElement>("rect.actor, text.actor, text.messageText, line.messageLine0, line.messageLine1, path.messageLine0, path.messageLine1, rect.note, text.noteText"));
+      if (msgs.length && actors.length && all.length) {
+        const A = box3(actors), X = box3(all);
+        const rows = msgs.map(box3);
+        const now = Math.max(0, seqNow(msgs.length, frame, start, end));
+        const win = (c: number) => { const lo = Math.max(0, Math.min(c, msgs.length - 1) - SEQ_WINDOW + 1); return { lo, y0: rows[lo].y0, y1: rows[Math.min(c, msgs.length - 1)].y1 }; };
+        const t = now === 0 ? 1 : seqShown(now, msgs.length, frame, start, end);
+        const from = win(Math.max(SEQ_WINDOW - 1, now - 1)), to = win(Math.max(SEQ_WINDOW - 1, now));
+        const y0w = from.y0 + (to.y0 - from.y0) * t, y1w = from.y1 + (to.y1 - from.y1) * t;
+        const gap = 16, ah = A.y1 - A.y0;
+        const lift = Math.max(0, y0w - gap - A.y1);           // how far the participant names move down to sit just above the window
+        actors.forEach((q) => q.setAttribute("transform", `translate(0 ${lift})`));
+        const pad = 30;
+        const vx = X.x0 - pad, vy = A.y0 + lift - pad, vw = X.x1 - X.x0 + 2 * pad, vh = y1w - (A.y0 + lift) + 2 * pad;
+        el.setAttribute("viewBox", `${vx} ${vy} ${vw} ${vh}`);
+        const k = Math.min(box.clientWidth / vw, box.clientHeight / vh, 3);
+        el.style.width = `${vw * k}px`;
+        el.style.height = `${vh * k}px`;
+        el.style.overflow = "hidden";
+        // a message that has scrolled above the window fades out (it would sit under the travelling names)
+        msgs.forEach((group, i) => group.forEach((q) => { q.dataset.leave = String(i < to.lo ? Math.max(0, 1 - (i < from.lo ? 1 : t)) : 1); }));
+        void ah;
+      }
     } else {
       el.setAttribute("viewBox", `${nx} ${ny} ${nw} ${nh}`);
       const k = Math.min(box.clientWidth / nw, box.clientHeight / nh, isSequence ? 3 : MAX_GROW);
@@ -625,15 +676,10 @@ const MermaidDiagram: React.FC<{ code: string; p: Pal; accent: string; frames: n
 
     // a sequence diagram: the participants stay on screen, the messages appear one at a time (each is its text followed by its line), the one being told brightest
     if (isSequence) {
-      const parts = Array.from(el.querySelectorAll<SVGElement>("text.messageText, line.messageLine0, line.messageLine1, path.messageLine0, path.messageLine1"));
-      const steps: SVGElement[][] = [];
-      parts.forEach((q) => { if (q.matches("text.messageText") || steps.length === 0) steps.push([q]); else steps[steps.length - 1].push(q); });
+      const steps = seqSteps(el);
       if (steps.length > 1) {
-        const stepAt = (i: number) => start + ((end - start) * i) / Math.max(1, steps.length - 1);
-        const stepShown = (i: number) => interpolate(frame, [stepAt(i), stepAt(i) + 10], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-        let now = -1;
-        steps.forEach((_, i) => { if (stepShown(i) > 0.5) now = i; });
-        steps.forEach((group, i) => group.forEach((q) => { q.style.opacity = String(stepShown(i) * (i === now ? 1 : 0.72)); }));
+        const now = seqNow(steps.length, frame, start, end);
+        steps.forEach((group, i) => group.forEach((q) => { q.style.opacity = String(seqShown(i, steps.length, frame, start, end) * (i === now ? 1 : 0.72) * Number(q.dataset.leave ?? 1)); }));
       }
       return;
     }

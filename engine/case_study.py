@@ -331,10 +331,27 @@ def fit_layout(scene, labels, previous=None):
     crowding each other, so the section becomes a checklist (a timeline when the section before is one)."""
     if scene != "counters":
         return scene
-    numbered = [x for x in labels if re.match(r"\s*[$€£]?\d", x)]
-    if len(numbered) >= 2:
+    leads = [re.match(r"\s*([$€£]?)(\d[\d,]*(?:\.\d+)?)\s*(%|[a-zA-Z]+)?", x) for x in labels]
+    figures = [m for m in leads if m and is_figure(m)]
+    counts = [int(m.group(2)) for m in leads if m and re.fullmatch(r"\d+", m.group(2))]
+    enumeration = len(counts) == len(labels) and counts == list(range(1, len(labels) + 1))     # "1 Law", "2 Algorithms": a numbered list, not data
+    if len(figures) >= 2 and not enumeration:
         return scene
     return "timeline" if previous == "checklist" else "checklist"
+
+
+UNITS = {"k", "m", "b", "bn", "x", "ms", "s", "kb", "mb", "gb", "tb", "hz", "mhz", "ghz", "km", "kg", "mph", "million", "billion", "trillion",
+         "thousand", "hundred", "times", "percent", "seconds", "minutes", "hours", "days", "weeks", "months", "years", "users", "people",
+         "devices", "servers", "sites", "websites", "computers", "dollars", "euros", "records", "accounts", "bits", "bytes"}
+
+
+def is_figure(m):
+    """Whether a label's leading number (a match of fit_layout's pattern) is a real figure: money, a percentage, a decimal or thousands separator,
+    a value of 10 or more, or a number with a unit. A bare small number ("2 Algorithms") is a count of things, not a figure."""
+    sign, num, unit = m.group(1), m.group(2), (m.group(3) or "").lower()
+    if sign or unit == "%" or "." in num or "," in num or unit in UNITS:
+        return True
+    return int(num.replace(",", "")) >= 10
 
 
 def _undouble(text):

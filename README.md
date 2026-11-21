@@ -105,7 +105,7 @@ python main.py --source_video "https://www.youtube.com/watch?v=VIDEO_ID" --extra
   <img src="demos/presenters.png" width="720" alt="Ten ready-made presenters: six people of different looks, two cats, a dog and a robot" />
 </p>
 
-Give a case explainer a drawn host in the corner who talks with the narration: the mouth follows the words, it blinks, raises its brows and nods. Pick one of the ten above (`--case avatar=maya`), or build your own on the **Presenters** card: any look for a person, or a cat, a dog or a robot, with a talking preview. It can suggest the look from your photo (read on your PC).
+Give a case explainer a drawn host in the corner who talks with the narration: the mouth follows the words, it blinks, raises its brows and nods. Pick one of the ten above (`--case avatar=maya`), or build your own on the **Presenters** card: any look for a person, or a cat, a dog or a robot, with a talking preview. Each one speaks with its own voice (choose from eleven, with a Listen button). It can suggest the look from your photo (read on your PC).
 
 **Optional: your real face.** An add-on (about 5 GB, NVIDIA GPU, installed with one button) makes a photo of you talk with the narration, made on your PC with SadTalker. Only your own face, or someone who agreed.
 

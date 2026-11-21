@@ -18,6 +18,23 @@ COLOURS = ("skin", "hairColor", "eyeColor", "lips", "outfit", "furLight")
 CHOICES = {"kind": KINDS, "hair": HAIR, "beard": BEARD, "glasses": GLASSES, "pattern": PATTERN}
 FOLDER = "presenters"
 
+# The voice each presenter speaks with: an Edge voice (free) by name, with its gender, and the ElevenLabs premade voice of that gender for runs
+# that have ElevenLabs credits. A presenter without a voice of its own gets one that fits its look (see DEFAULT_VOICE).
+VOICES = {
+    "en-US-AndrewMultilingualNeural": ("Andrew (US, warm male)", "male"),
+    "en-US-BrianMultilingualNeural": ("Brian (US, casual male)", "male"),
+    "en-US-ChristopherNeural": ("Christopher (US, deep male)", "male"),
+    "en-GB-RyanNeural": ("Ryan (British male)", "male"),
+    "en-IN-PrabhatNeural": ("Prabhat (Indian male)", "male"),
+    "en-US-AvaMultilingualNeural": ("Ava (US, bright female)", "female"),
+    "en-US-EmmaMultilingualNeural": ("Emma (US, calm female)", "female"),
+    "en-GB-SoniaNeural": ("Sonia (British female)", "female"),
+    "en-IN-NeerjaNeural": ("Neerja (Indian female)", "female"),
+    "en-AU-NatashaNeural": ("Natasha (Australian female)", "female"),
+    "en-US-AnaNeural": ("Ana (US, young and playful)", "female"),
+}
+ELEVENLABS_BY_GENDER = {"male": "onwK4e9ZLuTAKqWW03F9", "female": "21m00Tcm4TlvDq8ikWAM"}     # premade "Daniel" and "Rachel"
+
 DEFAULT = {"kind": "human", "name": "", "skin": "#f1c3a0", "hair": "short", "hairColor": "#2b1d15", "eyeColor": "#3b6fd8", "beard": "none",
            "glasses": "none", "lashes": False, "lips": "#b0505a", "outfit": "#ff8a3d", "pattern": "plain", "furLight": "#fff4e8"}
 
@@ -28,21 +45,21 @@ HAIR_COLOURS = {"black": "#1b1512", "dark brown": "#2b1d15", "brown": "#5a3a24",
 EYE_COLOURS = {"brown": "#5b3a1e", "dark brown": "#3a2412", "blue": "#3b6fd8", "green": "#3f9a52", "grey": "#7b8894", "hazel": "#8a6a2c", "amber": "#d39a2a"}
 
 PRESETS = {
-    "alex": {"kind": "human", "name": "Alex", "hair": "short", "hairColor": "#2b1d15", "skin": "#f1c3a0", "eyeColor": "#3b6fd8", "outfit": "#ff8a3d"},
-    "maya": {"kind": "human", "name": "Maya", "hair": "long", "hairColor": "#3a2418", "skin": "#e9b48e", "eyeColor": "#5b3a1e", "lashes": True,
+    "alex": {"kind": "human", "name": "Alex", "voice": "en-US-AndrewMultilingualNeural", "hair": "short", "hairColor": "#2b1d15", "skin": "#f1c3a0", "eyeColor": "#3b6fd8", "outfit": "#ff8a3d"},
+    "maya": {"kind": "human", "name": "Maya", "voice": "en-US-AvaMultilingualNeural", "hair": "long", "hairColor": "#3a2418", "skin": "#e9b48e", "eyeColor": "#5b3a1e", "lashes": True,
              "lips": "#c0505f", "outfit": "#14b8a6"},
-    "priya": {"kind": "human", "name": "Priya", "hair": "bun", "hairColor": "#1b1512", "skin": "#c68e64", "eyeColor": "#3a2412", "lashes": True,
+    "priya": {"kind": "human", "name": "Priya", "voice": "en-IN-NeerjaNeural", "hair": "bun", "hairColor": "#1b1512", "skin": "#c68e64", "eyeColor": "#3a2412", "lashes": True,
               "glasses": "square", "lips": "#a8404e", "outfit": "#8b5cf6"},
-    "sam": {"kind": "human", "name": "Sam", "hair": "curly", "hairColor": "#1b1512", "skin": "#8d5a3b", "eyeColor": "#3a2412", "beard": "stubble",
+    "sam": {"kind": "human", "name": "Sam", "voice": "en-US-BrianMultilingualNeural", "hair": "curly", "hairColor": "#1b1512", "skin": "#8d5a3b", "eyeColor": "#3a2412", "beard": "stubble",
             "glasses": "round", "lips": "#7a3a3a", "outfit": "#22c55e"},
-    "leo": {"kind": "human", "name": "Leo", "hair": "side", "hairColor": "#d9b26a", "skin": "#f8d9c0", "eyeColor": "#3f9a52", "beard": "full",
+    "leo": {"kind": "human", "name": "Leo", "voice": "en-GB-RyanNeural", "hair": "side", "hairColor": "#d9b26a", "skin": "#f8d9c0", "eyeColor": "#3f9a52", "beard": "full",
             "outfit": "#2563eb"},
-    "nora": {"kind": "human", "name": "Nora", "hair": "bob", "hairColor": "#9a9a9a", "skin": "#f1c3a0", "eyeColor": "#7b8894", "lashes": True,
+    "nora": {"kind": "human", "name": "Nora", "voice": "en-GB-SoniaNeural", "hair": "bob", "hairColor": "#9a9a9a", "skin": "#f1c3a0", "eyeColor": "#7b8894", "lashes": True,
              "glasses": "round", "lips": "#b0505a", "outfit": "#e11d48"},
-    "miso": {"kind": "cat", "name": "Miso", "skin": "#f0a050", "pattern": "tabby", "eyeColor": "#3f9a52", "furLight": "#fff4e8"},
-    "luna": {"kind": "cat", "name": "Luna", "skin": "#7d8696", "pattern": "plain", "eyeColor": "#d39a2a", "furLight": "#e9edf3"},
-    "biscuit": {"kind": "dog", "name": "Biscuit", "skin": "#c98a4a", "pattern": "patch", "eyeColor": "#3a2412", "furLight": "#fbe8cf"},
-    "bolt": {"kind": "robot", "name": "Bolt", "skin": "#c9d2e3", "eyeColor": "#38e1ff"},
+    "miso": {"kind": "cat", "name": "Miso", "voice": "en-US-AnaNeural", "skin": "#f0a050", "pattern": "tabby", "eyeColor": "#3f9a52", "furLight": "#fff4e8"},
+    "luna": {"kind": "cat", "name": "Luna", "voice": "en-US-EmmaMultilingualNeural", "skin": "#7d8696", "pattern": "plain", "eyeColor": "#d39a2a", "furLight": "#e9edf3"},
+    "biscuit": {"kind": "dog", "name": "Biscuit", "voice": "en-US-ChristopherNeural", "skin": "#c98a4a", "pattern": "patch", "eyeColor": "#3a2412", "furLight": "#fbe8cf"},
+    "bolt": {"kind": "robot", "name": "Bolt", "voice": "en-US-BrianMultilingualNeural", "skin": "#c9d2e3", "eyeColor": "#38e1ff"},
 }
 
 
@@ -58,6 +75,8 @@ def clean(spec):
         if isinstance(spec.get(key), str) and re.fullmatch(r"#[0-9a-fA-F]{6}", spec[key]):
             out[key] = spec[key].lower()
     out["lashes"] = bool(spec.get("lashes", False))
+    if spec.get("voice") in VOICES:
+        out["voice"] = spec["voice"]
     if out["kind"] == "photo":
         photo = str(spec.get("photo") or "")
         if not re.fullmatch(r"[a-z0-9_-]{1,30}\.(jpg|png)", photo):
@@ -198,15 +217,16 @@ def suggest_from_photo(path, use="local", base=None, ask=None):
 PREVIEW_WORDS = "Hi there I am your host and I will walk you through it".split()
 
 
-def render_preview(spec, out_path, accent="#00e5a8", remotion_dir=None, run=None):
+def render_preview(spec, out_path, accent="#00e5a8", remotion_dir=None, run=None, words=None, audio=None):
     """A 3-second silent clip of the presenter's card saying a few words (the builder's preview). Returns out_path. Raises RuntimeError on failure."""
     import subprocess
     import uuid
     remotion_dir = remotion_dir or _base("remotion-video")
-    words, t = [], 0.4
-    for w in PREVIEW_WORDS:
-        words.append({"word": w, "start": round(t, 2), "end": round(t + 0.17 + 0.03 * len(w), 2)})
-        t = words[-1]["end"] + 0.04
+    if not words:
+        words, t = [], 0.4
+        for w in PREVIEW_WORDS:
+            words.append({"word": w, "start": round(t, 2), "end": round(t + 0.17 + 0.03 * len(w), 2)})
+            t = words[-1]["end"] + 0.04
     props_name = f"temp_props_presenter_{uuid.uuid4().hex[:8]}.json"
     props_path = os.path.join(remotion_dir, props_name)
     with open(props_path, "w", encoding="utf-8") as f:
@@ -222,13 +242,20 @@ def render_preview(spec, out_path, accent="#00e5a8", remotion_dir=None, run=None
             pass
     if getattr(result, "returncode", 1) != 0:
         raise RuntimeError("The preview could not be drawn: " + (getattr(result, "stderr", "") or "")[-300:])
+    if audio and os.path.isfile(audio) and run is None:          # the presenter's voice under the picture
+        import subprocess
+        tmp = out_path + ".voice.mp4"
+        done = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", out_path, "-i", audio, "-map", "0:v", "-map", "1:a", "-c:v", "copy",
+                               "-c:a", "aac", tmp], capture_output=True)
+        if done.returncode == 0:
+            os.replace(tmp, out_path)
     return out_path
 
 
 KIND_LABELS = {"human": "person", "cat": "cat", "dog": "dog", "robot": "robot", "photo": "real photo"}
 
 
-def save_photo(home, name, photo_path):
+def save_photo(home, name, photo_path, voice=None):
     """Save a realistic presenter: the photo (resized, EXIF turned upright) as presenters/<name>.jpg and its JSON. Returns (slug, path)."""
     from PIL import Image, ImageOps
     key = slug(name)
@@ -245,7 +272,7 @@ def save_photo(home, name, photo_path):
         im.save(os.path.join(folder(home), key + ".jpg"), "JPEG", quality=92)
     path = os.path.join(folder(home), key + ".json")
     with open(path, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(clean({"kind": "photo", "name": name, "photo": key + ".jpg"}), f, indent=1)
+        json.dump(clean({"kind": "photo", "name": name, "photo": key + ".jpg", "voice": voice}), f, indent=1)
     return key, path
 
 
@@ -326,3 +353,55 @@ def thumbnail(name, home=None):
         except RuntimeError:
             return None
     return path
+
+
+def voice_for(spec):
+    """(edge voice, elevenlabs voice id) for a presenter: its own voice, else one that fits its look (eyelashes read as a female look)."""
+    if not spec:
+        return None, None
+    name = spec.get("voice")
+    if name not in VOICES:
+        name = "en-US-AvaMultilingualNeural" if spec.get("lashes") else "en-US-AndrewMultilingualNeural"
+    return name, ELEVENLABS_BY_GENDER[VOICES[name][1]]
+
+
+def voice_choices():
+    """[(label, edge voice name)] for a picker."""
+    return [(label, name) for name, (label, _) in VOICES.items()]
+
+
+SAMPLE_TEXT = "Hi there. I am your host, and in the next few minutes I will walk you through how it works."
+
+
+def voice_sample(voice, folder_path, text=SAMPLE_TEXT):
+    """(mp3 path, [words with start/end]) of a voice saying the sample line, made once per voice and kept in folder_path. The line is sent to
+    Microsoft's Edge voice service (no key needed). Raises RuntimeError when it cannot be made."""
+    import asyncio
+    if voice not in VOICES:
+        raise RuntimeError(f"Unknown voice: {voice}")
+    os.makedirs(folder_path, exist_ok=True)
+    mp3 = os.path.join(folder_path, f"voice_{voice}.mp3")
+    meta = mp3 + ".json"
+    if os.path.isfile(mp3) and os.path.isfile(meta):
+        with open(meta, encoding="utf-8") as f:
+            return mp3, json.load(f)
+
+    async def speak():
+        import edge_tts
+        words = []
+        com = edge_tts.Communicate(text, voice, boundary="WordBoundary")
+        with open(mp3, "wb") as f:
+            async for chunk in com.stream():
+                if chunk["type"] == "audio":
+                    f.write(chunk["data"])
+                elif chunk["type"] == "WordBoundary":
+                    start = chunk["offset"] / 1e7
+                    words.append({"word": chunk["text"], "start": round(start, 3), "end": round(start + chunk["duration"] / 1e7, 3)})
+        return words
+    try:
+        words = asyncio.run(speak())
+    except Exception as e:
+        raise RuntimeError(f"The voice sample could not be made (needs the internet): {str(e)[:120]}")
+    with open(meta, "w", encoding="utf-8") as f:
+        json.dump(words, f)
+    return mp3, words

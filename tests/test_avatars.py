@@ -130,3 +130,52 @@ def _jpg(tmp_path):
     p = tmp_path / "face.jpg"
     Image.new("RGB", (400, 500), "#c68e64").save(p)
     return str(p)
+
+
+def test_every_presenter_speaks_with_a_voice_that_fits_it():
+    for name, spec in av.PRESETS.items():
+        edge, eleven = av.voice_for(av.load(name))
+        assert edge in av.VOICES and eleven in av.ELEVENLABS_BY_GENDER.values(), name
+    assert av.VOICES[av.voice_for(av.load("alex"))[0]][1] == "male" and av.VOICES[av.voice_for(av.load("maya"))[0]][1] == "female"
+    assert av.voice_for(av.load("maya"))[1] == av.ELEVENLABS_BY_GENDER["female"]
+    assert av.VOICES[av.voice_for(av.clean({"lashes": True}))[0]][1] == "female"           # no voice of its own: one that fits its look
+    assert av.VOICES[av.voice_for(av.clean({}))[0]][1] == "male"
+    assert "voice" not in av.clean({"voice": "evil-voice"})
+    assert av.voice_for(None) == (None, None)
+
+
+def test_the_presenter_voice_is_used_when_elevenlabs_is_not(tmp_path):
+    from engine import case_render
+    script = {"sections": [{"title": "A", "narration": "One."}, {"title": "B", "narration": "Two."}]}
+    seen = []
+
+    def gen(text, **kw):
+        seen.append(kw.get("voice_name"))
+        open(kw["output_audio"], "wb").write(b"x")
+        open(kw["output_subs"], "w").write("[]")
+        return kw["output_audio"], kw["output_subs"]
+    case_render.speak_sections(script, str(tmp_path), provider=None, edge_voice="en-GB-RyanNeural", generate=gen)
+    assert seen == ["en-GB-RyanNeural", "en-GB-RyanNeural"]
+    seen.clear()
+    case_render.speak_sections(script, str(tmp_path), provider="edgetts", voice="en-US-AnaNeural", edge_voice="en-GB-RyanNeural", generate=gen)
+    assert seen == ["en-US-AnaNeural", "en-US-AnaNeural"]            # a voice the person chose wins
+
+
+def test_voice_samples_are_made_once_and_kept(tmp_path, monkeypatch):
+    import sys
+    import types
+    calls = []
+
+    class Com:
+        def __init__(self, text, voice, boundary=None):
+            calls.append(voice)
+
+        async def stream(self):
+            yield {"type": "audio", "data": b"mp3"}
+            yield {"type": "WordBoundary", "offset": 5_000_000, "duration": 2_000_000, "text": "Hi"}
+    monkeypatch.setitem(sys.modules, "edge_tts", types.SimpleNamespace(Communicate=Com))
+    mp3, words = av.voice_sample("en-GB-RyanNeural", str(tmp_path))
+    assert open(mp3, "rb").read() == b"mp3" and words == [{"word": "Hi", "start": 0.5, "end": 0.7}]
+    assert av.voice_sample("en-GB-RyanNeural", str(tmp_path))[1] == words and calls == ["en-GB-RyanNeural"]     # kept, not made again
+    with pytest.raises(RuntimeError, match="Unknown voice"):
+        av.voice_sample("nope", str(tmp_path))

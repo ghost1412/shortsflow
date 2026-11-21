@@ -330,8 +330,10 @@ def speak_elevenlabs(text, audio, subs, voice_id=None, model=None, previous_text
     return audio, subs
 
 
-def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=None, generate=None):
-    """Speak every section. Returns ([audio paths], [word lists]). `generate` replaces engine.voice_gen.generate_voice (tests)."""
+def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=None, generate=None, edge_voice=None):
+    """Speak every section. Returns ([audio paths], [word lists]). `voice` is the ElevenLabs voice id (or the voice of another provider);
+    `edge_voice` is the Edge voice used when ElevenLabs is not used or fails (a presenter's own voice). `generate` replaces
+    engine.voice_gen.generate_voice (tests)."""
     generate_is_default = generate is None
     if generate is None:
         from engine.voice_gen import generate_voice as generate
@@ -360,6 +362,8 @@ def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=N
                 kwargs["provider"] = "edgetts"
             if voice and provider != "elevenlabs":
                 kwargs["voice_name"] = voice
+            elif edge_voice and (provider in (None, "edgetts") or (fallback and eleven_failed)):
+                kwargs["voice_name"] = edge_voice
             if clone_voice:
                 kwargs["clone_voice"] = clone_voice
             result_audio, result_subs = generate(sec["narration"], **kwargs)

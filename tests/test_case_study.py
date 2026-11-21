@@ -223,7 +223,7 @@ def test_recipe_template_and_counter_cap():
     from engine import case_study as cs
     t = cs.load_template("recipe")
     assert [s["scene"] for s in t] == ["quote", "flow", "counters", "checklist"]
-    rows = [{"id": s["id"], "narration": "A sentence about it.", "on_screen": ["1 a", "2 b", "3 c", "4 d", "5 e", "6 f"], "scene": s["scene"]} for s in t]
+    rows = [{"id": s["id"], "narration": "A sentence about it.", "on_screen": ["10 a", "20 b", "30 c", "40 d", "50 e", "60 f"], "scene": s["scene"]} for s in t]
     script = cs.write_script("T", t, [], lambda p: json.dumps({"title": "T", "sections": rows}))
     counters = [s for s in script["sections"] if s["scene"] == "counters"]
     assert counters and all(len(s["on_screen"]) <= cs.MAX_COUNTERS for s in counters)
@@ -251,3 +251,13 @@ def test_the_hook_is_editable_in_the_review_text():
     assert "HOOK: Old hook" in text
     assert cs.script_from_text(text.replace("HOOK: Old hook", "HOOK: A better, sharper hook"), base)["hook"] == "A better, sharper hook"
     assert cs.script_from_text(text.replace("HOOK: Old hook\n", ""), base)["hook"] == "Old hook"          # a deleted line keeps the saved hook
+
+
+def test_number_cards_need_real_figures_not_counts_or_a_numbered_list():
+    from engine.case_study import fit_layout
+    assert fit_layout("counters", ["1 Law: Uruguay Law 18600", "2 Algorithms: RSA and ElGamal"]) == "checklist"      # a numbered list
+    assert fit_layout("counters", ["3 vulnerabilities fixed", "2 patches released"]) == "checklist"                    # small counts
+    assert fit_layout("counters", ["66% of sites affected", "17 million servers", "2.3x faster"]) == "counters"
+    assert fit_layout("counters", ["$4.5 million cost", "500,000 records"]) == "counters"
+    assert fit_layout("counters", ["4 million users", "2 billion devices"]) == "counters"                              # small numbers with a unit
+    assert fit_layout("counters", ["1 Law", "2 Rules"], previous="checklist") == "timeline"

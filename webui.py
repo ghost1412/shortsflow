@@ -1441,18 +1441,19 @@ def case_video_ui(*a):
     yield from case_video(*a[:11], avatar=a[11])
 
 
-def presenter_spec(kind_label, name, skin, hair, hair_color, eye_color, beard, glasses, lashes, lips, outfit, pattern, fur_light):
+def presenter_spec(kind_label, name, skin, hair, hair_color, eye_color, beard, glasses, lashes, lips, outfit, pattern, fur_light, voice=None):
     from engine import avatars
     return avatars.clean({"kind": PRESENTER_KINDS.get(kind_label, "human"), "name": name, "skin": skin, "hair": hair, "hairColor": hair_color,
                           "eyeColor": eye_color, "beard": beard, "glasses": glasses, "lashes": bool(lashes), "lips": lips, "outfit": outfit,
-                          "pattern": pattern, "furLight": fur_light})
+                          "pattern": pattern, "furLight": fur_light, "voice": voice})
 
 
 def presenter_fields(spec):
     """The builder's field values for a spec (the order of PRESENTER_FIELDS)."""
     kind = next((k for k, v in PRESENTER_KINDS.items() if v == spec["kind"]), "Person")
+    from engine import avatars
     return [kind, spec["name"], spec["skin"], spec["hair"], spec["hairColor"], spec["eyeColor"], spec["beard"], spec["glasses"], spec["lashes"],
-            spec["lips"], spec["outfit"], spec["pattern"], spec["furLight"]]
+            spec["lips"], spec["outfit"], spec["pattern"], spec["furLight"], avatars.voice_for(spec)[0]]
 
 
 def presenter_start_from(name):
@@ -1471,14 +1472,35 @@ def presenter_kind_view(kind_label):
 
 
 def presenter_preview(*fields):
+    """The presenter saying a line in its own voice (the line goes to the Edge voice service; without the internet the preview is silent)."""
     from engine import avatars
     import time
-    out = os.path.join(ROOT, "sessions", "presenter_previews", time.strftime("preview_%H%M%S.mp4"))
-    os.makedirs(os.path.dirname(out), exist_ok=True)
+    folder = os.path.join(ROOT, "sessions", "presenter_previews")
+    out = os.path.join(folder, time.strftime("preview_%H%M%S.mp4"))
+    os.makedirs(folder, exist_ok=True)
+    spec = presenter_spec(*fields)
+    audio = words = None
+    note = ""
     try:
-        return avatars.render_preview(presenter_spec(*fields), out), "Drawn. Change anything and press Preview again."
+        audio, words = avatars.voice_sample(avatars.voice_for(spec)[0], folder)
+    except RuntimeError as e:
+        note = f" ({e}; the preview is silent.)"
+    try:
+        return avatars.render_preview(spec, out, words=words, audio=audio), "Drawn, in its voice. Change anything and press Preview again." + note
     except RuntimeError as e:
         return None, str(e)
+
+
+def presenter_voice_sample(name):
+    """The voice of the chosen presenter, for the picker on the Case card (None for off)."""
+    from engine import avatars
+    try:
+        spec = avatars.load(name, ROOT)
+        if not spec:
+            return None
+        return avatars.voice_sample(avatars.voice_for(spec)[0], os.path.join(ROOT, "sessions", "presenter_previews"))[0]
+    except (ValueError, RuntimeError):
+        return None
 
 
 def presenter_save(save_name, *fields):
@@ -1554,12 +1576,12 @@ def real_presenter_preview(photo, consent):
     return out, "Made on this PC. Save it below to use it in a case explainer."
 
 
-def real_presenter_save(name, photo, consent):
+def real_presenter_save(name, photo, consent, voice=None):
     from engine import avatars
     if not consent:
         return "Tick the box first: only use your own face, or the face of someone who agreed.", gr.update(), gr.update()
     try:
-        key, _ = avatars.save_photo(ROOT, name, photo)
+        key, _ = avatars.save_photo(ROOT, name, photo, voice=voice)
     except ValueError as e:
         return str(e), gr.update(), gr.update()
     picks = avatars.choices(ROOT)
@@ -2328,7 +2350,9 @@ def build_ui():
                                                    info="A drawn host (a person, a cat, a dog or a robot) in the corner who talks with the narration. Make your own on the Presenters card.")
                             c_avatar_pic = gr.Image(None, label="Chosen presenter", height=170, width=145, interactive=False, show_label=False,
                                                     visible=False, scale=1)
+                        c_avatar_voice = gr.Audio(None, label="Its voice", interactive=False, visible=False)
                         c_avatar.change(lambda n: gr.update(value=_avatars.thumbnail(n, ROOT), visible=bool(_avatars.thumbnail(n, ROOT))), [c_avatar], c_avatar_pic)
+                        c_avatar.change(lambda n: (lambda a: gr.update(value=a, visible=bool(a)))(presenter_voice_sample(n)), [c_avatar], c_avatar_voice)
                         c_formats = gr.CheckboxGroup(["16:9", "9:16"], value=["16:9", "9:16"], label="Shapes",
                                                      info="16:9 for YouTube and LinkedIn, 9:16 for Reels and Shorts. Each shape takes its own render time.")
                         c_bg = gr.Dropdown(list(web_args.CASE_BACKGROUNDS), value="Stock video", label="Behind the scenes",
@@ -2438,6 +2462,11 @@ def build_ui():
                         with gr.Row():
                             pr_pattern = gr.Dropdown(list(_av.PATTERN), value="plain", label="Pattern")
                             pr_fur_light = gr.ColorPicker("#fff4e8", label="Muzzle and chest")
+                    with gr.Row(equal_height=False):
+                        pr_voice = gr.Dropdown(_av.voice_choices(), value="en-US-AndrewMultilingualNeural", label="Voice", scale=3,
+                                               info="The narration of a video with this presenter uses this voice (the free Edge voice; with ElevenLabs credits, its voice of the same kind).")
+                        pr_voice_play = gr.Audio(None, label="Listen", interactive=False, scale=2)
+                    pr_voice.change(lambda v: _av.voice_sample(v, os.path.join(ROOT, "sessions", "presenter_previews"))[0] if v else None, [pr_voice], pr_voice_play)
                     with gr.Accordion("Make it look like someone (from a photo)", open=False):
                         gr.Markdown("A vision model reads the photo and fills in skin tone, hair, eyes, beard and glasses; you can change anything after. "
                                     "**Only use your own face, or the face of someone who agreed.** With *this PC* the photo stays here (needs a local "
@@ -2448,7 +2477,7 @@ def build_ui():
                         pr_suggest = gr.Button("Suggest from the photo")
                 with gr.Column(scale=2):
                     pr_pic = gr.Image(_av.thumbnail("alex", ROOT), label="Starting from", height=200, interactive=False)
-                    pr_video = gr.Video(label="Preview (no sound)", interactive=False, height=400, autoplay=True, loop=True)
+                    pr_video = gr.Video(label="Preview (in its voice)", interactive=False, height=400, autoplay=True)
                     pr_preview = gr.Button("Preview", variant="primary")
                     with gr.Row():
                         pr_save_name = gr.Textbox(label="Save as", placeholder="my_host", scale=2)
@@ -2467,6 +2496,7 @@ def build_ui():
                     with gr.Column():
                         rp_photo = gr.Image(type="filepath", label="A clear, front-facing photo (face and shoulders)", height=260)
                         rp_consent = gr.Checkbox(False, label="This is my face, or the person agreed to it")
+                        rp_voice = gr.Dropdown(_av.voice_choices(), value="en-US-AndrewMultilingualNeural", label="Voice")
                         with gr.Row():
                             rp_name = gr.Textbox(label="Save as", placeholder="me", scale=2)
                             rp_save = gr.Button("Save", scale=1)
@@ -2474,7 +2504,7 @@ def build_ui():
                         rp_video = gr.Video(label="Preview", interactive=False, height=300)
                         rp_preview = gr.Button("Preview (the photo says one sentence)")
                 rp_msg = gr.Markdown("")
-            pr_fields = [pr_kind, pr_name, pr_skin, pr_hair, pr_hair_color, pr_eyes, pr_beard, pr_glasses, pr_lashes, pr_lips, pr_outfit, pr_pattern, pr_fur_light]
+            pr_fields = [pr_kind, pr_name, pr_skin, pr_hair, pr_hair_color, pr_eyes, pr_beard, pr_glasses, pr_lashes, pr_lips, pr_outfit, pr_pattern, pr_fur_light, pr_voice]
             pr_start.change(presenter_start_from, [pr_start], pr_fields + [pr_person, pr_animal])
             pr_start.change(lambda n: _av.thumbnail(n, ROOT), [pr_start], pr_pic)
             pr_kind.change(presenter_kind_view, [pr_kind], [pr_person, pr_animal])
@@ -2484,7 +2514,7 @@ def build_ui():
             pr_suggest.click(presenter_from_photo, [pr_photo, pr_use, pr_consent] + pr_fields, [pr_msg] + pr_fields)
             rp_install.click(real_presenter_install, None, [rp_log, rp_status])
             rp_preview.click(real_presenter_preview, [rp_photo, rp_consent], [rp_video, rp_msg])
-            rp_save.click(real_presenter_save, [rp_name, rp_photo, rp_consent], [rp_msg, c_avatar, pr_start])
+            rp_save.click(real_presenter_save, [rp_name, rp_photo, rp_consent, rp_voice], [rp_msg, c_avatar, pr_start])
         with gr.Column(visible=False) as mode_col_publish:
             gr.Markdown("### Publish a video\nPick any video you have made (every format of every kind of run), check its title and description, and choose where it goes. "
                         "**The video and its title leave this PC when you publish.** Keys and your YouTube sign-in are in the Settings card.")

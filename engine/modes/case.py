@@ -71,7 +71,7 @@ def _make_script(args, session_dir, opts):
     return script
 
 
-def _narration(args, script, session_dir, resumed):
+def _narration(args, script, session_dir, resumed, avatar=None):
     """([audio], [words]): the saved narration of a resumed session, else newly spoken (ElevenLabs when its key is set)."""
     from engine import case_render as cr
     if resumed:
@@ -85,7 +85,13 @@ def _narration(args, script, session_dir, resumed):
         provider = "elevenlabs"
     elif provider == "auto":
         provider = None
-    return cr.speak_sections(script, session_dir, provider=provider, voice=getattr(args, "voice", None),
+    voice, edge_voice = getattr(args, "voice", None), None
+    if avatar and not voice:                       # the presenter's own voice, so a man is not voiced by a woman (or the other way round)
+        from engine import avatars
+        edge_voice, eleven = avatars.voice_for(avatar)
+        voice = eleven if provider == "elevenlabs" else edge_voice
+        print(f"[Log] Voice: {avatars.VOICES[edge_voice][0]} (the presenter's voice).")
+    return cr.speak_sections(script, session_dir, provider=provider, voice=voice, edge_voice=edge_voice,
                              clone_voice=os.getenv("VOICE_CLONE_SAMPLE") or None)
 
 
@@ -148,7 +154,9 @@ def run(args, target_bitrate=None, target_preset=None):
                   f"Edit it if you like, then: --mode CASE --case resume={session_dir}")
             sys.exit(0)
 
-    audios, words = _narration(args, script, session_dir, bool(resume))
+    from engine import avatars
+    avatar = avatars.load(opts["avatar"], os.getcwd())
+    audios, words = _narration(args, script, session_dir, bool(resume), avatar)
     timing = cr.plan_timing([cr._duration(a) for a in audios])
 
     music = getattr(args, "music", None)
@@ -158,8 +166,6 @@ def run(args, target_bitrate=None, target_preset=None):
     want_manim = bool(opts["manim"])
     choice = opts["background"]
     theme = opts["theme"]
-    from engine import avatars
-    avatar = avatars.load(opts["avatar"], os.getcwd())
 
     from engine.case_llm import make_ask
     ask_code = make_ask("You write Manim Community Edition code.", opts["llm"])
