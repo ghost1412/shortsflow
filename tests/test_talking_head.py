@@ -69,3 +69,30 @@ def test_the_case_run_falls_back_to_the_still_photo(tmp_path, monkeypatch):
     assert "image" in case._photo_presenter(spec, [], [], str(tmp_path), draft=False)
     os.remove(av.photo_path(spec, str(home)))
     assert case._photo_presenter(spec, [], [], str(tmp_path), draft=False) == {}
+
+
+def test_a_full_render_makes_the_talking_video_from_the_narration(tmp_path, monkeypatch):
+    from engine import case_render
+    from engine.modes import case
+    home = tmp_path / "ws"
+    home.mkdir()
+    monkeypatch.chdir(home)
+    key, _ = av.save_photo(str(home), "Me", _photo(tmp_path))
+    spec = av.load(key, str(home))
+    monkeypatch.setattr(th, "installed", lambda b=None: True)
+    joined = []
+    monkeypatch.setattr(case_render, "join_audio", lambda audios, timing, out, sfx=None: joined.append(out) or out)
+    made = []
+
+    def fake_make(photo, audio, out, **kw):
+        made.append((photo, audio))
+        open(out, "wb").write(b"v")
+        return out
+    monkeypatch.setattr(th, "make", fake_make)
+    got = case._photo_presenter(spec, ["a.mp3"], [(0, 1)], str(tmp_path), draft=False)
+    assert got["video"].endswith("presenter_talking.mp4") and made[0][1] == joined[0] and joined[0].endswith("presenter_voice.mp3")
+    case._photo_presenter(spec, ["a.mp3"], [(0, 1)], str(tmp_path), draft=False)
+    assert len(made) == 1                      # the second shape reuses the video made for the first
+    monkeypatch.setattr(th, "make", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("gpu out of memory")))
+    os.remove(got["video"])
+    assert "image" in case._photo_presenter(spec, ["a.mp3"], [(0, 1)], str(tmp_path), draft=False)

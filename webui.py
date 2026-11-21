@@ -2323,8 +2323,12 @@ def build_ui():
                                                 info="auto: the model picks the best layout for each section (timeline, flow, counters, checklist, compare, chart, quote). template: the sections' own.")
                         c_theme = gr.Dropdown(list(web_args.CASE_THEME_LABELS.values()), value=web_args.CASE_THEME_LABELS["dark"], label="Look")
                         from engine import avatars as _avatars
-                        c_avatar = gr.Dropdown(_avatars.choices(ROOT), value="off", label="Presenter",
-                                               info="A drawn host (a person, a cat, a dog or a robot) in the corner who talks with the narration. Make your own on the Presenters card.")
+                        with gr.Row(equal_height=False):
+                            c_avatar = gr.Dropdown(_avatars.choices(ROOT), value="off", label="Presenter", scale=3,
+                                                   info="A drawn host (a person, a cat, a dog or a robot) in the corner who talks with the narration. Make your own on the Presenters card.")
+                            c_avatar_pic = gr.Image(None, label="Chosen presenter", height=170, width=145, interactive=False, show_label=False,
+                                                    visible=False, scale=1)
+                        c_avatar.change(lambda n: gr.update(value=_avatars.thumbnail(n, ROOT), visible=bool(_avatars.thumbnail(n, ROOT))), [c_avatar], c_avatar_pic)
                         c_formats = gr.CheckboxGroup(["16:9", "9:16"], value=["16:9", "9:16"], label="Shapes",
                                                      info="16:9 for YouTube and LinkedIn, 9:16 for Reels and Shorts. Each shape takes its own render time.")
                         c_bg = gr.Dropdown(list(web_args.CASE_BACKGROUNDS), value="Stock video", label="Behind the scenes",
@@ -2443,6 +2447,7 @@ def build_ui():
                         pr_consent = gr.Checkbox(False, label="This is my face, or the person agreed to it")
                         pr_suggest = gr.Button("Suggest from the photo")
                 with gr.Column(scale=2):
+                    pr_pic = gr.Image(_av.thumbnail("alex", ROOT), label="Starting from", height=200, interactive=False)
                     pr_video = gr.Video(label="Preview (no sound)", interactive=False, height=400, autoplay=True, loop=True)
                     pr_preview = gr.Button("Preview", variant="primary")
                     with gr.Row():
@@ -2471,6 +2476,7 @@ def build_ui():
                 rp_msg = gr.Markdown("")
             pr_fields = [pr_kind, pr_name, pr_skin, pr_hair, pr_hair_color, pr_eyes, pr_beard, pr_glasses, pr_lashes, pr_lips, pr_outfit, pr_pattern, pr_fur_light]
             pr_start.change(presenter_start_from, [pr_start], pr_fields + [pr_person, pr_animal])
+            pr_start.change(lambda n: _av.thumbnail(n, ROOT), [pr_start], pr_pic)
             pr_kind.change(presenter_kind_view, [pr_kind], [pr_person, pr_animal])
             pr_tone.change(lambda t: _av.SKIN_TONES.get(t, gr.update()) if t else gr.update(), [pr_tone], pr_skin)
             pr_preview.click(presenter_preview, pr_fields, [pr_video, pr_msg])

@@ -100,6 +100,7 @@ def _photo_presenter(avatar, audios, timing, session_dir, draft):
     """{image} or {video} for a realistic presenter: the still photo in a draft, the photo talking with the narration in a full render (made once
     per run with the optional talking-head add-on; without it, or if it fails, the still photo is shown and the run goes on)."""
     from engine import avatars, talking_head
+    from engine import case_render as cr
     photo = avatars.photo_path(avatar, os.getcwd())
     if not photo:
         print(f"[Warning] The presenter's photo is missing (presenters/{avatar.get('photo')}); no presenter is shown.")

@@ -202,7 +202,7 @@ def render_preview(spec, out_path, accent="#00e5a8", remotion_dir=None, run=None
     """A 3-second silent clip of the presenter's card saying a few words (the builder's preview). Returns out_path. Raises RuntimeError on failure."""
     import subprocess
     import uuid
-    remotion_dir = remotion_dir or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "remotion-video")
+    remotion_dir = remotion_dir or _base("remotion-video")
     words, t = [], 0.4
     for w in PREVIEW_WORDS:
         words.append({"word": w, "start": round(t, 2), "end": round(t + 0.17 + 0.03 * len(w), 2)})
@@ -267,3 +267,62 @@ def choices(home=None):
             continue
         out.append((f"{spec.get('name') or n} ({KIND_LABELS[spec['kind']]}{', saved' if n not in PRESETS else ''})", n))
     return out
+
+
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+THUMBS = os.path.join(_REPO, "assets", "presenters")    # pictures of the ready-made ones (a pip install keeps them in the workspace)
+
+
+def _base(sub, home=None):
+    """The folder `sub` (remotion-video, assets/presenters) in the workspace when it is there (a pip install), else next to the code."""
+    for root in (home, os.getcwd(), _REPO):
+        if root and os.path.isdir(os.path.join(root, sub)):
+            return os.path.join(root, sub)
+    return os.path.join(_REPO, sub)
+
+
+def render_still(spec, out_path, remotion_dir=None, run=None, frame=14):
+    """One frame of the presenter's card (mid-word, eyes open) as a picture. Returns out_path. Raises RuntimeError on failure."""
+    import subprocess
+    import uuid
+    remotion_dir = remotion_dir or _base("remotion-video")
+    props_name = f"temp_props_presenter_{uuid.uuid4().hex[:8]}.json"
+    props_path = os.path.join(remotion_dir, props_name)
+    with open(props_path, "w", encoding="utf-8") as f:
+        json.dump({"avatar": clean(spec), "words": [{"word": "Hello", "start": 0.2, "end": 0.9}], "accent": "#00e5a8"}, f)
+    cmd = ["npx", "remotion", "still", "PresenterCard", os.path.abspath(out_path), f"--props={props_name}", f"--frame={frame}", "--log=error"]
+    try:
+        result = (run or subprocess.run)(" ".join(f'"{c}"' if " " in c else c for c in cmd) if os.name == "nt" else cmd, shell=os.name == "nt",
+                                         cwd=remotion_dir, capture_output=True, text=True, timeout=300)
+    finally:
+        try:
+            os.remove(props_path)
+        except OSError:
+            pass
+    if getattr(result, "returncode", 1) != 0:
+        raise RuntimeError("The picture could not be drawn: " + (getattr(result, "stderr", "") or "")[-300:])
+    return out_path
+
+
+def thumbnail(name, home=None):
+    """A picture of a presenter for the picker, or None for off: the bundled one for a ready-made presenter, the photo of a photo presenter,
+    and for a home-made drawn one the picture saved next to it (drawn once, then kept)."""
+    try:
+        spec = load(name, home)
+    except ValueError:
+        return None
+    if spec is None:
+        return None
+    key = slug(name)
+    if key in PRESETS and not (home and os.path.isfile(os.path.join(folder(home), key + ".json"))):
+        path = os.path.join(_base(os.path.join("assets", "presenters"), home), key + ".png")
+        return path if os.path.isfile(path) else None
+    if spec["kind"] == "photo":
+        return photo_path(spec, home)
+    path = os.path.join(folder(home), key + ".png")
+    if not os.path.isfile(path):
+        try:
+            render_still(spec, path)
+        except RuntimeError:
+            return None
+    return path

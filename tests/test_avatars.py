@@ -113,3 +113,20 @@ def test_the_preview_command_and_its_failure(tmp_path):
     R.returncode, R.stderr = 1, "boom"
     with pytest.raises(RuntimeError, match="boom"):
         av.render_preview(av.load("luna"), str(tmp_path / "p.mp4"), remotion_dir=str(tmp_path), run=run)
+
+
+def test_pictures_of_presenters(tmp_path):
+    for name in av.PRESETS:
+        assert os.path.isfile(os.path.join(av.THUMBS, name + ".png")), name
+        assert av.thumbnail(name).endswith(name + ".png")
+    assert av.thumbnail("off") is None and av.thumbnail("nobody") is None
+    home = str(tmp_path)
+    key, _ = av.save_photo(home, "Me", _jpg(tmp_path))
+    assert av.thumbnail(key, home).endswith("me.jpg")
+
+
+def _jpg(tmp_path):
+    from PIL import Image
+    p = tmp_path / "face.jpg"
+    Image.new("RGB", (400, 500), "#c68e64").save(p)
+    return str(p)

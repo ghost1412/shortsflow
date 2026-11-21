@@ -68,6 +68,7 @@ packages = ["shortsflow", "engine"]
 "assets/branding" = "shortsflow/_bundle/assets/branding"
 "assets/models" = "shortsflow/_bundle/assets/models"
 "assets/caption_previews" = "shortsflow/_bundle/assets/caption_previews"
+"assets/presenters" = "shortsflow/_bundle/assets/presenters"
 "music" = "shortsflow/_bundle/music"
 "env.example" = "shortsflow/_bundle/env.example"
 "remotion-video/src" = "shortsflow/_bundle/remotion-video/src"
@@ -82,7 +83,7 @@ packages = ["shortsflow", "engine"]
 
 [tool.hatch.build.targets.sdist]
 # Leading slashes anchor each pattern to the repo root (otherwise "engine" also matches node_modules/**/engine).
-include = ["/shortsflow", "/engine", "/assets/avatars", "/assets/branding", "/assets/models", "/assets/caption_previews", "/music", "/env.example",
+include = ["/shortsflow", "/engine", "/assets/avatars", "/assets/branding", "/assets/models", "/assets/caption_previews", "/assets/presenters", "/music", "/env.example",
            "/remotion-video/src", "/remotion-video/public/fonts", "/remotion-video/public/emoji", "/remotion-video/package.json",
            "/remotion-video/package-lock.json", "/remotion-video/tsconfig.json", "/remotion-video/remotion.config.ts", "/remotion-video/scripts", "/webui.py",
            "/README.md", "/LICENSE", "/pyproject.toml"]
