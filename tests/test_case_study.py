@@ -239,9 +239,9 @@ def test_the_prompt_asks_for_a_hook_and_the_script_keeps_a_supported_one():
     good = json.dumps({"title": "T", "hook": "One logging bug put millions of servers at risk", "sections": rows})
     assert cs.write_script("T", t, src, lambda p: good)["hook"] == "One logging bug put millions of servers at risk"
     bad = json.dumps({"title": "T", "hook": "It cost 99 billion dollars", "sections": rows})       # a figure no source holds
-    assert cs.write_script("T", t, src, lambda p: bad)["hook"] == ""
+    assert cs.write_script("T", t, src, lambda p: bad)["hook"] == "A sentence."                     # never the unsupported figure: the narration's first sentence
     assert cs.write_script("T", t, [], lambda p: good)["hook"] != ""                                # no sources: nothing to check against
-    assert cs.write_script("T", t, src, lambda p: json.dumps({"title": "T", "sections": rows}))["hook"] == ""
+    assert cs.write_script("T", t, src, lambda p: json.dumps({"title": "T", "sections": rows}))["hook"] == "A sentence."
 
 
 def test_the_hook_is_editable_in_the_review_text():
@@ -261,3 +261,22 @@ def test_number_cards_need_real_figures_not_counts_or_a_numbered_list():
     assert fit_layout("counters", ["$4.5 million cost", "500,000 records"]) == "counters"
     assert fit_layout("counters", ["4 million users", "2 billion devices"]) == "counters"                              # small numbers with a unit
     assert fit_layout("counters", ["1 Law", "2 Rules"], previous="checklist") == "timeline"
+
+
+def test_the_hook_is_checked_retried_and_falls_back_with_a_reason(capsys):
+    from engine import case_study as cs
+    src = "OpenSSL had a bug in 2014. It leaked memory from 17 percent of servers."
+    secs = [{"narration": "In 2014 a bug in OpenSSL leaked memory. It hit many servers."}]
+    assert cs.check_hook("A bug in OpenSSL leaked memory in 2014.", src)[0]
+    assert "2019" in cs.check_hook("In 2019 everything broke.", src)[1]
+    assert "words" in cs.check_hook(" ".join(["word"] * 20), src)[1]
+    assert cs.make_hook("A 2014 OpenSSL bug leaked memory.", secs, src, lambda p: "x") == "A 2014 OpenSSL bug leaked memory."
+    asked = []
+    hook = cs.make_hook("In 2019 it broke", secs, src, lambda p: asked.append(p) or "17 percent of servers leaked memory.")
+    assert hook == "17 percent of servers leaked memory." and "2019" in capsys.readouterr().out and "OpenSSL" in asked[0]
+    hook = cs.make_hook("", secs, src, lambda p: "In 2021 it broke")                 # the retry is unsupported too: the first sentence
+    assert hook == "In 2014 a bug in OpenSSL leaked memory."
+    def busy(p):
+        raise RuntimeError("503")
+    assert cs.make_hook("", [{"narration": " ".join(["long"] * 30) + "."}], src, busy) == ""
+    assert "No hook" in capsys.readouterr().out

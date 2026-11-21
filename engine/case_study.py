@@ -475,11 +475,52 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
             sections[-1]["diagram"] = diagram
     if not sections:
         raise ValueError("Nothing usable was left in the script" + (" after the unsupported claims were removed." if dropped else "."))
-    hook = " ".join(str(data.get("hook") or "").split())[:110]
-    if hook and sources and unsupported(hook, source_text):        # a hook is held to the same rule as every sentence: nothing the sources do not say
-        hook = ""
+    hook = make_hook(data.get("hook"), sections, source_text if sources else None, ask)
     return {"title": str(data.get("title") or topic).strip()[:120], "hook": hook, "verified": bool(sources),
             "sources": [{"id": s["id"], "ref": s["ref"]} for s in sources], "sections": sections, "dropped": dropped}
+
+
+HOOK_WORDS = 14
+
+
+def check_hook(text, source_text=None):
+    """(hook, '') when `text` can open the video, else ('', why): it must exist, be one short line, and hold nothing the sources do not say."""
+    hook = " ".join(str(text or "").split()).strip().strip('"').strip()
+    if not hook:
+        return "", "the model gave none"
+    if len(hook.split()) > HOOK_WORDS:
+        return "", f"it is {len(hook.split())} words (at most {HOOK_WORDS})"
+    bad = unsupported(hook, source_text) if source_text else []
+    if bad:
+        return "", "it holds " + ", ".join(bad[:3]) + ", which the sources do not"
+    return hook[:110], ""
+
+
+def make_hook(first, sections, source_text, ask):
+    """The opening line of the video. The model's hook when it passes `check_hook`; else one more ask, written from the (already checked) narration;
+    else the first sentence of the narration when it is short enough; else none. Every step that fails says why in the log."""
+    hook, why = check_hook(first, source_text)
+    if hook:
+        return hook
+    print(f"[Warning] Hook left out: {why}. Asking for another one from the script.")
+    told = " ".join(s["narration"] for s in sections)[:2500]
+    try:
+        reply = ask("Write the opening line of a short explainer video: ONE line of 12 words or fewer that makes a viewer keep watching (a surprising "
+                    "fact, a number, a stake or a question). Use ONLY facts, numbers and names from this narration:\n\n" + told
+                    + "\n\nReturn only the line, no quotes, no explanation.")
+    except Exception as e:                      # the model is busy: fall back below
+        reply, why = "", f"the model did not answer ({str(e)[:80]})"
+    hook, why2 = check_hook(str(reply or "").strip().splitlines()[0] if str(reply or "").strip() else "", source_text)
+    if hook:
+        print(f"[Log] Hook: {hook}")
+        return hook
+    first_sentence = re.split(r"(?<=[.!?])\s+", sections[0]["narration"].strip())[0] if sections else ""
+    hook, _ = check_hook(first_sentence, source_text)
+    if hook:
+        print(f"[Log] Hook: the first sentence of the narration ({why2 or why}).")
+        return hook
+    print(f"[Warning] No hook: {why2 or why}; the cover shows the title.")
+    return ""
 
 
 def script_to_text(script):
