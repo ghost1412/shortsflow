@@ -626,7 +626,7 @@ def case_render_script(script_text, session, theme_label, formats, no_manim, bac
 
 
 def case_video(topic, sources, template, theme_label, formats, no_manim, background_label, background_file, resume_label="", draft=False, layouts="auto",
-               resume_path=None, avatar="off", transition="number", narrator="standard"):
+               resume_path=None, avatar="off", transition="number", narrator="standard", voice_sample=None):
     """Case explainer tab: a topic and sources in, a sectioned explainer video out. Yields (status, log, videos)."""
     import time
     old = resume_path or dict(web_args.list_case_sessions(ROOT, limit=50)).get(resume_label or "")
@@ -637,7 +637,8 @@ def case_video(topic, sources, template, theme_label, formats, no_manim, backgro
         if background == "file" and not background_file:
             raise ValueError("Add an image or video file, or choose another background.")
         args = web_args.case_args(topic, sources, template, theme, formats, no_manim, False, session, background, background_file,
-                                  resume=old, draft=bool(draft), layouts=layouts, avatar=avatar, transition=transition, narrator=narrator)
+                                  resume=old, draft=bool(draft), layouts=layouts, avatar=avatar, transition=transition, narrator=narrator,
+                                  voice_sample=voice_sample)
     except ValueError as e:
         raise gr.Error(str(e))
     cmd = [*_pipeline_cmd(), *args]
@@ -1496,7 +1497,10 @@ PRESENTER_KINDS = {"Person": "human", "Cat": "cat", "Dog": "dog", "Robot": "robo
 
 def case_video_ui(*a):
     """The case card's Make button: the form values, the presenter last."""
-    yield from case_video(*a[:11], avatar=a[11], transition=a[12], narrator=a[13])
+    sample, consent = a[14], a[15]
+    if sample and a[13] == "voice_server" and not consent:
+        raise gr.Error("Tick the box under your recording first: only your own voice, or the voice of someone who agreed.")
+    yield from case_video(*a[:11], avatar=a[11], transition=a[12], narrator=a[13], voice_sample=sample if a[13] == "voice_server" else None)
 
 
 def presenter_spec(kind_label, name, skin, hair, hair_color, eye_color, beard, glasses, lashes, lips, outfit, pattern, fur_light, voice=None):
@@ -2442,6 +2446,11 @@ def build_ui():
                                               info="Expressive speaks each section in its mood (tense, excited, serious...) in the presenter's voice, with the Chatterbox "
                                                    "voice server on this PC. Install and start it on the Voice-over card first; it uses the GPU while it speaks. "
                                                    "If it is not running, the standard voice is used.")
+                        with gr.Accordion("Narrate in your own voice (with the expressive narrator)", open=False):
+                            gr.Markdown("Give 10-30 seconds of clean speech; the voice server copies it for the whole narration. It stays on this PC. "
+                                        "**Only your own voice, or the voice of someone who agreed.**")
+                            c_voice_sample = gr.Audio(sources=["upload", "microphone"], type="filepath", label="Your voice (10-30 s)")
+                            c_voice_consent = gr.Checkbox(False, label="This is my voice, or the person agreed to it")
                         from engine import avatars as _avatars
                         with gr.Row(equal_height=False):
                             c_avatar = gr.Dropdown(_avatars.choices(ROOT), value="off", label="Presenter", scale=3,
@@ -2474,7 +2483,7 @@ def build_ui():
                     c_render = gr.Button("🎬 Render this script", variant="primary")
                 with gr.Accordion("Technical details", open=False):
                     c_log = gr.Textbox(label="Full log", lines=14, max_lines=14, autoscroll=True)
-                c_run = c_btn.click(case_video_ui, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_resume, c_draft, c_layouts, c_avatar, c_transition, c_narrator], [c_status, c_log, c_video])
+                c_run = c_btn.click(case_video_ui, [c_topic, c_sources, c_template, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_resume, c_draft, c_layouts, c_avatar, c_transition, c_narrator, c_voice_sample, c_voice_consent], [c_status, c_log, c_video])
                 c_plan_run = c_plan.click(case_plan, [c_topic, c_sources, c_template], [c_status, c_log, c_script, c_session])
                 c_render_run = c_render.click(case_render_script, [c_script, c_session, c_theme, c_formats, c_nomanim, c_bg, c_bgfile, c_draft, c_avatar, c_transition, c_narrator],
                                               [c_status, c_log, c_video])

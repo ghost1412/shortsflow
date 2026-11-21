@@ -71,15 +71,30 @@ def _make_script(args, session_dir, opts):
     return script
 
 
-def _narration(args, script, session_dir, resumed, avatar=None, narrator="standard"):
+def _narrator_tag(narrator, voice_sample, avatar, voice=None):
+    """What the narration is spoken with, as kept in voice_cache.json, so a redo with another narrator, another recording or another presenter
+    voice speaks it again: "standard", "voice_server:own_<hash>.wav" (a person's recording) or "voice_server:voice_<edge voice>.wav"."""
+    if narrator != "voice_server":
+        return "standard"
+    if voice_sample and os.path.isfile(voice_sample):
+        import hashlib
+        with open(voice_sample, "rb") as f:
+            return "voice_server:own_" + hashlib.sha1(f.read()).hexdigest()[:12] + ".wav"
+    from engine import avatars
+    from engine.case_render import NARRATOR_VOICE
+    copy = voice if voice in avatars.VOICES else (avatars.voice_for(avatar)[0] if avatar else NARRATOR_VOICE)
+    return f"voice_server:voice_{copy}.wav"
+
+
+def _narration(args, script, session_dir, resumed, avatar=None, narrator="standard", voice_sample=""):
     """([audio], [words]): the saved narration of a resumed session, else newly spoken (ElevenLabs when its key is set)."""
     from engine import case_render as cr
     if resumed:
-        cached = cr.cached_voice(script, session_dir, narrator)
+        cached = cr.cached_voice(script, session_dir, _narrator_tag(narrator, voice_sample, avatar, getattr(args, "voice", None)))
         if cached:
             print("[Log] Reusing the saved narration (no new voice is made).")
             return cached
-        print("[Warning] The saved narration is missing or incomplete; making it again.")
+        print("[Warning] The saved narration is missing, incomplete or was spoken another way; making it again.")
     provider = getattr(args, "tts_provider", None)
     if provider in (None, "auto") and os.getenv("ELEVENLABS_API_KEY"):
         provider = "elevenlabs"
@@ -97,8 +112,17 @@ def _narration(args, script, session_dir, resumed, avatar=None, narrator="standa
         if ev.available():
             from engine import avatars
             from engine.case_render import NARRATOR_VOICE
-            copy = edge_voice or (avatars.voice_for(avatar)[0] if avatar else NARRATOR_VOICE)
-            expressive = {"speak": ev.speak, "sample": ev.sample_for(copy, os.path.join(session_dir, "voice_samples"))}
+            sample, tag = None, _narrator_tag(narrator, voice_sample, avatar, getattr(args, "voice", None))
+            if voice_sample:
+                try:
+                    sample, copy = ev.own_sample(voice_sample, os.path.join(session_dir, "voice_samples")), "your recording"
+                except RuntimeError as e:
+                    print(f"[Warning] Your voice recording is not used ({e}); the presenter's voice is copied instead.")
+            if not sample:
+                copy = edge_voice or (avatars.voice_for(avatar)[0] if avatar else NARRATOR_VOICE)
+                sample = ev.sample_for(copy, os.path.join(session_dir, "voice_samples"))
+                tag = f"voice_server:voice_{copy}.wav"
+            expressive = {"speak": ev.speak, "sample": sample, "tag": tag}
             print(f"[Log] Narration: the local voice server, each section in its mood (voice copied from {copy}).")
         else:
             print(f"[Warning] narrator=voice_server, but no voice server answers at {ev.server_url()} (start it on the Voice-over card, or "
@@ -168,7 +192,9 @@ def run(args, target_bitrate=None, target_preset=None):
 
     from engine import avatars
     avatar = avatars.load(opts["avatar"], os.getcwd())
-    audios, words = _narration(args, script, session_dir, bool(resume), avatar, opts["narrator"])
+    if opts["voice_sample"] and opts["narrator"] != "voice_server":
+        print("[Warning] voice_sample is used only with narrator=voice_server (the local voice server copies it); it is ignored.")
+    audios, words = _narration(args, script, session_dir, bool(resume), avatar, opts["narrator"], opts["voice_sample"])
     timing = cr.plan_timing([cr._duration(a) for a in audios])
 
     music = getattr(args, "music", None)

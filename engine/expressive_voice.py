@@ -135,3 +135,21 @@ def sample_for(edge_voice, folder):
         if subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", mp3, "-ac", "1", "-ar", "24000", wav]).returncode != 0:
             return None
     return wav
+
+
+def own_sample(path, folder):
+    """A person's own recording as the voice to copy: the first 30 seconds, one channel, 24 kHz WAV (kept in `folder`). Raises RuntimeError
+    when it cannot be read or is shorter than 5 seconds."""
+    import hashlib
+    os.makedirs(folder, exist_ok=True)
+    with open(path, "rb") as f:
+        key = hashlib.sha1(f.read()).hexdigest()[:12]
+    wav = os.path.join(folder, f"own_{key}.wav")
+    if not os.path.isfile(wav):
+        if subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", path, "-t", "30", "-ac", "1", "-ar", "24000", wav]).returncode != 0:
+            raise RuntimeError(f"the recording could not be read: {path}")
+    seconds = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", wav],
+                                   capture_output=True, text=True).stdout or 0)
+    if seconds < 5:
+        raise RuntimeError(f"the recording is {seconds:.0f} seconds; give 10-30 seconds of clean speech")
+    return wav

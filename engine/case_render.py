@@ -340,7 +340,7 @@ def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=N
         from engine.voice_gen import generate_voice as generate
     audios, words = [], []
     sections = script["sections"]
-    narrator_used = "voice_server" if expressive else "standard"
+    narrator_used = (expressive.get("tag") or "voice_server") if expressive else "standard"
     eleven_failed = False        # after one failure (no credits left, a bad key) the rest of the run goes straight to the fallback voice
     for i, sec in enumerate(sections, start=1):
         audio = os.path.join(session_dir, f"voice_{i:02d}.mp3")
@@ -508,8 +508,8 @@ def cached_voice(script, session_dir, narrator=None):
             cache = json.load(f)
         if cache.get("narration") != _narration_hashes(script):
             return None
-        if narrator and cache.get("narrator", "standard") != narrator:      # another narrator was asked for: speak it again
-            return None
+        if narrator and cache.get("narrator", "standard") != narrator:
+            return None                               # another narrator (or another recording to copy) was asked for: speak it again
     except (OSError, ValueError, AttributeError):
         pass                                          # a session from before the check: the files are taken as they are
     audios, words = [], []

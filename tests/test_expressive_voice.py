@@ -74,3 +74,27 @@ def test_the_narrator_choice_travels_from_the_app_to_the_pipeline():
     assert case_options.parse(["narrator=voice_server"])["narrator"] == "voice_server" and case_options.parse([])["narrator"] == "standard"
     assert "narrator=voice_server" in web_args.case_args("T", narrator="voice_server")
     assert not any("narrator" in a for a in web_args.case_args("T"))
+
+
+def test_your_own_recording_can_be_the_voice_and_a_new_one_respeaks(tmp_path):
+    import pytest
+    from engine import case_options
+    from engine.modes import case
+    from shortsflow import web_args
+    rec = tmp_path / "me.mp3"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=d=12", str(rec)], check=True)
+    short = tmp_path / "short.mp3"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=d=2", str(short)], check=True)
+    assert case_options.parse([f"voice_sample={rec}"])["voice_sample"] == str(rec)
+    with pytest.raises(Exception, match="not found"):
+        case_options.parse([f"voice_sample={tmp_path / 'missing.wav'}"])
+    wav = ev.own_sample(str(rec), str(tmp_path / "s"))
+    assert wav.endswith(".wav") and os.path.isfile(wav)
+    with pytest.raises(RuntimeError, match="10-30 seconds"):
+        ev.own_sample(str(short), str(tmp_path / "s"))
+    args = web_args.case_args("T", narrator="voice_server", voice_sample=str(rec))
+    assert f"voice_sample={rec}" in args
+    assert not any("voice_sample" in a for a in web_args.case_args("T", voice_sample=str(rec)))     # only with the expressive narrator
+    own = case._narrator_tag("voice_server", str(rec), None)
+    assert own.startswith("voice_server:own_") and own == case._narrator_tag("voice_server", str(rec), None)
+    assert case._narrator_tag("voice_server", "", None) != own and case._narrator_tag("standard", str(rec), None) == "standard"

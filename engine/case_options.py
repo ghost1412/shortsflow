@@ -31,6 +31,13 @@ def _background(raw):
     raise OptionError(f"'background' must be {', '.join(BACKGROUND_KINDS)}, or the path of an existing image or video file (got '{raw}').")
 
 
+def _voice_sample(raw):
+    path = os.path.expanduser(raw.strip().strip('"'))
+    if path and not os.path.isfile(path):
+        raise OptionError(f"'voice_sample' must be an existing recording (.wav or .mp3, 10-30 seconds of one voice); not found: {path}")
+    return path
+
+
 def _avatar(raw):
     from engine import avatars
     try:
@@ -49,6 +56,8 @@ OPTIONS = (
     Option("narrator", "choice", "standard", "who speaks the narration: standard (ElevenLabs with credits, else the free Edge voice), or voice_server: the "
            "local voice server (Chatterbox, set up on the Voice-over card) if it is running, each section in its mood and in the presenter's voice; "
            "it uses the GPU while it speaks", ("standard", "voice_server")),
+    Option("voice_sample", "path", "", "with narrator=voice_server: a recording of the voice to copy instead of the presenter's (yours, or someone "
+           "who agreed; .wav or .mp3, 10-30 seconds of clean speech). It stays on this PC", check=_voice_sample),
     Option("transition", "choice", "number", "how one section gives way to the next: number (a big section number and title), fade, slide, zoom, wipe "
            "or cut. Try another on an earlier run with resume=FOLDER draft (the script and voice are reused)", TRANSITIONS),
     Option("layouts", "choice", "auto", "who picks the layout of each section: auto (the model, from timeline, flow, counters, checklist, compare, chart, quote) or template (the template's own)", ("auto", "template")),
