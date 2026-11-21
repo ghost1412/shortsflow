@@ -154,7 +154,7 @@ def generate_voice_elevenlabs(text, output_audio="assets/voice.mp3", output_subs
 
     return output_audio, output_subs
 
-def generate_voice_voicestudio(text, output_audio="assets/voice.mp3", output_subs="assets/subs.json", voice_name=None, clone_voice=None, voice_studio_url=None):
+def generate_voice_voicestudio(text, output_audio="assets/voice.mp3", output_subs="assets/subs.json", voice_name=None, clone_voice=None, voice_studio_url=None, extra=None):
     """
     Generates voice via VoiceStudio / Local OpenAI-compatible TTS API (e.g. Kokoro, F5-TTS, XTTSv2).
     Supports zero-shot voice cloning if clone_voice (sample_wav path) is specified.
@@ -178,6 +178,9 @@ def generate_voice_voicestudio(text, output_audio="assets/voice.mp3", output_sub
         "voice": voice_name or "default",
         "response_format": "mp3"
     }
+
+    if extra:
+        payload.update(extra)                  # optional hints (tone, speed...) that a server may use and otherwise ignores
 
     if sample_path and os.path.exists(sample_path):
         try:

@@ -277,6 +277,20 @@ def dub_args(source, target_lang, spoken="auto", burn_captions=False, session_di
     return args
 
 
+def voiceover_args(script_file, sample, tone="neutral", fmt="mp3", session_dir=None, server=""):
+    """Arguments (after the pipeline command) for `--mode VOICEOVER`: the script is read from `script_file`, the voice copied from `sample`."""
+    from engine.voiceover import OPTIONS
+    values = {"sample": sample, "tone": tone or "neutral", "format": fmt or "mp3", "server": (server or "").strip()}
+    args = ["--mode", "VOICEOVER", "--script", script_file]
+    for pair in OPTIONS.to_pairs(values):
+        args += ["--voiceover", pair]
+    if "sample=" not in " ".join(args):                 # a sample is always given, even when it equals the (empty) default
+        args += ["--voiceover", f"sample={sample}"]
+    if session_dir:
+        args += ["--session_dir", session_dir]
+    return args
+
+
 MAX_RECAP_SECONDS = 3600      # a wedding film can run 20-30 minutes; the engine itself has no limit
 
 RECAP_KIND_CHOICES = [("Trip (days, places named from GPS)", "trip"), ("Wedding (one part per event of the day)", "wedding"),

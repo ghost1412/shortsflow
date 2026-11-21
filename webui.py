@@ -293,6 +293,63 @@ def dub_video(upload, url, target_lang, spoken="auto", burn_captions=False, tts_
     yield "❌ No dubbed video was made." + (f" {reason}" if reason else " Open 'Technical details' for the reason."), log, None, None
 
 
+def voice_server_status():
+    from engine import voice_server
+    return voice_server.status()[2]
+
+
+def voice_server_install():
+    """Voice-over card: install the local voice server (long: downloads about 5.5 GB). Yields (status, log)."""
+    from engine import voice_server
+    if voice_server.installed():
+        yield voice_server.status()[2], ""
+        return
+    yield "Installing the voice server (about 5.5 GB; this takes a while, keep this page open)...", ""
+    log = ""
+    for log, _videos in _run([sys.executable, "-m", "engine.voice_server", "install"]):
+        yield "Installing the voice server (about 5.5 GB; this takes a while, keep this page open)...", log
+    ok = voice_server.installed()
+    reason = next((ln.split("]", 1)[1].strip() for ln in reversed(log.splitlines()) if ln.startswith("[Error]")), "")
+    yield ("✅ Installed. Make a voice-over: the server starts by itself." if ok else "❌ The install did not finish." + (f" {reason}" if reason else " See the log.")), log
+
+
+def voice_server_toggle(action):
+    from engine import voice_server
+    try:
+        if action == "start":
+            voice_server.start()
+        else:
+            voice_server.stop()
+    except RuntimeError as e:
+        return str(e)
+    return voice_server.status()[2]
+
+
+def voiceover_make(script, sample, tone="neutral"):
+    """Voice-over tab: a script read in a clone of the voice in `sample`. Yields (status, log, audio)."""
+    import time
+    if not (script or "").strip():
+        raise gr.Error("Type or paste the script to read first.")
+    if not sample:
+        raise gr.Error("Add a recording of your voice first (upload one or record it): a clean 10-30 seconds of one speaker.")
+    session = os.path.join(ROOT, "sessions", time.strftime("voiceover_%Y%m%d_%H%M%S"))
+    os.makedirs(session, exist_ok=True)
+    script_file = os.path.join(session, "script.txt")
+    with open(script_file, "w", encoding="utf-8") as f:
+        f.write(script)
+    cmd = [*_pipeline_cmd(), *web_args.voiceover_args(script_file, sample, tone, "mp3", session)]
+    yield "Reading your script in your voice...", "", None
+    log = ""
+    for log, _videos in _run(cmd):
+        yield "Reading your script in your voice...", log, None
+    audio = os.path.join(session, "voiceover.mp3")
+    if os.path.exists(audio):
+        yield "✅ Done! Your voice-over is ready below.", log, audio
+        return
+    reason = next((ln.split("]", 1)[1].strip() for ln in reversed(log.splitlines()) if ln.startswith("[Error]")), "")
+    yield "❌ No voice-over was made." + (f" {reason}" if reason else " Open 'Technical details' for the reason."), log, None
+
+
 def trip_recap(files, name, stops, note, hook, length, style, music, reuse="", drive="", look=False, both=False, name_places=True, enhance=False, kind="trip", keep_sound=False,
                grade="default", edit="none", edit_strength="medium", clean_sound=False, sample="auto", transitions="auto", subject_look="auto", subject_color="auto", subject_max=2, lines="", open_result=False, llm_provider="auto", steps="", font="default",
                visual_template="none", intro_animation="none", outro_animation="none",
@@ -1590,13 +1647,13 @@ def real_presenter_save(name, photo, consent, voice=None):
             gr.update(choices=picks, value=key), gr.update(choices=[c for c in picks if c[1] != "off"]))
 
 
-MODE_KEYS = ["shorts", "clip", "dub", "recap", "reel", "idea", "case", "publish", "settings", "presenter"]       # the columns; "highlights" shares the first one
+MODE_KEYS = ["shorts", "clip", "dub", "recap", "reel", "idea", "case", "publish", "settings", "presenter", "voiceover"]       # the columns; "highlights" shares the first one
 
 
 def web_args_modes():
     """[(label, key)] of the things you can make: the first screen of the app."""
     return [("Shorts", "shorts"), ("Highlights video", "highlights"), ("Dub into another language", "dub"), ("Recap (trip, wedding, event)", "recap"),
-            ("Photo reel", "reel"), ("Video from an idea", "idea"), ("Case explainer", "case"), ("Clip tool (all options)", "clip"), ("Publish videos", "publish"), ("Settings", "settings"), ("Presenters", "presenter")]
+            ("Photo reel", "reel"), ("Video from an idea", "idea"), ("Case explainer", "case"), ("Clip tool (all options)", "clip"), ("Publish videos", "publish"), ("Settings", "settings"), ("Presenters", "presenter"), ("Voice-over in your voice", "voiceover")]
 
 
 def pick_mode(mode):
@@ -2077,6 +2134,36 @@ def build_ui():
                     [clip_log, clip_videos],
                 )
                 clip_stop.click(stop_jobs, None, clip_log, cancels=[clip_run])
+
+            with gr.Column(visible=False) as mode_col_voiceover:
+                gr.Markdown("### Read a script in your own voice\n"
+                            "Paste a script and give a recording of your voice; you get an audio file. The voice is copied by a voice server running on this PC "
+                            "(VoiceStudio, F5-TTS or XTTS; set its address as VOICE_STUDIO_URL in `.env`), so nothing leaves the PC. "
+                            "Use only your own voice, or the voice of someone who agreed. The tone changes the pace for sure; how much more it changes depends on the server.")
+                with gr.Accordion("Set up the voice server (once)", open=False):
+                    gr.Markdown("Installs a voice-cloning model (Chatterbox) with its own Python in your user folder: about 5.5 GB of downloads, run on this PC's "
+                                "graphics card (an NVIDIA card with 6 GB or more is best; on the processor alone it is very slow). Close games first. Nothing leaves the PC.")
+                    vo_srv_status = gr.Markdown(voice_server_status())
+                    with gr.Row():
+                        vo_install = gr.Button("Install the voice server")
+                        vo_start = gr.Button("Start")
+                        vo_srv_stop = gr.Button("Stop")
+                    vo_srv_log = gr.Textbox(label="Setup log", lines=8, max_lines=8, autoscroll=True)
+                    vo_inst_run = vo_install.click(voice_server_install, None, [vo_srv_status, vo_srv_log])
+                    vo_start.click(lambda: voice_server_toggle("start"), None, vo_srv_status)
+                    vo_srv_stop.click(lambda: voice_server_toggle("stop"), None, vo_srv_status)
+                vo_script = gr.Textbox(label="Script", lines=8, placeholder="Paste what should be read...")
+                vo_sample = gr.Audio(label="A recording of your voice (10-30 seconds, clean, only you)", sources=["upload", "microphone"], type="filepath")
+                vo_tone = gr.Dropdown([("Neutral", "neutral"), ("Warm", "warm"), ("Excited", "excited"), ("Calm", "calm"), ("Serious", "serious"),
+                                       ("Dramatic", "dramatic"), ("Sad", "sad")], value="neutral", label="Tone")
+                vo_btn = gr.Button("Read it in my voice", variant="primary")
+                vo_stop = gr.Button("⏹ Stop", variant="stop")
+                vo_status = gr.Markdown("Waiting for a script and a recording of your voice...")
+                vo_audio = gr.Audio(label="Your voice-over", interactive=False)
+                with gr.Accordion("Technical details", open=False):
+                    vo_log = gr.Textbox(label="Full log", lines=10, max_lines=10, autoscroll=True)
+                vo_run = vo_btn.click(voiceover_make, [vo_script, vo_sample, vo_tone], [vo_status, vo_log, vo_audio])
+                vo_stop.click(stop_jobs, None, vo_status, cancels=[vo_run])
 
             with gr.Column(visible=False) as mode_col_dub:
                 gr.Markdown("### Re-voice a video in another language\n"
@@ -2572,7 +2659,7 @@ def build_ui():
                     "See `env.example`. Your video files stay on this PC. Only what you switch on goes out: transcript text to an AI text provider when a key is set, "
                     "small frames to Gemini for `--visual_context` when a key is set, text to the voice service in the dub and idea-to-video modes, "
                     "stock-footage search words to Pexels, place names looked up on OpenStreetMap in trip recaps (turn it off with `--recap_no_geocode`), and any upload you ask for.")
-        mode_cols = [mode_col_shorts, mode_col_clip, mode_col_dub, mode_col_recap, mode_col_reel, mode_col_idea, mode_col_case, mode_col_publish, mode_col_settings, mode_col_presenter]
+        mode_cols = [mode_col_shorts, mode_col_clip, mode_col_dub, mode_col_recap, mode_col_reel, mode_col_idea, mode_col_case, mode_col_publish, mode_col_settings, mode_col_presenter, mode_col_voiceover]
         mode_card.change(pick_mode, mode_card, [*mode_cols, q_mode])
     return demo
 

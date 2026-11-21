@@ -28,7 +28,7 @@ from engine.media_gen import is_url
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate either FACTS, STORY, FIND_IT, WYR, REDDIT, TRIVIA, QUOTE, JWST, RIDDLE, ODD_ONE_OUT, or FILTER shorts.")
-    parser.add_argument("--mode", choices=["FACTS", "STORY", "FIND_IT", "WYR", "REDDIT", "TRIVIA", "QUOTE", "ODD_ONE_OUT", "NEWS", "NEWS_SERIOUS", "GUESS_SOUND", "RIDDLE", "TREND", "CHALLENGE", "JWST", "TRAILER_MISSED", "MUSIC", "EXPLAINER", "FILTER", "EMOJI_GUESS", "PHOTO_REEL", "FUNNY_EXPLAINER", "TEACH", "DUB", "SPLIT_SCREEN", "PODCAST", "TOP_5", "CHAT_STORY", "HORROR", "TRUE_CRIME", "BIBLE", "ARTICLE", "UGC", "AUTO", "TRIP", "CASE", "ANIMATE"], help="Force a specific mode.")
+    parser.add_argument("--mode", choices=["FACTS", "STORY", "FIND_IT", "WYR", "REDDIT", "TRIVIA", "QUOTE", "ODD_ONE_OUT", "NEWS", "NEWS_SERIOUS", "GUESS_SOUND", "RIDDLE", "TREND", "CHALLENGE", "JWST", "TRAILER_MISSED", "MUSIC", "EXPLAINER", "FILTER", "EMOJI_GUESS", "PHOTO_REEL", "FUNNY_EXPLAINER", "TEACH", "DUB", "SPLIT_SCREEN", "PODCAST", "TOP_5", "CHAT_STORY", "HORROR", "TRUE_CRIME", "BIBLE", "ARTICLE", "UGC", "AUTO", "TRIP", "CASE", "ANIMATE", "VOICEOVER"], help="Force a specific mode.")
     parser.add_argument("--scene", help="Scene or scenario prompt for FUNNY_EXPLAINER mode.")
     parser.add_argument("--photos_dir", help="Directory containing photos for PHOTO_REEL mode.")
     parser.add_argument("--music", help="Path to audio/music track for PHOTO_REEL or background music.")
@@ -219,6 +219,8 @@ def parse_args():
     parser.add_argument("--sources", action="append", metavar="LINK_OR_FILE", help="CASE mode: a source the script may use (a link, a text file or pasted notes); repeat up to 3 times. The script holds nothing the sources do not.")
     parser.add_argument("--case", action="append", metavar="KEY=VALUE", help="CASE mode options, repeatable: theme=neon, formats=16:9, background=images, draft, resume=FOLDER, plan_only, manim=off, template=postmortem. `--case help` lists them all.")
     parser.add_argument("--case_file", metavar="FILE", help="CASE mode: a JSON file of the same options ({\"theme\": \"editorial\", \"formats\": \"16:9\"}), for a series that should always look alike. --case values win.")
+    parser.add_argument("--voiceover", action="append", metavar="KEY=VALUE", help="VOICEOVER mode options, repeatable: sample=my_voice.wav, tone=warm, format=wav, out=FILE, server=URL. The script comes from --script (text or a .txt file). `--voiceover help` lists them all.")
+    parser.add_argument("--voiceover_file", metavar="FILE", help="VOICEOVER mode: a JSON file of the same options. --voiceover values win.")
     parser.add_argument("--aspect_ratio", choices=["9:16", "16:9", "1:1", "4:5"], default="9:16", help="Frame shape of clips cut from a video (--source_video): 9:16 vertical (default, 1080x1920), 1:1 square (1080x1080), 4:5 (1080x1350) or 16:9 landscape (1920x1080). The face-tracked crop, the layouts, the captions, templates and covers follow it. The highlights video (--extract_mode long) is always 16:9. Other modes make 9:16.")
     parser.add_argument("--target_lang", help="Target language for --mode DUB (translate and re-voice the video): es, hi, de, fr, ja, pt, zh, it, ru, ko, ar, en, tr, nl, pl, uk, id.")
     parser.add_argument("--dub_captions", action="store_true", help="--mode DUB: burn the translated subtitles into the dubbed video (re-encodes; the .srt is always written). Uses a font with the glyphs for the target script (Hindi, Arabic, Cyrillic, Chinese, Japanese, Korean).")
@@ -408,6 +410,11 @@ if getattr(args, "mode", None) == "MUSIC":
 if getattr(args, "mode", None) == "DUB":
     from engine.modes.dub import run as run_dub
     run_dub(args, target_bitrate, target_preset)
+
+# 🟢 Standalone VOICEOVER Mode (a script read in the user's own cloned voice)
+if getattr(args, "mode", None) == "VOICEOVER":
+    from engine.modes.voiceover import run as run_voiceover
+    run_voiceover(args, target_bitrate, target_preset)
 
 # 🟢 Standalone TRIP recap Mode (several videos -> one recap + itinerary)
 if getattr(args, "mode", None) == "TRIP":

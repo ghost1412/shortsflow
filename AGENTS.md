@@ -113,6 +113,13 @@ python main.py --mode ANIMATE --prompt "The Pythagorean theorem and why it works
 python main.py --mode ANIMATE --prompt "How binary search halves the work" --case theme=blueprint --case formats=16:9
 ```
 
+### Skill 5c: Voice-over in your own voice (script in, audio out)
+```bash
+python main.py --mode VOICEOVER --script "Text to read, or a .txt file" --voiceover sample=my_voice.wav --voiceover tone=warm
+python main.py --mode VOICEOVER --voiceover help      # every option; tones: neutral, warm, excited, calm, serious, dramatic, sad
+```
+Needs a local OpenAI-compatible voice server that clones from a sample (VoiceStudio, F5-TTS, XTTS; `VOICE_STUDIO_URL`). No fallback to a stock voice. Own voice or a consenting person's only.
+
 ### Skill 6: Launch Single-Window Interactive Studio GUI
 ```bash
 # Launch visual CustomTkinter 3-column studio layout
@@ -137,6 +144,8 @@ python gui_app.py
 | `engine/modes/case.py`, `engine/case_study.py`, `engine/case_render.py`, `engine/case_options.py`, `engine/case_manim.py`, `engine/case_mermaid.py`, `engine/manim_kit.py`, `engine/manim_overlap.py`, `engine/case_footage.py`, `engine/case_sources.py`, `engine/case_sfx.py`, `engine/light_music.py` | `--mode CASE`: sources (web page, PDF, YouTube, audio or video file) -> a script written only from them (a template of sections; the model picks each layout) -> narration -> `remotion-video/src/CaseVideo.tsx` render (16:9 and 9:16); Mermaid diagrams (any diagram type, written by the model, parsed by Mermaid itself in Node, drawn by Mermaid's own layout in Remotion with a camera that follows long chains) and optional Manim animation built from a tested kit and checked for overlaps, Pexels footage or photos, synthesised music and sound effects. Options live in one schema (`engine/case_options.py`): `--case KEY=VALUE`, `--case help` |
 | `engine/avatars.py`, `remotion-video/src/Presenter.tsx` | Drawn presenters for the case explainer (`--case avatar=NAME`): ready-made people, cats, a dog and a robot, home-made ones in `presenters/` (checked by `clean`, only known parts and colours), `suggest_from_photo` (local Ollama vision by default; Gemini sends the photo to Google), `render_preview` (the `PresenterCard` composition). `presenterRect` is the one place that says where the card sits; scenes and the cover keep out of it via `usePresenterRoom` |
 | `engine/talking_head.py` | Optional realistic presenter: SadTalker in its own folder and Python (`~/.shortsflow/talking_head`, `python -m engine.talking_head install`), `make(photo, audio, out)` cached by photo+voice; used by `--case avatar=NAME` when NAME is a saved photo presenter (full render only; a draft or a missing add-on shows the still photo). Runs locally: the photo never leaves the PC. Only the owner's own face or a consenting person's |
+| `engine/voiceover.py`, `engine/modes/voiceover.py` | `--mode VOICEOVER`: a script (text or .txt) read in a clone of the user's own voice by a local voice server through `engine.voice_gen.generate_voice_voicestudio`; tone presets (`TONES`: server hints plus a certain speed change); options in one `OptionSet` (`--voiceover KEY=VALUE`); the browser tab is "Voice-over in your voice" |
+| `engine/voice_server.py` | Optional add-on for `--mode VOICEOVER`, never installed unless the user asks (`python -m engine.voice_server install`, or "Install the voice server" on the Voice-over card): a Chatterbox voice-cloning server in its own folder and Python (`~/.shortsflow/voice_server`, about 5.5 GB), listening on 127.0.0.1 only; `start`, `stop` (the exact PID it started), `status`; the mode starts it by itself only when it is installed |
 | `engine/expressive_voice.py` | `--case narrator=voice_server`: a client for the local voice server (POST input, exaggeration, sample_audio_b64 -> WAV; SHORTSFLOW_VOICE_SERVER_URL, default 127.0.0.1:8080): per-section mood -> emotion strength, the presenter's Edge voice sample as the voice to copy, word timings from Whisper on the CPU aligned to the script's words (`align`). Used only when chosen and the server answers; failures fall back to the standard voice |
 | `engine/modes/animate.py` | `--mode ANIMATE`: hands the case pipeline the `animation` template (one section, one Manim animation over the whole narration) and `background=none` unless the user chose otherwise |
 | `engine/mode_options.py` | Reusable option schema for a mode (`OptionSet`, `Option`): one `--<mode> KEY=VALUE` flag instead of a flag per option (house rule, section 5) |
