@@ -220,7 +220,8 @@ def run(args, target_bitrate=None, target_preset=None):
             print(f"[Error] The animation could not be made for: {', '.join(lost) or 'this video'} (the model was busy or its scenes kept failing the checks; "
                   f"see the lines above). The script and the narration are saved: run again with --case resume={session_dir}")
             sys.exit(1)
-        footage = cr.backgrounds_for(script, session_dir, aspect, choice, has_pexels=bool(os.getenv("PEXELS_API_KEY")))
+        footage = cr.backgrounds_for(script, session_dir, aspect, choice, has_pexels=bool(os.getenv("PEXELS_API_KEY")),
+                                     cartoon=opts["cartoon"], ask=ask_code)
         props = cr.build_props(script, timing, words, theme=theme, music_volume=0.2, clips=clips, footage=footage, portrait=portrait, avatar=avatar, transition=opts["transition"])
         voice_track = cr.join_audio(audios, timing, os.path.join(session_dir, f"voice_all_{tag}.mp3"),
                                     sfx=cr.sfx_for(props, os.path.join(session_dir, f"sfx_{tag}.wav")))

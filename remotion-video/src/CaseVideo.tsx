@@ -30,7 +30,7 @@ export const caseVideoSchema = z.object({
     scene: z.enum(CASE_SCENES).default("quote"),
     labels: z.array(z.string()).default([]),
     sourceLabels: z.array(z.string()).default([]),   // where this section's facts come from, shown as a small chip
-    footage: z.array(z.object({ src: z.string(), seconds: z.number().default(10), kind: z.enum(["video", "image"]).default("video") })).default([]),   // stock clips, one per beat, shown behind the scene
+    footage: z.array(z.object({ src: z.string(), seconds: z.number().default(10), kind: z.enum(["video", "image", "cartoon"]).default("video") })).default([]),   // stock clips, one per beat, shown behind the scene
     beats: z.array(z.tuple([z.number(), z.number()])).default([]),                       // seconds after the section starts: a new picture at each
     clip: z.string().optional(),                // a rendered animation (Manim) drawn for this section, shown instead of the plain scene
     diagram: z.string().optional(),             // Mermaid source (any diagram type), drawn by Mermaid's own layout and revealed step by step
@@ -742,7 +742,7 @@ const MermaidDiagram: React.FC<{ code: string; p: Pal; accent: string; frames: n
 const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation, compare: Compare, chart: Chart, animation: Quote, diagram: Quote } as const;
 
 // one beat of stock footage: it punches in with a flash, drifts to one side, and repeats when the clip is shorter than the beat
-const BeatFootage: React.FC<{ src: string; seconds: number; kind?: "video" | "image"; index: number; frames: number; start: number; opacity: number }> = ({ src, seconds, kind, index, frames, start, opacity }) => {
+const BeatFootage: React.FC<{ src: string; seconds: number; kind?: "video" | "image" | "cartoon"; index: number; frames: number; start: number; opacity: number }> = ({ src, seconds, kind, index, frames, start, opacity }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const punch = interpolate(frame, [0, 12], [1.2, 1.04], { extrapolateRight: "clamp" });
@@ -750,7 +750,7 @@ const BeatFootage: React.FC<{ src: string; seconds: number; kind?: "video" | "im
   const flash = interpolate(frame, [0, 7], [0.5, 0], { extrapolateRight: "clamp" });
   return (
     <AbsoluteFill>
-      {kind === "image" ? (
+      {kind === "image" || kind === "cartoon" ? (
         <Img src={asset(src)} style={{ width: "100%", height: "100%", objectFit: "cover", opacity, transform: `scale(${punch + frame * 0.0011}) translateX(${drift * 1.4}%)` }} />
       ) : (
         <Loop durationInFrames={Math.max(15, Math.round(seconds * fps))}>
@@ -801,12 +801,18 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
             const len = Math.max(8, Math.round((b[1] - b[0]) * fps));
             return (
               <Sequence key={i} from={from} durationInFrames={len}>
-                <BeatFootage opacity={p.light ? 0.42 : 0.66} src={clip.src} seconds={clip.seconds} kind={clip.kind} index={i} frames={len} start={Math.round((i % 3) * 1.5 * fps) % Math.max(1, Math.round(clip.seconds * fps))} />
+                <BeatFootage opacity={clip.kind === "cartoon" ? 1 : p.light ? 0.42 : 0.66} src={clip.src} seconds={clip.seconds} kind={clip.kind} index={i} frames={len} start={Math.round((i % 3) * 1.5 * fps) % Math.max(1, Math.round(clip.seconds * fps))} />
               </Sequence>
             );
           })}
-          <AbsoluteFill style={{ background: `linear-gradient(180deg, ${p.bg1}b8 0%, ${p.bg1}3d 45%, ${p.bg1}d0 100%)` }} />
-          <AbsoluteFill style={{ background: `${accent}14`, mixBlendMode: "color" }} />
+          {footage.some((f) => f.kind === "cartoon") ? (
+            <AbsoluteFill style={{ background: `linear-gradient(180deg, ${p.bg1}b3 0%, ${p.bg1}73 28%, ${p.bg1}73 62%, ${p.bg1}c0 100%)` }} />
+          ) : (
+            <>
+              <AbsoluteFill style={{ background: `linear-gradient(180deg, ${p.bg1}b8 0%, ${p.bg1}3d 45%, ${p.bg1}d0 100%)` }} />
+              <AbsoluteFill style={{ background: `${accent}14`, mixBlendMode: "color" }} />
+            </>
+          )}
           <AbsoluteFill style={{ background: "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)" }} />
         </AbsoluteFill>
       )}

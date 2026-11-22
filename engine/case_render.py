@@ -470,7 +470,7 @@ def user_background(script, path, probe=None):
     return [[dict(item)] for _ in script["sections"]]
 
 
-def backgrounds_for(script, session_dir, aspect, choice="footage", has_pexels=True):
+def backgrounds_for(script, session_dir, aspect, choice="footage", has_pexels=True, cartoon="auto", ask=None):
     """Per-section backgrounds for the `--case_background` choice: "footage" (stock video, needs the Pexels key), "images" (stock photos,
     needs the key), "none" (the style's own animated background only), or the path of the user's own image or video."""
     choice = (choice or "footage").strip()
@@ -480,6 +480,9 @@ def backgrounds_for(script, session_dir, aspect, choice="footage", has_pexels=Tr
         return attach_footage(script, session_dir, aspect) if has_pexels else None
     if choice == "images":
         return attach_images(script, session_dir, aspect) if has_pexels else None
+    if choice == "cartoon":
+        from engine import case_cartoon
+        return case_cartoon.attach(script, session_dir, aspect, cartoon, ask=ask)
     own = user_background(script, choice.strip('"'))
     if own is None:
         print(f"[Warning] --case_background '{choice}' is not an image or video file; using the style's own background.")

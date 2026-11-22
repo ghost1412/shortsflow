@@ -468,11 +468,11 @@ def parse_sources(text, limit=3):
     return [ln.strip() for ln in str(text or "").splitlines() if ln.strip()][:limit]
 
 
-CASE_BACKGROUNDS = {"Stock video": "footage", "Stock photos": "images", "Style only (no pictures)": "none", "My own image or video": "file"}
+CASE_BACKGROUNDS = {"Stock video": "footage", "Stock photos": "images", "Cartoon pictures": "cartoon", "Style only (no pictures)": "none", "My own image or video": "file"}
 
 
 def case_args(topic, sources_text="", template="case", theme="dark", formats=("16:9", "9:16"), no_manim=False, no_footage=False, session_dir=None,
-              background="footage", background_file=None, resume=None, draft=False, plan_only=False, layouts="auto", avatar="off", transition="number", narrator="standard", voice_sample=None):
+              background="footage", background_file=None, resume=None, draft=False, plan_only=False, layouts="auto", avatar="off", transition="number", narrator="standard", voice_sample=None, cartoon="auto"):
     """Command-line arguments for a case explainer (--mode CASE). The options travel as `--case KEY=VALUE` pairs built from the shared schema
     (engine/case_options.py). Raises ValueError with a plain message when the topic is empty."""
     topic = (topic or "").strip()
@@ -497,6 +497,8 @@ def case_args(topic, sources_text="", template="case", theme="dark", formats=("1
         values["background"] = str(background_file)
     elif background in _case_options.BACKGROUND_KINDS:
         values["background"] = background
+    if background == "cartoon" and cartoon in _case_options.CARTOON_SOURCES and cartoon != "auto":
+        values["cartoon"] = cartoon
     args = ["--mode", "CASE", *(["--prompt", topic] if topic else []), "--skip_upload"]
     for pair in _case_options.to_pairs(values):
         args += ["--case", pair]

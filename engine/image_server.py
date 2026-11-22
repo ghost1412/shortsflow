@@ -1,0 +1,209 @@
+"""Optional local picture server for `--case background=cartoon` (a Stable Diffusion XL model, run on this PC's graphics card).
+
+An add-on: nothing here runs unless it was installed with `python -m engine.image_server install` (or the "Set up" button on the Case card). That
+builds a private Python 3.10-3.12 environment with PyTorch and diffusers in one folder, `~/.shortsflow/image_server` (or SHORTSFLOW_IMAGE_SERVER),
+apart from ShortsFlow's own packages: about 2.5 GB of PyTorch plus about 7 GB of model files. The server listens on 127.0.0.1 only (default port
+8081), so the picture requests never leave this PC. The model is SDXL base 1.0 (an open licence that allows commercial use); another one can be
+named in SHORTSFLOW_IMAGE_MODEL. It runs with CPU offload so it fits an 8 GB card, and the case pipeline stops it again as soon as the pictures are made.
+
+    python -m engine.image_server install | start | stop | status
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+
+from engine import voice_server as _vs
+
+DEFAULT_PORT = 8081
+MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
+TORCH = ["torch==2.6.0", "--index-url", "https://download.pytorch.org/whl/cu124"]
+PACKAGES = ["diffusers", "transformers", "accelerate", "safetensors", "sentencepiece", "pillow"]
+
+SERVER_SOURCE = r'''
+import io, json, os, sys, threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 8081
+MODEL_ID = os.environ.get("SHORTSFLOW_IMAGE_MODEL") or "stabilityai/stable-diffusion-xl-base-1.0"
+LOCK = threading.Lock()
+PIPE = {}
+
+
+def pipe():
+    if "p" not in PIPE:
+        import torch
+        from diffusers import AutoPipelineForText2Image
+        print("loading the picture model", MODEL_ID, flush=True)
+        p = AutoPipelineForText2Image.from_pretrained(MODEL_ID, torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
+        if torch.cuda.is_available():
+            p.enable_model_cpu_offload()
+            p.enable_vae_tiling()
+        PIPE["p"] = p
+    return PIPE["p"]
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def _send(self, code, body, kind="application/json"):
+        self.send_response(code)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        self._send(200, json.dumps({"ok": True, "loaded": "p" in PIPE}).encode())
+
+    def do_POST(self):
+        try:
+            data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+            prompt = (data.get("prompt") or "").strip()
+            if not prompt:
+                return self._send(400, b'{"error": "no prompt"}')
+            w = max(256, min(1344, int(data.get("width", 1024)) // 8 * 8))
+            h = max(256, min(1344, int(data.get("height", 576)) // 8 * 8))
+            with LOCK:
+                image = pipe()(prompt=prompt, negative_prompt="text, letters, watermark, photo, realistic, blurry, deformed, extra limbs",
+                               width=w, height=h, num_inference_steps=int(data.get("steps", 25)), guidance_scale=6.0).images[0]
+            buf = io.BytesIO()
+            image.save(buf, format="PNG")
+            self._send(200, buf.getvalue(), "image/png")
+        except Exception as e:
+            self._send(500, json.dumps({"error": str(e)}).encode())
+
+
+if __name__ == "__main__":
+    if "--check" in sys.argv:
+        pipe()
+        print("model ready", flush=True)
+        sys.exit(0)
+    print("picture server on 127.0.0.1:%d" % PORT, flush=True)
+    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+'''
+
+
+def home():
+    return os.environ.get("SHORTSFLOW_IMAGE_SERVER") or os.path.join(os.path.expanduser("~"), ".shortsflow", "image_server")
+
+
+def paths(base=None):
+    return _vs.paths(base or home())
+
+
+def installed(base=None):
+    return _vs.installed(base or home())
+
+
+def base_url(port=DEFAULT_PORT):
+    return f"http://127.0.0.1:{port}"
+
+
+def is_running(port=DEFAULT_PORT):
+    return _vs.running(port)
+
+
+def status(base=None, port=DEFAULT_PORT):
+    """(installed, running, one plain sentence)."""
+    inst, run = installed(base), is_running(port)
+    if run:
+        return inst, True, f"The picture server is running on this PC (port {port})."
+    if inst:
+        return True, False, "Installed, not running. It starts by itself for the cartoon pictures and stops when they are made."
+    return False, False, "Not installed. Press 'Set up' once: about 10 GB of downloads (PyTorch and the picture model), then it runs locally."
+
+
+def install(base=None, log=print):
+    p = paths(base)
+    if installed(base):
+        log(f"[Log] Already installed in {p['base']}.")
+        return p
+    py = _vs._find_python()
+    if not py:
+        raise RuntimeError("The picture server needs Python 3.10, 3.11 or 3.12 next to your Python (install it from python.org).")
+    os.makedirs(p["base"], exist_ok=True)
+    if not os.path.isfile(p["python"]):
+        _vs._run(py + ["-m", "venv", os.path.join(p["base"], "env")], log)
+    log("[Log] Installing PyTorch (about 2.5 GB)...")
+    _vs._run([p["python"], "-m", "pip", "install", "--upgrade", "pip"], log)
+    _vs._run([p["python"], "-m", "pip", "install", *TORCH], log)
+    log("[Log] Installing diffusers...")
+    _vs._run([p["python"], "-m", "pip", "install", *PACKAGES], log)
+    with open(p["server"], "w", encoding="utf-8") as f:
+        f.write(SERVER_SOURCE)
+    log("[Log] Downloading and loading the picture model (about 7 GB) to check it works...")
+    _vs._run([p["python"], p["server"], "--check"], log)
+    with open(p["ready"], "w", encoding="utf-8") as f:
+        f.write("ok")
+    log(f"[Success] The picture server is installed in {p['base']}.")
+    return p
+
+
+def start(base=None, port=DEFAULT_PORT, log=print):
+    """Start the server in the background. Returns its url."""
+    if is_running(port):
+        return base_url(port)
+    if not installed(base):
+        raise RuntimeError("The picture server is not installed. Press 'Set up' on the Case card, or run `python -m engine.image_server install`.")
+    p = paths(base)
+    try:
+        with open(p["server"], "r", encoding="utf-8") as f:
+            current = f.read()
+        if current != SERVER_SOURCE:
+            with open(p["server"], "w", encoding="utf-8") as f:
+                f.write(SERVER_SOURCE)
+    except OSError:
+        pass
+    flags = (subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS) if os.name == "nt" else 0
+    with open(p["log"], "ab") as out:
+        proc = subprocess.Popen([p["python"], p["server"], str(port)], stdout=out, stderr=subprocess.STDOUT, creationflags=flags,
+                                **({"start_new_session": True} if os.name != "nt" else {}))
+    with open(p["pid"], "w", encoding="utf-8") as f:
+        f.write(str(proc.pid))
+    log("[Log] Starting the picture server...")
+    for _ in range(60):
+        if is_running(port):
+            return base_url(port)
+        if proc.poll() is not None:
+            raise RuntimeError(f"The picture server stopped at start-up. See {p['log']}.")
+        time.sleep(1)
+    raise RuntimeError(f"The picture server did not answer in time. See {p['log']}.")
+
+
+def stop(base=None):
+    """Stop the server this module started (the exact process in its pid file). True when one was stopped."""
+    return _vs.stop(base or home())
+
+
+def ensure_running(port=DEFAULT_PORT, log=print):
+    """(url, started_by_us) when the add-on is installed (started if needed), (None, False) otherwise."""
+    if is_running(port):
+        return base_url(port), False
+    if installed():
+        return start(port=port, log=log), True
+    return None, False
+
+
+def main(argv=None):
+    argv = argv if argv is not None else sys.argv[1:]
+    cmd = argv[0] if argv else "status"
+    try:
+        if cmd == "install":
+            install()
+        elif cmd == "start":
+            print(f"[Success] Running at {start()}")
+        elif cmd == "stop":
+            print("[Success] Stopped." if stop() else "[Log] Nothing of ours was running.")
+        else:
+            print(json.dumps(dict(zip(("installed", "running", "message"), status())), indent=2))
+    except RuntimeError as e:
+        print(f"[Error] {e}")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

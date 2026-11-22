@@ -4,6 +4,9 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: **cartoon pictures** (`--case background=cartoon`, "Cartoon pictures" on the Case card): one flat, friendly illustration per beat instead of stock footage. `--case cartoon=auto|local|cloud|drawn` picks who draws: `local` (an optional picture add-on on this PC, SDXL on the graphics card, `python -m engine.image_server install`, about 10 GB, nothing leaves the PC), `cloud` (Gemini images, else Hugging Face, with your keys; only the beat's two-to-four word phrase is sent), `drawn` (the text model writes a simple SVG scene: no download, no GPU). `auto` tries them in that order; list ways to keep others off (`cartoon=local,drawn` never uses the cloud) or `cartoon=off`. Pictures are cached, and a beat nothing can draw keeps the look's own background.
+- Voice-over and narration: text in any language is no longer stripped before it reaches the voice (a Hindi script arrived empty); `--voiceover language=hi` and the other languages of the multilingual voice model work.
+
 ## 0.9.3 (2026-11-21)
 
 **Highlights:** presenters for the case explainer (ten drawn hosts with their own voices, your own built in the app, or an optional real face that talks); expressive narration through a local voice server, in each section's mood and optionally in your own voice; a Voice-over tab; multi-speaker dubbing; a choice of transitions; larger sequence diagrams; and hooks that are never lost.

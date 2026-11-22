@@ -13,7 +13,8 @@ from engine.mode_options import Option, OptionError, OptionSet
 THEMES = ("dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight")
 TEMPLATES = ("case", "postmortem", "history", "explainer", "recipe", "news", "animation")
 SHAPES = ("16:9", "9:16", "1:1", "4:5")
-BACKGROUND_KINDS = ("footage", "images", "none")
+BACKGROUND_KINDS = ("footage", "images", "cartoon", "none")
+CARTOON_SOURCES = ("auto", "local", "cloud", "drawn")
 TRANSITIONS = ("number", "fade", "slide", "zoom", "wipe", "cut")
 
 
@@ -29,6 +30,17 @@ def _background(raw):
     if raw in BACKGROUND_KINDS or os.path.isfile(raw.strip('"')):
         return raw.strip('"')
     raise OptionError(f"'background' must be {', '.join(BACKGROUND_KINDS)}, or the path of an existing image or video file (got '{raw}').")
+
+
+def _cartoon(raw):
+    """auto, off, or an ordered list of ways (local, cloud, drawn): a way left out is never used."""
+    raw = raw.strip().lower()
+    if raw in ("auto", "off"):
+        return raw
+    ways = [w.strip() for w in raw.split(",") if w.strip()]
+    if not ways or any(w not in CARTOON_SOURCES[1:] for w in ways):
+        raise OptionError(f"'cartoon' must be auto, off, or ways in the order to try, comma separated, from: {', '.join(CARTOON_SOURCES[1:])} (got '{raw}').")
+    return ",".join(dict.fromkeys(ways))
 
 
 def _voice_sample(raw):
@@ -51,8 +63,12 @@ OPTIONS = (
     Option("template", "text", "case", "the sections of the video: " + ", ".join(TEMPLATES) + ", or the path of a JSON file of {id, title, question, scene}"),
     Option("theme", "choice", "dark", "the whole look", THEMES),
     Option("formats", "text", "16:9,9:16", "video shapes to make, comma separated (" + ", ".join(SHAPES) + ")", check=_formats),
-    Option("background", "text", "footage", "what is behind the scenes: footage (stock video), images (stock photos), none (the look's own background), "
+    Option("background", "text", "footage", "what is behind the scenes: footage (stock video), images (stock photos), cartoon (an illustration per beat, see cartoon=), none (the look's own background), "
            "or the path of your own image or video", check=_background),
+    Option("cartoon", "text", "auto", "with background=cartoon, who draws the pictures: auto (the picture add-on on this PC if installed, else Gemini or "
+           "Hugging Face with your keys, else the text model drawing simple SVG scenes), one or more of local (the add-on: private), cloud (only the beat's "
+           "two-to-four word phrase is sent) and drawn (SVG by the text model: no download, no GPU) in the order to try, e.g. local,drawn to never use the "
+           "cloud, or off for no pictures (the look's own background)", check=_cartoon),
     Option("narrator", "choice", "standard", "who speaks the narration: standard (ElevenLabs with credits, else the free Edge voice), or voice_server: the "
            "local voice server (Chatterbox, set up on the Voice-over card) if it is running, each section in its mood and in the presenter's voice; "
            "it uses the GPU while it speaks", ("standard", "voice_server")),
