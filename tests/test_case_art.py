@@ -1,0 +1,123 @@
+"""The explaining pictures (engine/art_kit.py, engine/case_art.py): the icon kit, the scene spec check, badge positions, caching, fallbacks."""
+import json
+import xml.etree.ElementTree as ET
+
+from engine import art_kit as kit, case_art as art
+
+SPEC = {"setting": "night", "layout": "row", "items": [{"kind": "hacker", "color": "red"}, {"kind": "server", "color": "blue", "mark": "warning"},
+                                                        {"kind": "database", "color": "teal", "mark": "cross", "many": True}], "links": [[1, 2], [2, 3]]}
+SECTION = {"title": "What happened", "narration": "An attacker hit a server.", "on_screen": ["Attacker", "Server", "Stolen data"]}
+
+
+def test_every_icon_is_valid_svg_in_every_colour_and_mood():
+    for name, fn in kit.ICONS.items():
+        for color in kit.COLORS.values():
+            for mood in kit.MOODS:
+                ET.fromstring(f'<svg xmlns="http://www.w3.org/2000/svg">{fn(color, mood)}</svg>')
+    assert set(kit.HELP) == set(kit.ICONS) and all(m in kit.ICONS for m in kit.MARKS)
+
+
+def test_compose_gives_valid_svg_and_one_badge_inside_the_picture_per_item():
+    for aspect in ("16:9", "1:1"):
+        for n in (2, 3, 4):
+            for layout in kit.LAYOUTS:
+                spec = {"setting": "city", "layout": layout, "items": [{"kind": "cloud", "color": "blue"}] * n, "links": [{"from": 1, "to": 2}]}
+                svg, points = kit.compose(spec, aspect)
+                ET.fromstring(svg)
+                assert len(points) == n and all(0 <= x <= 100 and 0 <= y <= 100 for x, y in points)
+                assert len(set(points)) == n                         # no two badges on the same spot
+
+
+def test_badges_never_overlap_each_other():
+    for aspect in ("16:9", "1:1"):
+        for n in (2, 3, 4):
+            _, points = kit.compose({"items": [{"kind": "gear", "color": "blue"}] * n}, aspect)
+            for i in range(n):
+                for j in range(i + 1, n):
+                    assert abs(points[i][0] - points[j][0]) > 10 or abs(points[i][1] - points[j][1]) > 10
+
+
+def test_check_spec_accepts_a_good_reply_and_repairs_small_things():
+    spec, problem = art.check_spec(json.dumps(SPEC), 3)
+    assert spec and not problem and spec["items"][2]["many"] and spec["links"][0] == {"from": 1, "to": 2, "dashed": False}
+    odd = {"setting": "moon", "layout": "triangle", "items": [{"kind": "Attacker", "color": "chartreuse", "mood": "furious"}, {"kind": "padlock"}], "links": [[1, 1], [1, 9], [2, 1]]}
+    spec, _ = art.check_spec("Here you go:\n" + json.dumps(odd), 2)
+    assert spec["items"][0]["kind"] == "hacker" and spec["items"][0]["color"] in kit.COLORS and "mood" not in spec["items"][0]
+    assert spec["items"][1]["kind"] == "lock" and spec["setting"] == "office" and spec["layout"] == "row"      # triangle needs exactly 3 items
+    assert spec["links"] == [{"from": 2, "to": 1, "dashed": False}]
+
+
+def test_check_spec_names_the_problem():
+    assert art.check_spec("no json", 3)[0] is None
+    spec, problem = art.check_spec(json.dumps({"items": [{"kind": "server"}]}), 3)
+    assert spec is None and "1 items" in problem
+    spec, problem = art.check_spec(json.dumps({"items": [{"kind": "unicorn"}, {"kind": "server"}]}), 2)
+    assert spec is None and "unicorn" in problem
+
+
+def test_check_spec_reads_a_wrapped_reply():
+    assert art.check_spec(json.dumps({"picture": SPEC}), 3)[0]["items"][0]["kind"] == "hacker"
+
+
+def test_make_retries_once_with_the_problem_and_caches(tmp_path):
+    calls = []
+
+    def ask(prompt):
+        calls.append(prompt)
+        return "nonsense" if len(calls) == 1 else json.dumps(SPEC)
+    got = art.make(SECTION, "Topic", "16:9", ask, str(tmp_path))
+    assert got and len(calls) == 2 and "could not be used" in calls[1]
+    assert list(got["points"]) == SECTION["on_screen"] and all(len(v) == 2 for v in got["points"].values())
+    assert art.make(SECTION, "Topic", "16:9", lambda p: 1 / 0, str(tmp_path))["points"] == got["points"]       # cached: the model is not asked again
+    assert art.make(SECTION, "Topic", "9:16", lambda p: json.dumps(SPEC), str(tmp_path))["path"] != got["path"]  # another shape, another picture
+
+
+def test_make_gives_up_after_two_bad_answers_and_with_too_few_labels(tmp_path):
+    assert art.make(SECTION, "T", "16:9", lambda p: "nope", str(tmp_path)) is None
+    assert art.make(dict(SECTION, on_screen=["Only one"]), "T", "16:9", lambda p: json.dumps(SPEC), str(tmp_path)) is None
+
+
+def test_attach_only_draws_illustration_sections_and_only_when_drawn_is_allowed(tmp_path):
+    script = {"title": "T", "sections": [dict(SECTION, scene="illustration"), dict(SECTION, scene="checklist")]}
+    ask = lambda p: json.dumps(SPEC)
+    out = art.attach(script, str(tmp_path), "16:9", "auto", ask, cache_dir=str(tmp_path))
+    assert out[0] and out[1] is None
+    assert art.attach(script, str(tmp_path), "16:9", "cloud", ask, cache_dir=str(tmp_path)) == [None, None]
+    assert art.attach(script, str(tmp_path), "16:9", "off", ask, cache_dir=str(tmp_path)) == [None, None]
+
+
+def test_build_props_puts_art_on_the_section_and_falls_back_to_a_checklist():
+    from engine import case_render as cr
+    script = {"title": "T", "sections": [dict(SECTION, id="a", scene="illustration"), dict(SECTION, id="b", scene="illustration")], "sources": []}
+    pic = {"path": "x.svg", "points": {"Attacker": (10.0, 20.0), "Server": (40.0, 20.0), "Stolen data": (70.0, 20.0)}}
+    props = cr.build_props(script, [(0, 5), (5, 10)], [[], []], art=[pic, None])
+    first, second = props["sections"]
+    assert first["scene"] == "illustration" and first["art"]["src"] == "x.svg" and len(first["art"]["points"]) == len(first["labels"]) == 3
+    assert second["scene"] == "checklist" and "art" not in second
+    by_label = dict(zip(first["labels"], first["art"]["points"]))
+    assert by_label["Server"] == {"x": 40.0, "y": 20.0}                       # a badge stays with its label even when the labels are reordered
+
+
+def test_layers_are_separate_transparent_pictures_that_add_up_to_the_scene():
+    checked, _ = art.check_spec(json.dumps(SPEC), 3)
+    layered = kit.compose_layers(checked, "16:9")
+    for svg in [layered["background"], *layered["items"], *(l["svg"] for l in layered["links"])]:
+        ET.fromstring(svg)
+    assert len(layered["items"]) == 3 and len(layered["links"]) == 2 and len(layered["centres"]) == 3
+    assert "<rect" not in layered["items"][0].split("<g", 1)[0]           # an item layer has no background of its own
+    whole, badges = kit.compose(checked, "16:9")
+    assert badges == layered["badges"] and whole.count("<g transform") >= 3
+
+
+def test_make_writes_layer_files_and_build_props_keeps_them_with_their_labels(tmp_path):
+    from engine import case_render as cr
+    got = art.make(SECTION, "T", "16:9", lambda p: json.dumps(SPEC), str(tmp_path))
+    assert list(got["items"]) == SECTION["on_screen"] and [(l["from"], l["to"]) for l in got["links"]] == [("Attacker", "Server"), ("Server", "Stolen data")]
+    assert all(__import__("os").path.isfile(p) for p in [got["path"], *got["items"].values(), *(l["path"] for l in got["links"])])
+    script = {"title": "T", "sections": [dict(SECTION, id="a", scene="illustration")], "sources": []}
+    props = cr.build_props(script, [(0, 5)], [[]], art=[got])
+    pic = props["sections"][0]["art"]
+    labels = props["sections"][0]["labels"]
+    assert len(pic["items"]) == 3 and len(pic["links"]) == 2
+    assert [labels[l["from"]] for l in pic["links"]] == ["Attacker", "Server"] and [labels[l["to"]] for l in pic["links"]] == ["Server", "Stolen data"]
+    assert pic["items"][labels.index("Server")]["src"] == got["items"]["Server"]

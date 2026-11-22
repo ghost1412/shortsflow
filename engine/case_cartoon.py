@@ -33,6 +33,8 @@ def prompt_for(phrase):
 
 def shape_of(aspect):
     """(width, height) of the picture for a video shape; local models like multiples of 64."""
+    if aspect == "1:1":
+        return (768, 768)
     return (576, 1024) if aspect == "9:16" else (1024, 576)
 
 

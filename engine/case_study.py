@@ -11,13 +11,17 @@ import re
 
 MAX_COUNTERS = 4         # counter cards that fit a portrait frame above the caption
 MAX_CHECKLIST = 3        # checklist rows that fit above the caption bar
-SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation", "diagram")
+SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation", "diagram", "illustration")
 # the layouts the model may choose from by itself (terminal and formula only when a template asks for them: they suit few topics)
-AUTO_LAYOUTS = ("timeline", "flow", "counters", "checklist", "quote", "compare", "chart", "diagram")
+AUTO_LAYOUTS = ("timeline", "flow", "counters", "checklist", "quote", "compare", "chart", "diagram", "illustration")
+MAX_ILLUSTRATION = 4     # things in an explaining picture that stay clear of each other
 LAYOUT_HELP = {
     "timeline": "events in order of time; labels are short dated events",
     "flow": "the steps of one mechanism, one after another; labels are the steps",
     "diagram": "how things connect or happen when a plain row of steps is not enough: a process with branches, who talks to whom, states over time, how ideas relate; write Mermaid source in the section's \"diagram\" field (the on_screen labels are then only a fallback)",
+    "illustration": "a drawn picture that explains the idea as a small scene (a story, a cause and its effect, who did what to whom, how something looks from the inside); "
+                    "labels are two to four SHORT NAMES of things that appear in that scene (like 'Attacker', 'Mail server', 'Stolen data'): each becomes a numbered "
+                    "marker on the picture. Use it for the human or physical story of a section, not for numbers or step lists",
     "counters": "two to four big numbers; labels are 'number and what it counts', like '300,000 computers'",
     "checklist": "actions or conclusions; labels are short imperative lines",
     "compare": "two things side by side (before and after, A and B); each label is 'left | right', and the FIRST label holds the two headings like 'Before | After'",
@@ -334,6 +338,8 @@ def spell_powers(label):
 def fit_layout(scene, labels, previous=None):
     """Counters show big numbers: with fewer than two labels that start with a number (or hold a short figure) the cards would be long sentences
     crowding each other, so the section becomes a checklist (a timeline when the section before is one)."""
+    if scene == "illustration":
+        return scene if len([x for x in labels if str(x).strip()]) >= 2 else "checklist"     # a picture needs at least two things to mark
     if scene != "counters":
         return scene
     leads = [re.match(r"\s*([$€£]?)(\d[\d,]*(?:\.\d+)?)\s*(%|[a-zA-Z]+)?", x) for x in labels]
@@ -472,6 +478,8 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
         previous = scene
         if scene == "counters":
             labels = labels[:MAX_COUNTERS]
+        if scene == "illustration":
+            labels = labels[:MAX_ILLUSTRATION]
         if scene == "checklist":
             labels = labels[:MAX_CHECKLIST]       # more rows run into the caption bar
         mood = str(row.get("mood") or "").strip().lower()

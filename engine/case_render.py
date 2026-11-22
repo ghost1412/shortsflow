@@ -209,14 +209,20 @@ def source_label(ref):
 
 
 def build_props(script, timing, words_per_section, theme="dark", accent=None, intro=1.8, outro=2.5, audio_url=None, music_url=None,
-                music_volume=0.12, captions=True, clips=None, footage=None, portrait=False, avatar=None, transition="number"):
+                music_volume=0.12, captions=True, clips=None, footage=None, portrait=False, avatar=None, transition="number", art=None):
     """The CaseVideo props: sections with their times, every word shifted to where its section starts. `clips` (from attach_clips)
     puts a rendered animation on a section."""
     sections, words = [], []
     clips = clips or [None] * len(script["sections"])
     footage = footage or [None] * len(script["sections"])
-    for sec, (start, end), ws, clip, foot in zip(script["sections"], timing, words_per_section, clips, footage):
+    art = art or [None] * len(script["sections"])
+    for sec, (start, end), ws, clip, foot, pic in zip(script["sections"], timing, words_per_section, clips, footage, art):
         labels, cues = list(sec.get("on_screen") or []), None
+        if sec["scene"] == "illustration" and not pic:      # its picture could not be made: the plain checklist shows the labels
+            sec = dict(sec, scene="checklist")
+            labels = labels[:3]
+        if sec["scene"] == "illustration":
+            labels = [x for x in labels if x in pic["points"]]
         if sec["scene"] == "timeline":                     # events in the order of time, whatever order the narrator mentions them in
             cues = even_cues(len(labels), end - start)
         elif sec["scene"] in ORDERED_SCENES:               # a heading row, a ranking or a main line: the authored order is part of the meaning
@@ -226,6 +232,12 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
         else:
             labels, cues = spoken_order(labels, ws, duration=end - start)
         sections.append({"title": sec["title"], "scene": sec["scene"], "labels": labels, "cues": cues, "start": start, "end": end})
+        if pic and sec["scene"] == "illustration":
+            sections[-1]["art"] = {"src": pic["path"], "points": [{"x": pic["points"][x][0], "y": pic["points"][x][1]} for x in labels]}   # one badge per label, in label order
+            if pic.get("items"):                              # the picture in layers: one per icon (with its centre) and one per arrow, each shown when its label is spoken
+                sections[-1]["art"]["items"] = [{"src": pic["items"][x], "cx": pic["centres"][x][0], "cy": pic["centres"][x][1]} for x in labels]
+                sections[-1]["art"]["links"] = [{"src": l["path"], "from": labels.index(l["from"]), "to": labels.index(l["to"])}
+                                                for l in pic.get("links", []) if l["from"] in labels and l["to"] in labels]
         by_id = {s["id"]: s["ref"] for s in script.get("sources", [])}
         cited = [by_id[c] for c in sec.get("cites") or [] if c in by_id] or (list(by_id.values()) if script.get("verified") else [])
         sections[-1]["sourceLabels"] = list(dict.fromkeys(source_label(r) for r in cited))[:2]
@@ -455,6 +467,12 @@ def attach_images(script, session_dir, aspect="16:9", fetch=None, cache_dir=None
     return out
 
 
+def attach_art(script, session_dir, aspect, source, ask):
+    """[None | {"path", "points"}] per section: the explaining picture of each `illustration` section (see engine.case_art)."""
+    from engine import case_art
+    return case_art.attach(script, session_dir, aspect, source, ask)
+
+
 def user_background(script, path, probe=None):
     """The same background for every section: the user's own image or video. Returns the per-section list, or None when `path` is not
     a readable image or video file."""
@@ -559,6 +577,15 @@ def render_case(props, audio_path, output_path, music_path=None, aspect="16:9", 
                 s["clip"] = copy_to_public(s["clip"], assets) or None
                 if not s["clip"]:
                     s.pop("clip")
+            if s.get("art"):
+                rel = copy_to_public(s["art"]["src"], assets)
+                for layer in [*s["art"].get("items", []), *s["art"].get("links", [])] if rel else []:
+                    layer["src"] = copy_to_public(layer["src"], assets) or rel      # a layer that cannot be staged is replaced by the (harmless) background
+                if rel:
+                    s["art"]["src"] = rel
+                else:                                       # the picture cannot be staged: the labels show as a plain checklist
+                    s.pop("art")
+                    s["scene"], s["labels"] = "checklist", s["labels"][:3]
             if s.get("footage"):
                 kept = []
                 for f in s["footage"]:

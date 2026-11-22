@@ -222,7 +222,9 @@ def run(args, target_bitrate=None, target_preset=None):
             sys.exit(1)
         footage = cr.backgrounds_for(script, session_dir, aspect, choice, has_pexels=bool(os.getenv("PEXELS_API_KEY")),
                                      cartoon=opts["cartoon"], ask=ask_code)
-        props = cr.build_props(script, timing, words, theme=theme, music_volume=0.2, clips=clips, footage=footage, portrait=portrait, avatar=avatar, transition=opts["transition"])
+        from engine.case_llm import make_ask as _make_ask
+        art = cr.attach_art(script, session_dir, aspect, opts["cartoon"], _make_ask("You are an illustrator who draws flat SVG pictures.", opts["llm"]))
+        props = cr.build_props(script, timing, words, theme=theme, music_volume=0.2, clips=clips, footage=footage, portrait=portrait, avatar=avatar, transition=opts["transition"], art=art)
         voice_track = cr.join_audio(audios, timing, os.path.join(session_dir, f"voice_all_{tag}.mp3"),
                                     sfx=cr.sfx_for(props, os.path.join(session_dir, f"sfx_{tag}.wav")))
         if avatar and avatar["kind"] == "photo":

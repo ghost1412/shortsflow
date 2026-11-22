@@ -9,7 +9,7 @@ import { Presenter, PresenterRoom, avatarSchema, presenterRect, usePresenterRoom
 
 export const CASE_THEMES = ["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"] as const;
 export const CASE_TRANSITIONS = ["number", "fade", "slide", "zoom", "wipe", "cut"] as const;   // how one section gives way to the next
-export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation", "diagram"] as const;
+export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation", "diagram", "illustration"] as const;
 
 export const caseVideoSchema = z.object({
   title: z.string().default("Explainer"),
@@ -34,6 +34,9 @@ export const caseVideoSchema = z.object({
     beats: z.array(z.tuple([z.number(), z.number()])).default([]),                       // seconds after the section starts: a new picture at each
     clip: z.string().optional(),                // a rendered animation (Manim) drawn for this section, shown instead of the plain scene
     diagram: z.string().optional(),             // Mermaid source (any diagram type), drawn by Mermaid's own layout and revealed step by step
+    art: z.object({ src: z.string(), points: z.array(z.object({ x: z.number(), y: z.number() })).default([]),
+      items: z.array(z.object({ src: z.string(), cx: z.number(), cy: z.number() })).optional(),                // one picture per icon (centre in percent), brought in when its label is spoken
+      links: z.array(z.object({ src: z.string(), from: z.number(), to: z.number() })).optional() }).optional(),   // the arrows, shown once both ends are in   // the explaining picture of an illustration section; one point (percent of the picture) per label
     clipRate: z.number().default(1),
     clipAspect: z.number().default(16 / 9),     // width / height of the clip: older clips are 16:9, the landscape panel clips are wider
     cues: z.array(z.number()).default([]),     // seconds after the section starts at which each label is spoken
@@ -415,6 +418,61 @@ const Terminal: React.FC<SceneProps> = ({ labels, cues, accent, frames }) => {
   );
 };
 
+// A drawn picture that explains the section: numbered badges sit on it at the places the labels refer to, and the numbered labels stand beside it (below it in a
+// tall frame). Each badge and label comes in when the narrator reaches it, and the one being told is lit. The words are drawn here, never inside the picture.
+const Illustration: React.FC<SceneProps & { art: { src: string; points: { x: number; y: number }[]; items?: { src: string; cx: number; cy: number }[]; links?: { src: string; from: number; to: number }[] } }> = ({ labels, cues, p, accent, frames, art }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const { u, portrait } = useUnit();
+  const at = cueFrames(labels.length, cues, frames, fps);
+  const act = activeIndex(frame, at);
+  const intro = enter(frame, 0, fps);
+  const artW = (portrait ? 880 : 1120) * u, artH = (portrait ? 880 : 560) * u;
+  const longest = Math.max(0, ...labels.map((l) => l.length));
+  const fs = (portrait ? (longest > 30 ? 34 : 40) : longest > 30 ? 38 : 44) * u;
+  const badge = (n: number, on: boolean, size: number) => (
+    <div style={{ width: size, height: size, borderRadius: "50%", background: accent, color: "#04121f", border: `${4 * u}px solid #ffffff`, display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: FONT, fontWeight: 800, fontSize: size * 0.52, boxShadow: on ? `0 0 0 ${10 * u}px ${accent}55, 0 ${6 * u}px ${20 * u}px rgba(0,0,0,0.45)` : `0 ${6 * u}px ${18 * u}px rgba(0,0,0,0.4)`, flexShrink: 0 }}>{n}</div>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: portrait ? "column" : "row", alignItems: "center", gap: 40 * u }}>
+      <div style={{ position: "relative", width: artW, height: artH, borderRadius: 28 * u, overflow: "hidden", border: `3px solid ${accent}88`, background: "#ffffff", boxShadow: `0 0 ${60 * u}px ${accent}33, 0 ${16 * u}px ${40 * u}px rgba(0,0,0,0.4)`, opacity: intro, transform: `scale(${0.96 + 0.04 * intro})` }}>
+        <Img src={asset(art.src)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        {(art.links ?? []).map((l, i) => {
+          const t = enter(frame, Math.max(at[l.from] ?? 0, at[l.to] ?? 0) + 6, fps);
+          return <Img key={"l" + i} src={asset(l.src)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: Math.min(1, t * 1.5), transform: `translateX(${(1 - t) * -24 * u}px)` }} />;
+        })}
+        {(art.items ?? []).map((it, i) => {
+          const pop = spring({ frame: frame - (at[i] ?? 0), fps, config: { damping: 9, stiffness: 140, mass: 0.8 } });      // a little overshoot: the icon pops in
+          const bob = frame >= (at[i] ?? 0) ? Math.sin((frame / fps) * 2.2 + i * 1.7) * 4 * u : 0;                          // then floats gently
+          return <Img key={"i" + i} src={asset(it.src)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: Math.min(1, pop * 2.5), transformOrigin: `${it.cx}% ${it.cy}%`, transform: `translateY(${bob}px) scale(${0.35 + 0.65 * pop})` }} />;
+        })}
+        {labels.map((_, i) => {
+          const t = enter(frame, at[i], fps);
+          const pt = art.points[i] ?? { x: 50, y: 50 };
+          return (
+            <div key={i} style={{ position: "absolute", left: `${pt.x}%`, top: `${pt.y}%`, transform: `translate(-50%, -50%) scale(${0.3 + 0.7 * t})`, opacity: t }}>
+              {badge(i + 1, i === act, 62 * u)}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 * u, width: portrait ? artW : 640 * u }}>
+        {labels.map((l, i) => {
+          const t = enter(frame, at[i], fps);
+          const on = i === act;
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 24 * u, background: p.card, backdropFilter: p.blur, border: `${on ? 3 : 1}px solid ${on ? accent : p.line}`, borderRadius: 20 * u, padding: `${18 * u}px ${26 * u}px`, opacity: t, transform: `translateX(${(1 - t) * 50 * u}px)` }}>
+              {badge(i + 1, on, 54 * u)}
+              <div style={{ fontFamily: FONT, fontSize: fs, fontWeight: 600, color: p.text, lineHeight: 1.15 }}>{l}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const Quote: React.FC<SceneProps> = ({ labels, cues, p, accent, frames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -739,7 +797,7 @@ const MermaidDiagram: React.FC<{ code: string; p: Pal; accent: string; frames: n
   );
 };
 
-const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation, compare: Compare, chart: Chart, animation: Quote, diagram: Quote } as const;
+const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation, compare: Compare, chart: Chart, animation: Quote, diagram: Quote, illustration: Checklist } as const;
 
 // one beat of stock footage: it punches in with a flash, drifts to one side, and repeats when the clip is shorter than the beat
 const BeatFootage: React.FC<{ src: string; seconds: number; kind?: "video" | "image" | "cartoon"; index: number; frames: number; start: number; opacity: number }> = ({ src, seconds, kind, index, frames, start, opacity }) => {
@@ -793,7 +851,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
   const underline = interpolate(frame, [4, 24], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
     <AbsoluteFill style={sectionMotion(transition, frame, frames, fade)}>
-      {footage.length > 0 && (
+      {footage.length > 0 && !(section.scene === "illustration" && section.art) && (
         <AbsoluteFill>
           {beats.map((b, i) => {
             const clip = footage[i % footage.length];
@@ -832,7 +890,9 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
               <OffthreadVideo src={asset(section.clip)} muted transparent playbackRate={section.clipRate} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
           ) : (
-            section.scene === "diagram" && section.diagram ? (
+            section.scene === "illustration" && section.art ? (
+              <AutoFit><Illustration labels={section.labels} cues={section.cues} p={p} accent={accent} frames={frames} art={section.art} /></AutoFit>
+            ) : section.scene === "diagram" && section.diagram ? (
               <MermaidDiagram code={section.diagram} p={p} accent={accent} frames={frames}
                 fallback={<AutoFit><Flow labels={section.labels.length ? section.labels : [section.title]} cues={section.cues} p={p} accent={accent} frames={frames} /></AutoFit>} />
             ) : (
