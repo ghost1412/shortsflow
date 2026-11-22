@@ -325,7 +325,7 @@ def voice_server_toggle(action):
     return voice_server.status()[2]
 
 
-def voiceover_make(script, sample, tone="neutral"):
+def voiceover_make(script, sample, tone="neutral", language="en"):
     """Voice-over tab: a script read in a clone of the voice in `sample`. Yields (status, log, audio)."""
     import time
     if not (script or "").strip():
@@ -337,7 +337,7 @@ def voiceover_make(script, sample, tone="neutral"):
     script_file = os.path.join(session, "script.txt")
     with open(script_file, "w", encoding="utf-8") as f:
         f.write(script)
-    cmd = [*_pipeline_cmd(), *web_args.voiceover_args(script_file, sample, tone, "mp3", session)]
+    cmd = [*_pipeline_cmd(), *web_args.voiceover_args(script_file, sample, tone, "mp3", session, language=language)]
     yield "Reading your script in your voice...", "", None
     log = ""
     for log, _videos in _run(cmd):
@@ -2160,13 +2160,16 @@ def build_ui():
                 vo_sample = gr.Audio(label="A recording of your voice (10-30 seconds, clean, only you)", sources=["upload", "microphone"], type="filepath")
                 vo_tone = gr.Dropdown([("Neutral", "neutral"), ("Warm", "warm"), ("Excited", "excited"), ("Calm", "calm"), ("Serious", "serious"),
                                        ("Dramatic", "dramatic"), ("Sad", "sad")], value="neutral", label="Tone")
+                vo_lang = gr.Dropdown([("English", "en"), ("Hindi", "hi"), ("Spanish", "es"), ("French", "fr"), ("German", "de"), ("Italian", "it"), ("Portuguese", "pt"),
+                                       ("Japanese", "ja"), ("Korean", "ko"), ("Chinese", "zh"), ("Arabic", "ar"), ("Russian", "ru"), ("Turkish", "tr")],
+                                      value="en", label="Language of the script", info="Other languages load a second model the first time (a minute, and more graphics memory).")
                 vo_btn = gr.Button("Read it in my voice", variant="primary")
                 vo_stop = gr.Button("⏹ Stop", variant="stop")
                 vo_status = gr.Markdown("Waiting for a script and a recording of your voice...")
                 vo_audio = gr.Audio(label="Your voice-over", interactive=False)
                 with gr.Accordion("Technical details", open=False):
                     vo_log = gr.Textbox(label="Full log", lines=10, max_lines=10, autoscroll=True)
-                vo_run = vo_btn.click(voiceover_make, [vo_script, vo_sample, vo_tone], [vo_status, vo_log, vo_audio])
+                vo_run = vo_btn.click(voiceover_make, [vo_script, vo_sample, vo_tone, vo_lang], [vo_status, vo_log, vo_audio])
                 vo_stop.click(stop_jobs, None, vo_status, cancels=[vo_run])
 
             with gr.Column(visible=False) as mode_col_dub:

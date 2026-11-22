@@ -3,6 +3,7 @@ import os
 import asyncio
 import edge_tts
 import re
+import unicodedata
 
 def clean_for_tts(text):
     """
@@ -28,6 +29,8 @@ def clean_for_tts(text):
         if ord(c) < 127:
             if c.isalnum() or c.isspace() or c in allowed_chars:
                 result.append(c)
+        elif unicodedata.category(c)[0] in "LMN" or c in "।॥。":
+            result.append(c)                   # letters of any language (Hindi, accents...), never emoji
     return "".join(result)
 
 def add_dramatic_pauses(text):
@@ -192,7 +195,7 @@ def generate_voice_voicestudio(text, output_audio="assets/voice.mp3", output_sub
             print(f"[Warning] Failed to attach voice clone sample: {e}")
 
     print(f"[Log] Generating local voice via VoiceStudio ({endpoint_url})...")
-    res = req_lib.post(endpoint_url, json=payload, timeout=60)
+    res = req_lib.post(endpoint_url, json=payload, timeout=300)   # the first call loads a model
     res.raise_for_status()
 
     os.makedirs(os.path.dirname(os.path.abspath(output_audio)), exist_ok=True)

@@ -29,6 +29,16 @@ TONES = {
 CHUNK_CHARS = 280      # a local model reads short passages better than a whole page
 
 
+LANGUAGES = ("ar", "da", "de", "el", "en", "es", "fi", "fr", "he", "hi", "it", "ja", "ko", "ms", "nl", "no", "pl", "pt", "ru", "sv", "sw", "tr", "zh")
+
+
+def _check_language(raw):
+    code = (raw or "en").strip().lower().split("-")[0] or "en"
+    if code not in LANGUAGES:
+        raise OptionError(f"'language' must be one of: {', '.join(LANGUAGES)} (got '{raw}').")
+    return code
+
+
 def _check_sample(raw):
     path = os.path.expanduser(raw.strip().strip('"'))
     if not path:
@@ -39,6 +49,8 @@ def _check_sample(raw):
 OPTIONS = OptionSet("voiceover", [
     Option("sample", "path", "", "recording of your voice to copy (.wav or .mp3, 10-30 s of clean speech, one speaker)", check=_check_sample),
     Option("tone", "choice", "neutral", "how it is read", tuple(TONES)),
+    Option("language", "text", "en", "language of the script as a code: en (default), hi, es, fr, de, it, pt, ja, ko, zh, ar, ru, tr... (23 in all)",
+           check=lambda raw: _check_language(raw)),
     Option("format", "choice", "mp3", "the audio file type", ("mp3", "wav")),
     Option("out", "path", "", "where to save it (default: the session folder)"),
     Option("server", "text", "", "address of the local voice server (default: VOICE_STUDIO_URL, else http://localhost:8080)"),
@@ -72,10 +84,10 @@ def split_script(text, limit=CHUNK_CHARS):
     return out
 
 
-def _synth_chunk(text, path, sample, tone, server):
+def _synth_chunk(text, path, sample, tone, server, language="en"):
     from engine.voice_gen import generate_voice_voicestudio
     t = TONES[tone]
-    extra = {"speed": t["speed"], "exaggeration": t["exaggeration"], "emotion": tone, "style": tone}
+    extra = {"speed": t["speed"], "exaggeration": t["exaggeration"], "emotion": tone, "style": tone, "language": language}
     if t["instructions"]:
         extra["instructions"] = t["instructions"]
     generate_voice_voicestudio(text, output_audio=path, output_subs=path + ".subs.json", clone_voice=sample,
@@ -98,7 +110,7 @@ def _join(ffmpeg, parts, out_path, speed, workdir):
     return out_path
 
 
-def make_voiceover(script, session_dir, sample, tone="neutral", fmt="mp3", out=None, server=None, synth=None, join=None):
+def make_voiceover(script, session_dir, sample, tone="neutral", fmt="mp3", out=None, server=None, synth=None, join=None, language="en"):
     """Read `script` in the voice of `sample`. Returns {"audio", "passages", "tone"}. `synth(text, path)` and `join(parts, out, speed)`
     can be replaced (tests). Raises ValueError for input problems and RuntimeError when the server fails."""
     if tone not in TONES:
@@ -112,7 +124,7 @@ def make_voiceover(script, session_dir, sample, tone="neutral", fmt="mp3", out=N
     out_path = out or os.path.join(session_dir, f"voiceover.{fmt}")
     parts_dir = os.path.join(session_dir, "voiceover_parts")
     os.makedirs(parts_dir, exist_ok=True)
-    synth = synth or (lambda text, path: _synth_chunk(text, path, sample, tone, server))
+    synth = synth or (lambda text, path: _synth_chunk(text, path, sample, tone, server, language))
     parts = []
     for i, text in enumerate(passages):
         path = os.path.join(parts_dir, f"part_{i:03d}.mp3")

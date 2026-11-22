@@ -106,3 +106,33 @@ def test_web_args_build_the_voiceover_command():
     assert "sample=me.wav" in pairs and "tone=warm" in pairs and not any(p.startswith("format=") for p in pairs)
     parsed = voiceover.OPTIONS.parse(pairs)
     assert parsed["sample"] == "me.wav" and parsed["tone"] == "warm"
+
+
+def test_language_option_reaches_the_server_and_a_bad_code_is_refused(tmp_path, monkeypatch):
+    assert voiceover.OPTIONS.parse(["language=hi-IN"])["language"] == "hi" and voiceover.OPTIONS.parse()["language"] == "en"
+    with pytest.raises(OptionError):
+        voiceover.OPTIONS.parse(["language=xx"])
+    sample = tmp_path / "me.wav"
+    sample.write_bytes(b"RIFFdata")
+    seen = {}
+
+    class Resp:
+        headers = {"content-type": "audio/wav"}
+        content = b"a" * 500
+
+        def raise_for_status(self):
+            pass
+
+    import requests
+    monkeypatch.setattr(requests, "post", lambda url, json=None, timeout=None: seen.update(body=json) or Resp())
+    voiceover._synth_chunk("hello", str(tmp_path / "p.mp3"), str(sample), "warm", None, "hi")
+    assert seen["body"]["language"] == "hi"
+    from shortsflow import web_args
+    assert "language=hi" in web_args.voiceover_args("s.txt", "me.wav", language="hi")
+
+
+def test_clean_for_tts_keeps_letters_of_any_language_and_drops_emoji():
+    from engine.voice_gen import clean_for_tts
+    out = clean_for_tts("आज हम सीखेंगे। café \U0001F600 100%")
+    assert "आज हम सीखेंगे।" in out and "café" in out and "100%" in out
+    assert "\U0001F600" not in out

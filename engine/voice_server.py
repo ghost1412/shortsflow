@@ -28,13 +28,25 @@ LOCK = threading.Lock()
 MODEL = {}
 
 
-def model():
-    if "m" not in MODEL:
+def model(language="en"):
+    """The English model for en, the multilingual one for any other language; only one is kept in memory (a small graphics card)."""
+    key = "en" if language in ("", "en") else "mtl"
+    if MODEL.get("key") != key:
+        import gc
         import torch
-        from chatterbox.tts import ChatterboxTTS
+        MODEL.clear()
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        print("loading the voice model on", device, flush=True)
-        MODEL["m"], MODEL["device"] = ChatterboxTTS.from_pretrained(device=device), device
+        print("loading the", "English" if key == "en" else "multilingual", "voice model on", device, flush=True)
+        if key == "en":
+            from chatterbox.tts import ChatterboxTTS
+            MODEL["m"] = ChatterboxTTS.from_pretrained(device=device)
+        else:
+            from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+            MODEL["m"] = ChatterboxMultilingualTTS.from_pretrained(device=device)
+        MODEL["key"] = key
     return MODEL["m"]
 
 
@@ -59,7 +71,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        self._send(200, json.dumps({"ok": True, "loaded": "m" in MODEL}).encode())
+        self._send(200, json.dumps({"ok": True, "loaded": MODEL.get("key")}).encode())
 
     def do_POST(self):
         try:
@@ -67,13 +79,16 @@ class Handler(BaseHTTPRequestHandler):
             text = (data.get("input") or data.get("text") or "").strip()
             if not text:
                 return self._send(400, b'{"error": "no text"}')
+            language = str(data.get("language") or "en").lower()
             kwargs = {"exaggeration": float(data.get("exaggeration", 0.5)), "cfg_weight": 0.5}
+            if language != "en":
+                kwargs["language_id"] = language
             if data.get("sample_audio_b64"):
                 kwargs["audio_prompt_path"] = sample_file(data["sample_audio_b64"])
             import io
             import torchaudio
             with LOCK:
-                m = model()
+                m = model(language)
                 wav = m.generate(text, **kwargs)
                 buf = io.BytesIO()
                 torchaudio.save(buf, wav.cpu(), m.sr, format="wav")
@@ -188,6 +203,14 @@ def start(base=None, port=DEFAULT_PORT, log=print):
     if not installed(base):
         raise RuntimeError("The voice server is not installed. Press 'Install' on the Voice-over card, or run `python -m engine.voice_server install`.")
     p = paths(base)
+    try:
+        with open(p["server"], "r", encoding="utf-8") as f:
+            current = f.read()
+        if current != SERVER_SOURCE:                      # an update of this script reaches an installed server without a reinstall
+            with open(p["server"], "w", encoding="utf-8") as f:
+                f.write(SERVER_SOURCE)
+    except OSError:
+        pass
     flags = (subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS) if os.name == "nt" else 0
     with open(p["log"], "ab") as out:
         proc = subprocess.Popen([p["python"], p["server"], str(port)], stdout=out, stderr=subprocess.STDOUT, creationflags=flags,

@@ -39,7 +39,7 @@ def run(args, target_bitrate=None, target_preset=None):
             sys.exit(1)
     try:
         res = make_voiceover(script, session_dir, opts["sample"], tone=opts["tone"], fmt=opts["format"], out=opts["out"] or None,
-                             server=server)
+                             server=server, language=opts["language"])
     except (ValueError, RuntimeError) as e:
         print(f"[Error] {e}")
         sys.exit(1)

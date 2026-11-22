@@ -46,3 +46,9 @@ def test_the_server_script_takes_a_port_or_the_check_flag(monkeypatch):
         scope = {}
         exec(compile(header, "server.py", "exec"), scope)
         assert scope["PORT"] == port
+
+
+def test_the_server_script_picks_the_multilingual_model_for_other_languages():
+    src = voice_server.SERVER_SOURCE
+    ast.parse(src)
+    assert "ChatterboxMultilingualTTS" in src and 'kwargs["language_id"] = language' in src and "model(language)" in src

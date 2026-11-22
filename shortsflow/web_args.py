@@ -277,10 +277,10 @@ def dub_args(source, target_lang, spoken="auto", burn_captions=False, session_di
     return args
 
 
-def voiceover_args(script_file, sample, tone="neutral", fmt="mp3", session_dir=None, server=""):
+def voiceover_args(script_file, sample, tone="neutral", fmt="mp3", session_dir=None, server="", language="en"):
     """Arguments (after the pipeline command) for `--mode VOICEOVER`: the script is read from `script_file`, the voice copied from `sample`."""
     from engine.voiceover import OPTIONS
-    values = {"sample": sample, "tone": tone or "neutral", "format": fmt or "mp3", "server": (server or "").strip()}
+    values = {"sample": sample, "tone": tone or "neutral", "format": fmt or "mp3", "server": (server or "").strip(), "language": language or "en"}
     args = ["--mode", "VOICEOVER", "--script", script_file]
     for pair in OPTIONS.to_pairs(values):
         args += ["--voiceover", pair]
