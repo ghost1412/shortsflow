@@ -13,20 +13,6 @@ def test_prompt_is_phrase_plus_fixed_style_and_drops_odd_characters():
     assert cc.prompt_for("") == "" and cc.prompt_for(None) == ""
 
 
-def test_clean_svg_keeps_shapes_forces_viewbox_and_strips_risky_parts():
-    svg = cc.clean_svg("Here you go:\n```svg\n" + GOOD_SVG.replace("<rect", "<rect onclick='x()' href='http://evil'") + "\n```", "9:16")
-    assert svg and 'viewBox="0 0 576 1024"' in svg.replace("'", '"')
-    assert "onclick" not in svg and "http://evil" not in svg
-
-
-def test_clean_svg_refuses_scripts_images_text_and_tiny_or_broken_answers():
-    assert cc.clean_svg("<svg><script>alert(1)</script></svg>") is None
-    assert cc.clean_svg(GOOD_SVG.replace("</svg>", "<image href='x.png'/></svg>")) is None
-    assert cc.clean_svg(GOOD_SVG.replace("</svg>", "<text>hi</text></svg>")) is None
-    assert cc.clean_svg("<svg><rect/></svg>") is None
-    assert cc.clean_svg("<svg><rect></svg>") is None and cc.clean_svg("no picture") is None
-
-
 def test_order_of_ways():
     assert cc.order("auto", True, True) == ["local", "cloud", "drawn"]
     assert cc.order("auto", False, False) == ["drawn"]
@@ -90,17 +76,6 @@ def test_option_is_in_the_schema():
     assert case_options.parse([])["cartoon"] == "auto"
 
 
-def test_clean_svg_unwraps_a_json_reply():
-    import json
-    assert cc.clean_svg(json.dumps({"svg": GOOD_SVG})) is not None
-    assert cc.clean_svg(json.dumps([GOOD_SVG])) is not None
-
-
-def test_clean_svg_unwraps_escaped_double_quotes():
-    import json
-    assert cc.clean_svg(json.dumps({"svg": GOOD_SVG.replace("'", '"')})) is not None
-
-
 def test_ways_can_be_left_out_or_turned_off(tmp_path, monkeypatch):
     assert cc.order("local,drawn", True, True) == ["local", "drawn"]
     assert cc.order("drawn,cloud", True, False) == ["drawn", "cloud"]
@@ -119,10 +94,21 @@ def test_ways_can_be_left_out_or_turned_off(tmp_path, monkeypatch):
     assert cc.attach(script, str(tmp_path), "16:9", "off", cache_dir=str(tmp_path), makers=makers) == [None]
 
 
-def test_clean_svg_output_is_valid_xml_with_one_namespace_and_a_size():
+def test_drawn_way_picks_a_kit_icon_and_draws_it_on_the_canvas_of_the_video_shape():
+    import json
     import xml.etree.ElementTree as ET
-    for source in (GOOD_SVG, GOOD_SVG.replace(" xmlns='http://www.w3.org/2000/svg'", "")):
-        out = cc.clean_svg(source)
-        root = ET.fromstring(out)                      # a doubled xmlns made files the video renderer could not decode
-        assert out.count("xmlns=") == 1 and root.get("width") == "1024" and root.get("height") == "576"
-        assert root.tag == "{http://www.w3.org/2000/svg}svg"
+    reply = json.dumps({"setting": "space", "items": [{"kind": "black hole", "color": "orange"}]})
+    for aspect, size in (("16:9", "1024"), ("9:16", "576")):
+        svg = cc.make_drawn("glowing ring", aspect, lambda p: reply)
+        root = ET.fromstring(svg)
+        assert root.get("width") == size and "<ellipse" in svg and svg.count("<svg") == 1
+
+
+def test_drawn_way_draws_an_icon_the_kit_lacks_and_gives_up_when_the_model_fails(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setenv("SHORTSFLOW_ICONS", str(tmp_path))
+    drawing = "<g>" + "<circle cx='0' cy='0' r='40' fill='#fff' stroke='#1f2937'/>" * 5 + "</g>"
+    replies = iter([json.dumps({"items": [{"kind": "unicorn"}]}), json.dumps({"svg": drawing})])
+    svg = cc.make_drawn("odd", "16:9", lambda p: next(replies))
+    assert svg and (tmp_path / "unicorn.svg").is_file()
+    assert cc.make_drawn("odd", "16:9", lambda p: 1 / 0) is None

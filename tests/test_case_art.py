@@ -51,8 +51,10 @@ def test_check_spec_names_the_problem():
     assert art.check_spec("no json", 3)[0] is None
     spec, problem = art.check_spec(json.dumps({"items": [{"kind": "server"}]}), 3)
     assert spec is None and "1 items" in problem
-    spec, problem = art.check_spec(json.dumps({"items": [{"kind": "unicorn"}, {"kind": "server"}]}), 2)
-    assert spec is None and "unicorn" in problem
+    spec, problem = art.check_spec(json.dumps({"items": [{"kind": "!!"}, {"kind": "server"}]}), 2)
+    assert spec is None and "short plain name" in problem
+    spec, problem = art.check_spec(json.dumps({"items": [{"kind": "Stone Pyramid"}, {"kind": "server"}]}), 2)          # not in the kit: it will be drawn
+    assert spec["items"][0]["kind"] == "stone_pyramid" and spec["items"][0]["custom"] and not spec["items"][1].get("custom")
 
 
 def test_check_spec_reads_a_wrapped_reply():
@@ -121,3 +123,35 @@ def test_make_writes_layer_files_and_build_props_keeps_them_with_their_labels(tm
     assert len(pic["items"]) == 3 and len(pic["links"]) == 2
     assert [labels[l["from"]] for l in pic["links"]] == ["Attacker", "Server"] and [labels[l["to"]] for l in pic["links"]] == ["Server", "Stolen data"]
     assert pic["items"][labels.index("Server")]["src"] == got["items"]["Server"]
+
+
+def test_a_thing_the_kit_lacks_is_drawn_saved_and_used_and_a_failure_falls_back(tmp_path):
+    from engine import art_icons
+    drawing = json.dumps({"svg": "<g><rect x='-60' y='0' width='120' height='70' fill='#f59e0b' stroke='#1f2937' stroke-width='6'/>" + "<circle cx='0' cy='-20' r='30' fill='#fff'/>" * 3 + "</g>"})
+    spec, _ = art.check_spec(json.dumps({"items": [{"kind": "vaccine"}, {"kind": "server"}]}), 2)
+    asked = []
+    out = art.resolve_custom(spec, lambda p: asked.append(p) or drawing, str(tmp_path))
+    assert out["items"][0]["kind"] == "vaccine" and "custom" not in out["items"][0] and len(asked) == 1
+    svg, _ = kit.compose(out, "16:9")
+    ET.fromstring(svg)
+    assert (tmp_path / "vaccine.svg").is_file()
+    spec, _ = art.check_spec(json.dumps({"items": [{"kind": "vaccine"}, {"kind": "server"}]}), 2)
+    art.resolve_custom(spec, lambda p: 1 / 0, str(tmp_path))                     # saved already: the model is not asked again
+    assert spec["items"][0]["kind"] == "vaccine"
+    spec, _ = art.check_spec(json.dumps({"items": [{"kind": "pyramid"}, {"kind": "server"}]}), 2)
+    art.resolve_custom(spec, lambda p: "no drawing", str(tmp_path))
+    assert spec["items"][0]["kind"] == art.FALLBACK
+
+
+def test_icon_check_keeps_flat_shapes_only_and_near_the_box():
+    from engine import art_icons
+    good = "<g>" + "<circle cx='0' cy='0' r='40' fill='#fff' stroke='#1f2937'/>" * 5 + "</g>"
+    assert art_icons.clean(json.dumps({"svg": good}))
+    assert art_icons.clean("<svg xmlns='http://www.w3.org/2000/svg' viewBox='-100 -100 200 200'>" + good + "</svg>")
+    assert "onclick" not in art_icons.clean(good.replace("<circle ", "<circle onclick='x()' ", 1))
+    assert art_icons.clean(good.replace("</g>", "<script>alert(1)</script></g>")) is None
+    assert art_icons.clean(good.replace("</g>", "<text>hi</text></g>")) is None
+    assert art_icons.clean(good.replace("</g>", "<image href='x'/></g>")) is None
+    assert art_icons.clean("<circle r='9'/><circle r='9'/>") is None                        # too few shapes
+    assert art_icons.clean(good.replace("r='40'", "r='400'")) is None                       # far outside the 200 x 200 box
+    assert art_icons.clean("<g><rect></g>") is None and art_icons.clean("") is None

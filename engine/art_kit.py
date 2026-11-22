@@ -15,7 +15,7 @@ COLORS = {"blue": "#3b82f6", "orange": "#f59e0b", "green": "#22c55e", "purple": 
           "teal": "#14b8a6", "pink": "#ec4899", "gray": "#94a3b8", "navy": "#334155"}
 CYCLE = ("blue", "orange", "green", "purple", "teal", "pink")
 MOODS = ("neutral", "happy", "angry", "worried")
-SETTINGS = ("office", "city", "cloud", "night")
+SETTINGS = ("office", "city", "cloud", "night", "space")
 LAYOUTS = ("row", "hub", "triangle")
 
 
@@ -290,11 +290,119 @@ def bell(c, mood=None):
             f'<path d="M-18 52 Q0 76 18 52 Z" fill="{c}" {S(5)}/><path d="M-82 -24 Q-90 -4 -82 16 M82 -24 Q90 -4 82 16" fill="none" {S(7)}/>')
 
 
+def black_hole(c, mood=None):
+    """a black hole with its glowing ring of gas"""
+    return (f'<g transform="rotate(-16)"><ellipse rx="96" ry="30" fill="none" stroke="{OUT}" stroke-width="30"/><ellipse rx="96" ry="30" fill="none" stroke="{c}" stroke-width="20"/>'
+            f'<ellipse rx="96" ry="30" fill="none" stroke="#fde68a" stroke-width="7"/></g>'
+            f'<circle r="46" fill="#05070f" {S()}/><path d="M-64 -30 Q0 -92 64 -30" fill="none" stroke="{OUT}" stroke-width="22" stroke-linecap="round"/>'
+            f'<path d="M-64 -30 Q0 -92 64 -30" fill="none" stroke="{c}" stroke-width="12" stroke-linecap="round"/>')
+
+
+def planet(c, mood=None):
+    return (f'<circle r="58" fill="{c}" {S()}/><path d="M-50 -20 Q0 -40 50 -20 M-58 8 Q0 -14 58 8" fill="none" stroke="{light(c, 0.35)}" stroke-width="9" stroke-linecap="round"/>'
+            f'<g transform="rotate(-20)"><path d="M-102 0 A102 26 0 0 0 102 0" fill="none" stroke="{OUT}" stroke-width="18"/><path d="M-102 0 A102 26 0 0 0 102 0" fill="none" stroke="#fde68a" stroke-width="9"/></g>')
+
+
+def star(c, mood=None):
+    pts = " ".join(f"{(88 if i % 2 == 0 else 38) * math.cos(-math.pi / 2 + i * math.pi / 5):.1f},{(88 if i % 2 == 0 else 38) * math.sin(-math.pi / 2 + i * math.pi / 5):.1f}" for i in range(10))
+    return f'<polygon points="{pts}" fill="#facc15" {S(7)}/><circle cx="-12" cy="-6" r="7" fill="#fff" opacity="0.7"/>'
+
+
+def galaxy(c, mood=None):
+    arms = "".join(f'<ellipse rx="{rx}" ry="{ry}" transform="rotate({a})" fill="none" stroke="{light(c, k)}" stroke-width="{w}" stroke-linecap="round" opacity="0.9"/>'
+                   for rx, ry, a, k, w in ((88, 30, 24, 0.0, 12), (70, 22, 24, 0.3, 9), (88, 30, -30, 0.2, 10), (60, 18, -30, 0.5, 7)))
+    dots = "".join(f'<circle cx="{x}" cy="{y}" r="4" fill="#fff"/>' for x, y in ((-70, 40), (74, -46), (30, 62), (-46, -58)))
+    return f'<circle r="96" fill="#0b1020" {S(5)}/>{arms}{dots}<circle r="20" fill="#fde68a"/><circle r="10" fill="#fff"/>'
+
+
+def telescope(c, mood=None):
+    return (f'<path d="M0 22 L-46 92 M0 22 L46 92 M0 22 L0 92" {S(9)}/><g transform="rotate(-28 0 0)"><rect x="-92" y="-26" width="150" height="52" rx="10" fill="{c}" {S()}/>'
+            f'<rect x="40" y="-34" width="34" height="68" rx="8" fill="{dark(c, 0.25)}" {S()}/><rect x="-104" y="-18" width="20" height="36" rx="6" fill="#cbd5e1" {S(5)}/><rect x="-62" y="-26" width="12" height="52" fill="{light(c, 0.4)}"/></g>'
+            f'<circle cx="0" cy="22" r="11" fill="#cbd5e1" {S(5)}/>')
+
+
+def dish(c, mood=None):
+    return (f'<path d="M-6 20 L-44 92 M-6 20 L32 92 M-60 92 L56 92" {S(9)}/><path d="M-84 -50 Q-84 40 4 56 L40 -26 Q-30 -70 -84 -50 Z" fill="{c}" {S()}/>'
+            f'<path d="M-52 -30 Q-52 20 6 36" fill="none" stroke="{light(c, 0.5)}" stroke-width="8" stroke-linecap="round"/><path d="M-22 6 L58 -50" {S(7)}/><circle cx="62" cy="-54" r="10" fill="#facc15" {S(5)}/>'
+            f'<path d="M80 -78 Q104 -54 86 -22 M96 -92 Q132 -56 106 -8" fill="none" stroke="{c}" stroke-width="8" stroke-linecap="round" opacity="0.8"/>')
+
+
+def atom(c, mood=None):
+    orbit = lambda a: f'<ellipse rx="92" ry="34" transform="rotate({a})" fill="none" stroke="{OUT}" stroke-width="12"/><ellipse rx="92" ry="34" transform="rotate({a})" fill="none" stroke="{c}" stroke-width="6"/>'
+    electrons = "".join(f'<circle cx="{92 * math.cos(math.radians(t)) * math.cos(math.radians(a)) - 34 * math.sin(math.radians(t)) * math.sin(math.radians(a)):.1f}" '
+                        f'cy="{92 * math.cos(math.radians(t)) * math.sin(math.radians(a)) + 34 * math.sin(math.radians(t)) * math.cos(math.radians(a)):.1f}" r="10" fill="#facc15" {S(5)}/>'
+                        for a, t in ((0, 40), (60, 200), (120, 300)))
+    return orbit(0) + orbit(60) + orbit(120) + f'<circle r="22" fill="#ef4444" {S(6)}/><circle cx="-6" cy="-6" r="6" fill="#fff" opacity="0.6"/>' + electrons
+
+
+def wave(c, mood=None):
+    path = "M-92 0 Q-69 -64 -46 0 T0 0 T46 0 T92 0"
+    return (f'<rect x="-100" y="-62" width="200" height="124" rx="20" fill="#ffffff" {S()}/><path d="M-84 0 L84 0" stroke="#cbd5e1" stroke-width="5" stroke-dasharray="2 10" stroke-linecap="round"/>'
+            f'<path d="{path}" transform="scale(0.88)" fill="none" stroke="{OUT}" stroke-width="20" stroke-linecap="round"/><path d="{path}" transform="scale(0.88)" fill="none" stroke="{c}" stroke-width="11" stroke-linecap="round"/>')
+
+
+def magnet(c, mood=None):
+    return (f'<path d="M-62 82 L-62 -6 A62 62 0 0 1 62 -6 L62 82" fill="none" stroke="{OUT}" stroke-width="52" stroke-linejoin="round"/>'
+            f'<path d="M-62 82 L-62 -6 A62 62 0 0 1 62 -6 L62 82" fill="none" stroke="#ef4444" stroke-width="38"/><path d="M62 82 L62 -6 A62 62 0 0 0 0 -68" fill="none" stroke="#3b82f6" stroke-width="38"/>'
+            f'<rect x="-81" y="58" width="38" height="28" fill="#e2e8f0" {S(5)}/><rect x="43" y="58" width="38" height="28" fill="#e2e8f0" {S(5)}/>')
+
+
+def rocket(c, mood=None):
+    return (f'<path d="M-24 52 Q-34 96 0 92 Q34 96 24 52 Z" fill="#f97316" {S(6)}/><path d="M-30 48 L-72 76 L-52 10 Z M30 48 L72 76 L52 10 Z" fill="{dark(c, 0.15)}" {S(6)}/>'
+            f'<path d="M0 -92 Q50 -48 40 40 L-40 40 Q-50 -48 0 -92 Z" fill="#f8fafc" {S()}/><path d="M0 -92 Q26 -70 36 -40 L-36 -40 Q-26 -70 0 -92 Z" fill="{c}" {S(6)}/>'
+            f'<circle cx="0" cy="-6" r="20" fill="#93c5fd" {S(6)}/>')
+
+
+def flask(c, mood=None):
+    return (f'<path d="M-22 -86 L-22 -34 L-78 66 Q-90 90 -62 90 L62 90 Q90 90 78 66 L22 -34 L22 -86" fill="#eaf6ff" {S()}/>'
+            f'<path d="M-52 22 L52 22 L78 66 Q90 90 62 90 L-62 90 Q-90 90 -78 66 Z" fill="{c}" {S(6)}/><circle cx="-16" cy="52" r="8" fill="{light(c, 0.6)}"/><circle cx="18" cy="66" r="6" fill="{light(c, 0.6)}"/>'
+            f'<rect x="-34" y="-96" width="68" height="16" rx="8" fill="#cbd5e1" {S(6)}/>')
+
+
+def microscope(c, mood=None):
+    return (f'<rect x="-70" y="74" width="140" height="18" rx="8" fill="#475569" {S(6)}/><path d="M-38 74 Q-90 62 -64 6 Q-50 -26 -8 -34" fill="none" stroke="{OUT}" stroke-width="26" stroke-linecap="round"/>'
+            f'<path d="M-38 74 Q-90 62 -64 6 Q-50 -26 -8 -34" fill="none" stroke="{c}" stroke-width="14" stroke-linecap="round"/><g transform="rotate(-22 0 -40)"><rect x="-18" y="-96" width="38" height="92" rx="8" fill="{c}" {S()}/>'
+            f'<rect x="-12" y="-4" width="26" height="22" rx="4" fill="#cbd5e1" {S(5)}/></g><rect x="-10" y="40" width="74" height="12" rx="5" fill="#cbd5e1" {S(6)}/>')
+
+
+def sun(c, mood=None):
+    rays = "".join(f'<path d="M{math.cos(a) * 62:.0f} {math.sin(a) * 62:.0f} L{math.cos(a) * 92:.0f} {math.sin(a) * 92:.0f}" {S(11)}/>' for a in [i * math.pi / 4 for i in range(8)])
+    return rays + f'<circle r="52" fill="#facc15" {S()}/><circle cx="-14" cy="-14" r="12" fill="#fff" opacity="0.55"/>'
+
+
+def moon(c, mood=None):
+    return (f'<path d="M30 -80 A82 82 0 1 0 30 80 A64 64 0 0 1 30 -80 Z" fill="#fde68a" {S()}/><circle cx="-22" cy="-20" r="11" fill="#f3d06b"/><circle cx="-34" cy="30" r="8" fill="#f3d06b"/>'
+            f'<polygon points="58,-34 63,-22 76,-22 66,-14 70,-2 58,-9 46,-2 50,-14 40,-22 53,-22" fill="#fde68a" {S(4)}/>')
+
+
+def eye(c, mood=None):
+    return (f'<path d="M-96 0 Q0 -84 96 0 Q0 84 -96 0 Z" fill="#ffffff" {S()}/><circle r="38" fill="{c}" {S(6)}/><circle r="17" fill="{OUT}"/><circle cx="-10" cy="-12" r="7" fill="#fff"/>')
+
+
+def camera(c, mood=None):
+    return (f'<rect x="-30" y="-62" width="60" height="22" rx="8" fill="{dark(c, 0.3)}" {S(6)}/><rect x="-92" y="-48" width="184" height="124" rx="22" fill="{c}" {S()}/>'
+            f'<circle cy="14" r="44" fill="#e2e8f0" {S()}/><circle cy="14" r="28" fill="{OUT}"/><circle cx="-8" cy="6" r="9" fill="#93c5fd"/><circle cx="68" cy="-24" r="8" fill="#facc15" {S(4)}/>')
+
+
 ICONS = {"person": person, "hacker": hacker, "group": group, "laptop": laptop, "phone": phone, "server": server, "database": database, "cloud": cloud,
          "lock": lock, "unlock": unlock, "key": key, "shield": shield, "bug": bug, "document": document, "folder": folder, "mail": mail, "globe": globe,
          "building": building, "house": house, "gear": gear, "chart_up": chart_up, "chart_down": chart_down, "money": money, "clock": clock,
          "warning": warning, "check": check, "cross": cross, "magnifier": magnifier, "fire": fire, "wifi": wifi, "burst": burst, "bulb": bulb,
-         "network": network, "target": target, "robot": robot, "box": box, "queue": queue, "chip": chip, "layers": layers, "plug": plug, "bell": bell}
+         "network": network, "target": target, "robot": robot, "box": box, "queue": queue, "chip": chip, "layers": layers, "plug": plug, "bell": bell,
+         "black_hole": black_hole, "planet": planet, "star": star, "galaxy": galaxy, "telescope": telescope, "dish": dish, "atom": atom, "wave": wave,
+         "magnet": magnet, "rocket": rocket, "flask": flask, "microscope": microscope, "sun": sun, "moon": moon, "eye": eye, "camera": camera}
+CUSTOM = {}                      # icons drawn while a video was made (engine/art_icons.py): name -> markup, colours of their own
+
+
+def register(name, markup):
+    """Make a drawn icon usable by name in scenes (it keeps its own colours; the colour a scene asks for does not recolour it)."""
+    CUSTOM[name] = lambda c, mood=None, _m=markup: _m
+
+
+def icon(kind):
+    return ICONS.get(kind) or CUSTOM[kind]
+
+
 MARKS = ("warning", "check", "cross", "fire", "lock", "burst")
 HELP = {"person": "a person (add a mood: neutral, happy, angry, worried)", "hacker": "an attacker or intruder in a dark hood", "group": "a team, crowd or users",
         "laptop": "a computer or a developer's machine", "phone": "a phone or app", "server": "a server, a rack, machines in a data centre", "database": "stored data",
@@ -306,13 +414,23 @@ HELP = {"person": "a person (add a mood: neutral, happy, angry, worried)", "hack
         "fire": "an emergency or something burning", "wifi": "network, signal, connectivity", "burst": "a crash, an explosion, a sudden failure", "bulb": "an idea or a lesson",
         "network": "connected nodes, a cluster, a mesh", "target": "a goal or a target", "robot": "AI, a bot, automation",
         "box": "a container, a package, a service you deploy (a pod, a sidecar, a build)", "queue": "a message queue, a pipeline, requests waiting in line",
-        "chip": "a processor, CPU load, hardware", "layers": "layers or tiers of a system, a stack", "plug": "a connection, an API, an integration", "bell": "an alarm or a notification"}
+        "chip": "a processor, CPU load, hardware", "layers": "layers or tiers of a system, a stack", "plug": "a connection, an API, an integration", "bell": "an alarm or a notification",
+        "black_hole": "a black hole, extreme gravity", "planet": "a planet or a world", "star": "a star, a bright source, a favourite", "galaxy": "a galaxy or the universe",
+        "telescope": "a telescope, observing the sky", "dish": "a radio dish or antenna, receiving a signal (radio astronomy, satellites)",
+        "atom": "an atom, a particle, quantum physics", "wave": "a wave, a signal, a frequency, a measurement over time", "magnet": "magnetism, attraction, a field",
+        "rocket": "a launch, space travel, fast progress", "flask": "chemistry, an experiment, a lab test", "microscope": "very small things, biology, close study",
+        "sun": "the sun, energy, heat, daylight", "moon": "the moon, night, a satellite", "eye": "seeing, observing, watching, surveillance",
+        "camera": "a camera, an image, taking a photo"}
 
 
 # ---- scene ----------------------------------------------------------------------------------------------------------------------
 
 def background(setting, w, h):
     floor_y = h * 0.8
+    if setting == "space":
+        stars = "".join(f'<circle cx="{(i * 193) % w}" cy="{(i * 89) % h}" r="{1.2 + (i % 4) * 0.8}" fill="#f8fafc" opacity="{0.45 + (i % 5) * 0.1:.2f}"/>' for i in range(1, 46))
+        return (f'<defs><radialGradient id="bg" cx="0.7" cy="0.35" r="1"><stop offset="0" stop-color="#2a1b5e"/><stop offset="0.55" stop-color="#0d1233"/><stop offset="1" stop-color="#04060f"/></radialGradient></defs>'
+                f'<rect width="{w}" height="{h}" fill="url(#bg)"/><circle cx="{w * 0.2}" cy="{h * 0.28}" r="{h * 0.2}" fill="#5b3fa8" opacity="0.18"/>{stars}')
     if setting == "night":
         stars = "".join(f'<circle cx="{(i * 137) % w}" cy="{(i * 71) % int(h * 0.7)}" r="{1.5 + (i % 3)}" fill="#e2e8f0" opacity="0.7"/>' for i in range(1, 30))
         return (f'<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0f172a"/><stop offset="1" stop-color="#1e3a5f"/></linearGradient></defs>'
@@ -343,15 +461,15 @@ def positions(n, layout, aspect_key):
     return [(x, 52) for x in xs]
 
 
-def _arrow(x1, y1, x2, y2, r, dashed=False):
+def _arrow(x1, y1, x2, y2, r, dashed=False, color=OUT):
     dx, dy = x2 - x1, y2 - y1
     d = math.hypot(dx, dy) or 1
     ux, uy = dx / d, dy / d
     sx, sy, ex, ey = x1 + ux * r, y1 + uy * r, x2 - ux * (r + 6), y2 - uy * (r + 6)
     head = f"{ex:.1f},{ey:.1f} {ex - ux * 30 - uy * 16:.1f},{ey - uy * 30 + ux * 16:.1f} {ex - ux * 30 + uy * 16:.1f},{ey - uy * 30 - ux * 16:.1f}"
     dash = ' stroke-dasharray="4 14"' if dashed else ""
-    return (f'<path d="M{sx:.1f} {sy:.1f} L{ex - ux * 24:.1f} {ey - uy * 24:.1f}" stroke="{OUT}" stroke-width="12" stroke-linecap="round"{dash} fill="none"/>'
-            f'<polygon points="{head}" fill="{OUT}" stroke="{OUT}" stroke-width="6" stroke-linejoin="round"/>')
+    return (f'<path d="M{sx:.1f} {sy:.1f} L{ex - ux * 24:.1f} {ey - uy * 24:.1f}" stroke="{color}" stroke-width="12" stroke-linecap="round"{dash} fill="none"/>'
+            f'<polygon points="{head}" fill="{color}" stroke="{color}" stroke-width="6" stroke-linejoin="round"/>')
 
 
 def _sizes(n, aspect_key, w, h):
@@ -364,10 +482,10 @@ def _item_inner(item, cx, cy, size):
     c = COLORS[item["color"]]
     shadow = f'<ellipse cx="{cx:.1f}" cy="{cy + size * 0.47:.1f}" rx="{size * 0.34:.1f}" ry="{size * 0.06:.1f}" fill="#000" opacity="0.13"/>'
     if item.get("many"):
-        body = "".join(f'<g transform="translate({cx + dx * scale:.1f} {cy + dy * scale:.1f}) scale({scale * 0.72:.3f})">{ICONS[item["kind"]](c, item.get("mood", "neutral"))}</g>'
+        body = "".join(f'<g transform="translate({cx + dx * scale:.1f} {cy + dy * scale:.1f}) scale({scale * 0.72:.3f})">{icon(item["kind"])(c, item.get("mood", "neutral"))}</g>'
                        for dx, dy in ((-46, -22), (46, -22), (0, 24)))
     else:
-        body = f'<g transform="translate({cx:.1f} {cy:.1f}) scale({scale:.3f})">{ICONS[item["kind"]](c, item.get("mood", "neutral"))}</g>'
+        body = f'<g transform="translate({cx:.1f} {cy:.1f}) scale({scale:.3f})">{icon(item["kind"])(c, item.get("mood", "neutral"))}</g>'
     mark = ""
     if item.get("mark"):
         mark = f'<g transform="translate({cx + size * 0.34:.1f} {cy - size * 0.34:.1f}) scale({scale * 0.46:.3f})">{ICONS[item["mark"]](c)}</g>'
@@ -378,19 +496,24 @@ def _wrap(inner, w, h):
     return f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}" preserveAspectRatio="xMidYMid slice">{inner}</svg>'
 
 
-def compose_layers(spec, aspect_key="16:9"):
+DARK_SETTINGS = ("night", "space")
+
+
+def compose_layers(spec, aspect_key="16:9", canvas=None, anchor=None, big=1.0):
     """The scene as separate transparent layers, so the video can bring each icon in when the narrator reaches it:
     {"background": svg, "items": [svg per item], "links": [{"svg", "from", "to"}] (1-based item numbers),
-     "centres": [(x, y) percent], "badges": [(x, y) percent: the top-left corner of each icon, so a badge never hides it]}"""
-    w, h = (768, 768) if aspect_key == "1:1" else (1024, 512)
+     "centres": [(x, y) percent], "badges": [(x, y) percent: the top-left corner of each icon, so a badge never hides it]}
+    `canvas` (width, height), `anchor` (x, y percent of the one icon) and `big` (a size factor) are for a background picture."""
+    w, h = canvas or ((768, 768) if aspect_key == "1:1" else (1024, 512))
     items = spec["items"]
-    pos = positions(len(items), spec.get("layout", "row"), aspect_key)
-    size = _sizes(len(items), aspect_key, w, h)
+    pos = [anchor] if anchor else positions(len(items), spec.get("layout", "row"), aspect_key)
+    size = _sizes(len(items), aspect_key, w, h) * big
     centres = [(w * x / 100, h * y / 100) for x, y in pos]
     return {
         "background": _wrap(background(spec.get("setting", "office"), w, h), w, h),
         "items": [_wrap(_item_inner(it, cx, cy, size), w, h) for it, (cx, cy) in zip(items, centres)],
-        "links": [{"svg": _wrap(_arrow(*centres[l["from"] - 1], *centres[l["to"] - 1], size * 0.56, l.get("dashed", False)), w, h), "from": l["from"], "to": l["to"]}
+        "links": [{"svg": _wrap(_arrow(*centres[l["from"] - 1], *centres[l["to"] - 1], size * 0.56, l.get("dashed", False),
+                                                "#e2e8f0" if spec.get("setting") in DARK_SETTINGS else OUT), w, h), "from": l["from"], "to": l["to"]}
                   for l in spec.get("links", [])],
         "centres": [(round(x, 1), round(y, 1)) for x, y in pos],
         "badges": [(round((cx - size * 0.40) / w * 100, 1), round((cy - size * 0.42) / h * 100, 1)) for cx, cy in centres],
@@ -399,8 +522,8 @@ def compose_layers(spec, aspect_key="16:9"):
 
 def compose(spec, aspect_key="16:9"):
     """(svg text, [(x, y) of each item's badge, percent of the picture]): the whole scene as one picture (the layers drawn together)."""
-    w, h = (768, 768) if aspect_key == "1:1" else (1024, 512)
     layered = compose_layers(spec, aspect_key)
+    w, h = (768, 768) if aspect_key == "1:1" else (1024, 512)
     inner = lambda svg: svg[svg.index(">") + 1:svg.rindex("</svg>")]
     parts = [inner(layered["background"])] + [inner(l["svg"]) for l in layered["links"]] + [inner(i) for i in layered["items"]]
     return _wrap("".join(parts), w, h), layered["badges"]

@@ -30,7 +30,11 @@ ALIASES = {"attacker": "hacker", "intruder": "hacker", "criminal": "hacker", "us
            "payment": "money", "time": "clock", "delay": "clock", "alert": "warning", "danger": "warning", "success": "check", "denied": "cross", "blocked": "cross",
            "search": "magnifier", "investigation": "magnifier", "flame": "fire", "network": "network", "signal": "wifi", "crash": "burst", "explosion": "burst",
            "outage": "burst", "idea": "bulb", "lesson": "bulb", "goal": "target", "ai": "robot", "bot": "robot", "protection": "shield", "defence": "shield",
-           "defense": "shield", "fix": "shield", "open": "unlock", "cluster": "network", "mesh": "network"}
+           "defense": "shield", "fix": "shield", "open": "unlock", "cluster": "network", "mesh": "network",
+           "blackhole": "black_hole", "black": "black_hole", "singularity": "black_hole", "antenna": "dish", "radio": "dish", "satellite": "dish",
+           "particle": "atom", "electron": "atom", "quantum": "atom", "photon": "atom", "signal_wave": "wave", "frequency": "wave", "light": "wave",
+           "universe": "galaxy", "space": "galaxy", "world": "planet", "earth": "planet", "sky": "telescope", "observatory": "telescope", "lab": "flask",
+           "experiment": "flask", "chemistry": "flask", "lens": "camera", "image": "camera", "photo": "camera", "vision": "eye", "watch": "eye", "launch": "rocket"}
 
 
 def art_aspect(aspect):
@@ -47,7 +51,9 @@ def request(section, topic, labels):
         f"Plan ONE cartoon picture that EXPLAINS this part of it: \"{section.get('title', '')}\".\n"
         f"What the narrator says over it: {narration}\n\n"
         f"The picture shows these {len(labels)} things, one icon each, so a viewer understands the idea at a glance:\n{items}\n\n"
-        f"Choose the icon for each, by what the thing IS in this story (not by its words):\n{kinds}\n\n"
+        f"Choose the icon for each, by what the thing IS in this story (not by its words):\n{kinds}\n"
+        "If NONE of these fits a thing, write a short plain name for it instead (one to three words, like \"vaccine\" or \"stone pyramid\") as its kind and it will be drawn "
+        "for you; do that rather than pick an icon that means something else.\n\n"
         "Make the picture tell the story: use a person's mood (angry, worried, happy) or a status mark (warning, check, cross, fire, lock, burst) on an icon to show what "
         "happened to it; use different icons for different things; set many=true when a thing is a large number of something (hundreds of servers, many users). "
         "Link things with arrows when one causes, sends or leads to another (list the pairs in the order the story goes).\n"
@@ -92,10 +98,13 @@ def check_spec(reply, count):
         raw = raw if isinstance(raw, dict) else {"kind": raw}
         kind = str(raw.get("kind", "")).strip().lower().replace(" ", "_").replace("-", "_")
         kind = kind if kind in kit.ICONS else ALIASES.get(kind, kind)
-        if kind not in kit.ICONS:
-            return None, f"item {i + 1} used the icon '{raw.get('kind')}', which is not in the list"
+        custom = kind not in kit.ICONS
+        if custom and not re.fullmatch(r"[a-z][a-z0-9_]{1,28}", kind):
+            return None, f"item {i + 1} named the thing '{raw.get('kind')}': give a short plain name of one to three words"
         color = str(raw.get("color", "")).strip().lower()
         item = {"kind": kind, "color": color if color in kit.COLORS else kit.CYCLE[i % len(kit.CYCLE)]}
+        if custom:
+            item["custom"] = True                  # not in the kit: it is drawn by the model and saved (engine/art_icons.py)
         mood = str(raw.get("mood", "")).strip().lower()
         if mood in kit.MOODS:
             item["mood"] = mood
@@ -119,13 +128,26 @@ def check_spec(reply, count):
             "items": items, "links": links}, ""
 
 
+FALLBACK = "star"        # the icon used for a thing the model cannot draw
+
+
+def resolve_custom(spec, ask, directory=None):
+    """The spec with every icon the kit lacks drawn (or loaded from the library of drawn icons); one that cannot be drawn becomes FALLBACK."""
+    from engine import art_icons
+    for item in spec["items"]:
+        if item.pop("custom", False) and not art_icons.get(item["kind"], ask, directory):
+            print(f"[Warning] No icon could be drawn for '{item['kind'].replace('_', ' ')}'; using a {FALLBACK}.")
+            item["kind"] = FALLBACK
+    return spec
+
+
 def usable_labels(section):
     labels = [str(x).strip() for x in section.get("on_screen") or [] if str(x).strip()]
     return labels[:MAX_LABELS]
 
 
 def _key(section, labels, aspect):
-    raw = "|".join([str(section.get("title", "")), str(section.get("narration", "")), *labels, art_aspect(aspect), "kit-v3"])
+    raw = "|".join([str(section.get("title", "")), str(section.get("narration", "")), *labels, art_aspect(aspect), "kit-v4"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
@@ -157,7 +179,7 @@ def make(section, topic, aspect, ask, cache_dir):
         spec, problem = check_spec(reply, len(labels))
         if not spec:
             continue
-        layered = kit.compose_layers(spec, art_aspect(aspect))
+        layered = kit.compose_layers(resolve_custom(spec, ask), art_aspect(aspect))
         os.makedirs(cache_dir, exist_ok=True)
 
         def write(name, svg):

@@ -207,6 +207,7 @@ def run(args, target_bitrate=None, target_preset=None):
 
     from engine.case_llm import make_ask
     ask_code = make_ask("You write Manim Community Edition code.", opts["llm"])
+    ask_art = make_ask("You are an art director who picks icons for flat cartoon pictures.", opts["llm"])
 
     results = []
     for aspect in formats:
@@ -221,9 +222,8 @@ def run(args, target_bitrate=None, target_preset=None):
                   f"see the lines above). The script and the narration are saved: run again with --case resume={session_dir}")
             sys.exit(1)
         footage = cr.backgrounds_for(script, session_dir, aspect, choice, has_pexels=bool(os.getenv("PEXELS_API_KEY")),
-                                     cartoon=opts["cartoon"], ask=ask_code)
-        from engine.case_llm import make_ask as _make_ask
-        art = cr.attach_art(script, session_dir, aspect, opts["cartoon"], _make_ask("You are an illustrator who draws flat SVG pictures.", opts["llm"]))
+                                     cartoon=opts["cartoon"], ask=ask_art)
+        art = cr.attach_art(script, session_dir, aspect, opts["cartoon"], ask_art)
         props = cr.build_props(script, timing, words, theme=theme, music_volume=0.2, clips=clips, footage=footage, portrait=portrait, avatar=avatar, transition=opts["transition"], art=art)
         voice_track = cr.join_audio(audios, timing, os.path.join(session_dir, f"voice_all_{tag}.mp3"),
                                     sfx=cr.sfx_for(props, os.path.join(session_dir, f"sfx_{tag}.wav")))

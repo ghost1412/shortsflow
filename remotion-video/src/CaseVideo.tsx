@@ -435,7 +435,7 @@ const Illustration: React.FC<SceneProps & { art: { src: string; points: { x: num
       fontFamily: FONT, fontWeight: 800, fontSize: size * 0.52, boxShadow: on ? `0 0 0 ${10 * u}px ${accent}55, 0 ${6 * u}px ${20 * u}px rgba(0,0,0,0.45)` : `0 ${6 * u}px ${18 * u}px rgba(0,0,0,0.4)`, flexShrink: 0 }}>{n}</div>
   );
   return (
-    <div style={{ display: "flex", flexDirection: portrait ? "column" : "row", alignItems: "center", gap: 40 * u }}>
+    <div style={{ display: "flex", flexDirection: portrait ? "column" : "row", alignItems: "center", gap: 52 * u }}>
       <div style={{ position: "relative", width: artW, height: artH, borderRadius: 28 * u, overflow: "hidden", border: `3px solid ${accent}88`, background: "#ffffff", boxShadow: `0 0 ${60 * u}px ${accent}33, 0 ${16 * u}px ${40 * u}px rgba(0,0,0,0.4)`, opacity: intro, transform: `scale(${0.96 + 0.04 * intro})` }}>
         <Img src={asset(art.src)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
         {(art.links ?? []).map((l, i) => {
@@ -457,7 +457,7 @@ const Illustration: React.FC<SceneProps & { art: { src: string; points: { x: num
           );
         })}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 * u, width: portrait ? artW : 640 * u }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 24 * u, width: portrait ? artW : 640 * u }}>
         {labels.map((l, i) => {
           const t = enter(frame, at[i], fps);
           const on = i === act;
@@ -891,7 +891,7 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
             </div>
           ) : (
             section.scene === "illustration" && section.art ? (
-              <AutoFit><Illustration labels={section.labels} cues={section.cues} p={p} accent={accent} frames={frames} art={section.art} /></AutoFit>
+              <AutoFit room={0.88}><Illustration labels={section.labels} cues={section.cues} p={p} accent={accent} frames={frames} art={section.art} /></AutoFit>
             ) : section.scene === "diagram" && section.diagram ? (
               <MermaidDiagram code={section.diagram} p={p} accent={accent} frames={frames}
                 fallback={<AutoFit><Flow labels={section.labels.length ? section.labels : [section.title]} cues={section.cues} p={p} accent={accent} frames={frames} /></AutoFit>} />
@@ -950,7 +950,7 @@ const captionZone = (u: number, h: number) => captionPad(u, h) + (2 * 62 * 1.25 
 
 // Scales its content down (never up) so that it fits the room it is given: the natural size of the content is measured, so this holds for any
 // number of items, any label length and any video shape. A floor keeps the type readable.
-const AutoFit: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const AutoFit: React.FC<{ children: React.ReactNode; room?: number }> = ({ children, room = 1 }) => {      // `room` < 1 leaves breathing space round the scene (the picture scene uses 0.88)
   const outer = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const [k, setK] = useState(1);
@@ -959,7 +959,7 @@ const AutoFit: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (!o || !i) return;
     const child = i.firstElementChild as HTMLElement | null;      // a scene with a fixed size (Flow, Timeline) is measured itself: centred overflow is not in scrollWidth
     const natW = Math.max(i.scrollWidth, child ? child.offsetWidth : 0), natH = Math.max(i.scrollHeight, child ? child.offsetHeight : 0);
-    const fit = Math.min(1, o.clientHeight / Math.max(1, natH), o.clientWidth / Math.max(1, natW));
+    const fit = room * Math.min(1, o.clientHeight / Math.max(1, natH), o.clientWidth / Math.max(1, natW));
     const next = Math.max(0.3, fit);          // a floor keeps absurd content from vanishing; real content (a handful of short labels) is never near it
     if (Math.abs(next - k) > 0.004) setK(next);
   });

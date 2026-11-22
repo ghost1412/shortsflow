@@ -5,7 +5,7 @@ Three ways to make a picture, chosen by `--case cartoon=auto|local|cloud|drawn` 
   local  the optional image add-on on this PC (engine/image_server.py, Stable Diffusion class model on the GPU). Nothing leaves the PC.
   cloud  Gemini image generation, else a Hugging Face model, with the keys already in `.env`. Only the beat's two-to-four word phrase and
          the fixed style sentence are sent, never the sources or the narration.
-  drawn  the text model writes a simple SVG scene (flat shapes, no text), checked against a short list of allowed tags. No download, no GPU;
+  drawn  the text model picks one icon and a setting from the kit in engine/art_kit.py and the kit draws it in one flat style. No download, no GPU;
          with llm=local nothing leaves the PC. Always available when any text model answers.
 
 Pictures are cached by phrase, shape and way of making, so a re-run (or a redo with another look) makes nothing again. A phrase that no way can
@@ -39,7 +39,7 @@ def shape_of(aspect):
 
 
 def cache_file(cache_dir, phrase, aspect, source, ext):
-    key = hashlib.sha1(f"{phrase.lower().strip()}|{aspect}|{source}|{STYLE}|v2".encode("utf-8")).hexdigest()[:10]
+    key = hashlib.sha1(f"{phrase.lower().strip()}|{aspect}|{source}|{STYLE}|v3".encode("utf-8")).hexdigest()[:10]
     slug = re.sub(r"[^a-z0-9]+", "_", phrase.lower()).strip("_")[:30]
     return os.path.join(cache_dir, f"{slug}_{aspect.replace(':', 'x')}_{source}_{key}.{ext}")
 
@@ -106,84 +106,33 @@ def make_local(prompt, aspect, post=None, url=None):
         return None
 
 
-# ---- drawn (SVG written by the text model) -------------------------------------------------------------------------------------------
+# ---- drawn (a kit icon picked by the text model) ------------------------------------------------------------------------------------
 
-ALLOWED_TAGS = {"svg", "g", "defs", "rect", "circle", "ellipse", "line", "polyline", "polygon", "path", "linearGradient", "radialGradient", "stop"}
-ALLOWED_ATTRS = {"viewBox", "xmlns", "width", "height", "x", "y", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry", "d", "points", "fill", "stroke",
-                 "stroke-width", "stroke-linecap", "stroke-linejoin", "opacity", "fill-opacity", "stroke-opacity", "transform", "id", "offset",
-                 "stop-color", "stop-opacity", "gradientUnits", "gradientTransform", "fx", "fy", "preserveAspectRatio"}
-MAX_SVG = 40000
-
-
-def _unwrap(raw):
-    """The reply as plain text: some providers answer in JSON mode, so the SVG arrives as a string inside {"svg": "..."} with escaped quotes."""
-    import json
-    text = str(raw or "").strip()
-    if text.startswith("{") or text.startswith("["):
-        try:
-            data = json.loads(text)
-            for v in (list(data.values()) if isinstance(data, dict) else list(data)):
-                if isinstance(v, str) and "<svg" in v:
-                    return v
-        except ValueError:
-            pass
-    return text
-
-
-def clean_svg(raw, aspect="16:9"):
-    """A safe SVG text from a model's reply, None when it is not usable: only flat-shape tags and plain attributes are kept, no scripts, links,
-    images, styles or fonts, so the file can only draw shapes. The viewBox is forced to the video shape."""
-    text = _unwrap(raw)
-    m = re.search(r"<svg\b.*?</svg\s*>", text, re.S | re.I)
-    if not m or len(m.group(0)) > MAX_SVG:
-        return None
-    try:
-        root = ET.fromstring(m.group(0))
-    except ET.ParseError:
-        return None
-    count = 0
-    for el in root.iter():
-        tag = el.tag.split("}")[-1]
-        if tag not in ALLOWED_TAGS:
-            return None
-        el.tag = tag                                   # no namespace on the tags: the one xmlns is written once below
-        count += 1
-        for attr in list(el.attrib):
-            name = attr.split("}")[-1]
-            value = el.attrib[attr]
-            if name not in ALLOWED_ATTRS or re.search(r"url\s*\(\s*(?!#)|javascript:|data:|http", value, re.I):
-                del el.attrib[attr]
-    if count < 6:
-        return None                                    # an empty or one-shape answer is not a scene
-    w, h = shape_of(aspect)
-    root.set("width", str(w))                          # an explicit size: an image with only a viewBox cannot always be decoded
-    root.set("height", str(h))
-    root.set("viewBox", f"0 0 {w} {h}")
-    root.set("preserveAspectRatio", "xMidYMid slice")
-    root.set("xmlns", "http://www.w3.org/2000/svg")
-    return ET.tostring(root, encoding="unicode")
-
-
-def svg_request(phrase, aspect):
-    w, h = shape_of(aspect)
-    return (f"Draw ONE flat cartoon illustration of: {phrase}.\n"
-            f"Answer with a single SVG and nothing else. Canvas: viewBox=\"0 0 {w} {h}\". Style: flat colours, simple rounded shapes, thick dark "
-            "outlines, a bright friendly palette, a plain sky or wall as the background, one clear subject in the middle, small details around it.\n"
-            "Rules: use only <svg>, <g>, <defs>, <linearGradient>, <radialGradient>, <stop>, <rect>, <circle>, <ellipse>, <line>, <polyline>, "
-            "<polygon>, <path>. No <text>, no <image>, no <style>, no scripts, no links, no fonts. Give 15 to 40 shapes. Keep the main subject "
-            "inside the middle 70% of the canvas.")
+def background_request(phrase):
+    from engine import art_kit as kit
+    kinds = "\n".join(f"  {k}: {v}" for k, v in kit.HELP.items())
+    return (f"Pick ONE icon that best illustrates the phrase \"{phrase}\" for a picture behind an explainer video.\n{kinds}\n"
+            f"Colours: {', '.join(kit.COLORS)}. Settings: {', '.join(kit.SETTINGS)} (space for astronomy and physics, night for security, cloud for online services, "
+            "city for companies and the public, office for work).\n"
+            'Answer with one JSON object and nothing else, like {"setting": "space", "items": [{"kind": "black_hole", "color": "orange"}]}.')
 
 
 def make_drawn(phrase, aspect, ask):
-    """SVG text drawn by the text model `ask(prompt) -> str`; None after two tries that fail the checks."""
+    """SVG text of a cartoon for `phrase`: the text model `ask(prompt) -> str` picks one icon of the kit (engine/art_kit.py) and the setting, and the kit draws
+    it large, off to one side (the scene's panel covers the middle). None after two tries that name no usable icon."""
+    from engine import art_kit as kit, case_art
+    w, h = shape_of(aspect)
     for _ in range(2):
         try:
-            svg = clean_svg(ask(svg_request(phrase, aspect)), aspect)
+            spec, _problem = case_art.check_spec(ask(background_request(phrase)), 1)
+            spec = case_art.resolve_custom(spec, ask) if spec else spec
         except Exception as e:
-            print(f"[Warning] The text model could not draw '{phrase}' ({' '.join(str(e).split())[:100]}).")
+            print(f"[Warning] The text model could not pick a picture for '{phrase}' ({' '.join(str(e).split())[:100]}).")
             return None
-        if svg:
-            return svg
+        if spec:
+            anchor = (50, 30) if h > w else (74, 50)
+            layered = kit.compose_layers(dict(spec, links=[]), "16:9", canvas=(w, h), anchor=anchor, big=1.7 if h <= w else 1.5)
+            return layered["background"][:-len("</svg>")] + "".join(i[i.index(">") + 1:i.rindex("</svg>")] for i in layered["items"]) + "</svg>"
     return None
 
 
@@ -259,6 +208,9 @@ def attach(script, session_dir, aspect="16:9", source="auto", ask=None, cache_di
 def _attach(script, aspect, source, ask, cache_dir, makers):
     out = []
     for sec in script["sections"]:
+        if sec.get("scene") == "illustration":          # its own picture fills the scene: a background would be hidden behind it
+            out.append(None)
+            continue
         phrases = sec.get("footage") or []
         phrases = [phrases] if isinstance(phrases, str) else phrases
         found = []
