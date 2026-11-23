@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Pictures that explain: the planner is told which ready-made icons the library of drawn icons holds (`~/.shortsflow/icons`), so a label like "Credit card" uses the real icon the next time instead of the nearest built-in one; a rejected picture plan now says why in the log.
+
 - Expressive narration: the word timing no longer loses the start of a section. Given the script as a hint, Whisper sometimes skipped the first seconds of a spoken section (12 s in one video) and heard a third of its words, so there were no captions and the presenter did not move for that time; the timing now checks that the heard words cover the script and listens again without the hint when they do not.
 
 - Pictures that explain: a plan the model wraps in a list (`[ {...} ]`) is read like a plain object; before, such a plan was thrown away and the section fell back to a plain checklist.

@@ -208,3 +208,16 @@ def test_check_spec_reads_a_plan_wrapped_in_a_list():
     assert spec and not problem and spec["items"][0]["kind"] == "hacker"
     assert art.check_spec(json.dumps([{"picture": SPEC}]), 3)[0]["items"][1]["kind"] == "server"
     assert art.check_spec(json.dumps([1, 2]), 3)[0] is None and art.check_spec("[]", 3)[0] is None
+
+
+def test_the_planner_is_told_the_ready_made_icons_and_a_rejected_plan_says_why(tmp_path, monkeypatch, capsys):
+    from engine import art_icons
+    monkeypatch.setenv("SHORTSFLOW_ICONS", str(tmp_path))
+    assert "Also ready-made" not in art.request(SECTION, "T", ["A", "B"])                 # an empty library adds nothing
+    for name in ("credit_card", "qr_code"):
+        (tmp_path / f"{name}.v2.svg").write_text("<g/>", encoding="utf-8")
+    (tmp_path / "old.svg").write_text("<g/>", encoding="utf-8")                           # a file from before the rectangle fix is not offered
+    assert art_icons.library_names() == ["credit_card", "qr_code"]
+    assert "Also ready-made, usable as a kind: credit_card, qr_code." in art.request(SECTION, "T", ["A", "B"])
+    assert art.make(SECTION, "T", "16:9", lambda p: json.dumps({"items": [{"kind": "server"}]}), str(tmp_path / "cache")) is None
+    assert "was not usable: it had 1 items and 3 were needed" in capsys.readouterr().out   # the reason is printed, not just "No picture"

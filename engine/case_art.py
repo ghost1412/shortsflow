@@ -42,6 +42,13 @@ def art_aspect(aspect):
     return "16:9" if aspect == "16:9" else "1:1"
 
 
+def _library_line():
+    """A line naming the ready-made icons in the library of drawn icons (usable as a kind, no model call needed), nothing when the library is empty."""
+    from engine import art_icons
+    names = art_icons.library_names()
+    return ("Also ready-made, usable as a kind: " + ", ".join(names) + ".\n") if names else ""
+
+
 def request(section, topic, labels):
     items = "\n".join(f"{i + 1}. {label}" for i, label in enumerate(labels))
     kinds = "\n".join(f"  {k}: {v}" for k, v in kit.HELP.items())
@@ -52,7 +59,8 @@ def request(section, topic, labels):
         f"What the narrator says over it: {narration}\n\n"
         f"The picture shows these {len(labels)} things, one icon each, so a viewer understands the idea at a glance:\n{items}\n\n"
         f"Choose the icon for each, by what the thing IS in this story (not by its words):\n{kinds}\n"
-        "Be strict: pick a listed icon only when it really shows the thing. If it is only a rough stand-in (a flask for a syringe, a bug for a virus, a person for a "
+        + _library_line()
+        + "Be strict: pick a listed icon only when it really shows the thing. If it is only a rough stand-in (a flask for a syringe, a bug for a virus, a person for a "
         "doctor), still give your closest icon as \"kind\" but ALSO set \"draw\" to the plain name of the real thing (one to three words, like \"syringe\", \"virus\" "
         "or \"stone pyramid\"), and that thing will be drawn for you instead. Leave \"draw\" out when the icon is exact.\n\n"
         "Make the picture tell the story: use a person's mood (angry, worried, happy) or a status mark (warning, check, cross, fire, lock, burst) on an icon to show what "
@@ -184,6 +192,7 @@ def make(section, topic, aspect, ask, cache_dir):
             return None
         spec, problem = check_spec(reply, len(labels))
         if not spec:
+            print(f"[Log] The picture plan for '{section.get('title', '')}' was not usable: {problem}.")
             continue
         layered = kit.compose_layers(resolve_custom(spec, ask), art_aspect(aspect))
         os.makedirs(cache_dir, exist_ok=True)

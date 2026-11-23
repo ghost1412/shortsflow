@@ -124,6 +124,14 @@ def _extent(root):
     return xs, ys
 
 
+def library_names(directory=None):
+    """The names of the icons saved in the library, sorted."""
+    try:
+        return sorted(f[:-len(".v2.svg")] for f in os.listdir(directory or home()) if f.endswith(".v2.svg"))
+    except OSError:
+        return []
+
+
 def path_of(concept, directory=None):
     return os.path.join(directory or home(), f"{slug(concept)}.v2.svg")      # v2: icons saved before the rectangle fix had invisible rectangles
 
