@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: the daily workflow failed with `StopIteration` in the puzzle modes (odd one out, find it, and any mode that picks a game character). The character was picked inside the search for it, so every comparison was a new random draw and about a third of the runs found no match (and each run wrote one history entry per character). It is picked once now.
+
 - Case explainer: a counter label with a raw exponent ("2 x 10^25 molecules") is left off the counter cards; with fewer than two real figures left the section becomes a checklist.
 
 - Case explainer: a calendar year ("1672 year", "2013") is a date, not a number a counter card can show: it is dropped from the counters, and with fewer than two real figures left the section becomes a checklist. Quantities such as "1,672 users" or "1500 years" still count.

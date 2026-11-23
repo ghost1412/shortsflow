@@ -193,6 +193,15 @@ def download_image(query, output_path="assets/obj.png"):
         print(f"Error downloading image: {e}")
     return None
 
+def pick_game_target(targets):
+    """One of `targets` ({"name", "query"}) that was not used in the last runs (engine.puzzle_variety). The name is picked ONCE: asking for a fresh pick
+    inside the search for the target (as this used to) made every comparison a new random draw, so about a third of the runs found no match, raised
+    StopIteration (the daily workflow failed on it) and wrote a pick per target into the history."""
+    from engine.puzzle_variety import fresh
+    name = fresh([t["name"] for t in targets], "game_target")
+    return next(t for t in targets if t["name"] == name)
+
+
 def get_game_assets(num_objects=30, target_query=None, output_dir="assets/game"):
     """
     Fetches one target (meme, figure, object) and a set of similar distractors for the game.
@@ -226,8 +235,7 @@ def get_game_assets(num_objects=30, target_query=None, output_dir="assets/game")
     if target_query:
         selected_target = {"name": "Object", "query": target_query}
     else:
-        from engine.puzzle_variety import fresh
-        selected_target = next(t for t in targets if t["name"] == fresh([t["name"] for t in targets], "game_target"))      # not one of the last few characters
+        selected_target = pick_game_target(targets)                  # not one of the last few characters
     assets["target_name"] = selected_target["name"]
     
     # Download Target

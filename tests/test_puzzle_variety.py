@@ -151,3 +151,14 @@ def test_facts_prompt_lists_earlier_facts_and_remembers_new_ones(tmp_path, monke
     script_gen._remember_facts({"hook": "Which one is the lie?", "facts": [{"fact": "Octopuses have three hearts."}]})
     line = script_gen._recent_facts_line()
     assert "Octopuses have three hearts." in line and "Which one is the lie?" in line and "do NOT repeat" in line
+
+
+def test_the_game_target_is_picked_once_and_never_fails_to_match(tmp_path, monkeypatch):
+    from engine import media_gen, puzzle_variety
+    history = tmp_path / "puzzle_history.json"
+    monkeypatch.setattr(puzzle_variety, "_path", lambda: str(history))
+    targets = [{"name": f"Character {i}", "query": f"q{i}"} for i in range(20)]
+    for _ in range(300):                                   # it used to raise StopIteration in about a third of the runs
+        assert media_gen.pick_game_target(targets) in targets
+    assert len(puzzle_variety.recent("game_target", count=1000)) == 60       # one remembered pick per call (the history keeps the last 60), not one per target
+    assert media_gen.pick_game_target(targets[:1]) == targets[0]             # a single option still works
