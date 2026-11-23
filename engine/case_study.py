@@ -385,6 +385,13 @@ def drop_years(labels):
     return kept or list(labels)
 
 
+def drop_unreadable(labels):
+    """The counter labels without the ones that hold a raw exponent ("2 x 10^25 molecules", "10^-5 fraction": a card cannot show that as a big number). The labels are
+    returned as they are when every one has one."""
+    kept = [x for x in labels if "^" not in str(x)]
+    return kept or list(labels)
+
+
 def is_figure(m):
     """Whether a label's leading number (a match of fit_layout's pattern) is a real figure: money, a percentage, a decimal or thousands separator,
     a value of 10 or more, or a number with a unit. A bare small number ("2 Algorithms") is a count of things, not a figure, and a year is a date."""
@@ -517,7 +524,7 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
         scene = pick_layout(sec["scene"], row.get("scene"), previous, layouts)
         wants_picture = scene == "illustration"
         if scene == "counters":
-            labels = drop_years(labels)                  # a year is a date, not a number to show big
+            labels = drop_unreadable(drop_years(labels))     # a year is a date, and a raw exponent is not a number to show big
         if layouts == "auto":
             scene = fit_layout(scene, labels, previous)
         if wants_picture and scene != "illustration" or (wants_picture and not [x for x in labels if x.strip()]):

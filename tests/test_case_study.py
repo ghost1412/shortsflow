@@ -372,3 +372,10 @@ def test_the_script_leaves_a_year_off_the_counter_cards():
              "on_screen": ["42 degrees", "7 colours", "1672 year", "10 million viewers"], "scene": "counters"}]
     script = cs.write_script("T", template, [], lambda p: json.dumps({"title": "T", "hook": "Rainbows bend light by exactly 42 degrees", "sections": rows}), "auto")
     assert script["sections"][0]["scene"] == "counters" and "1672 year" not in script["sections"][0]["on_screen"]
+
+
+def test_a_label_with_a_raw_exponent_is_left_off_the_counter_cards():
+    from engine import case_study as cs
+    assert cs.drop_unreadable(["2 x 10^25 molecules", "10^-5 fraction scattered", "1881 equations"]) == ["1881 equations"]
+    assert cs.drop_unreadable(["10^3", "10^-5"]) == ["10^3", "10^-5"]                  # all of them: left alone
+    assert cs.fit_layout("counters", cs.drop_unreadable(["2 x 10^25 molecules", "10^-5 fraction", "1881 equations"])) == "checklist"     # one real figure left
