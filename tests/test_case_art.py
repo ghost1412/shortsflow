@@ -201,3 +201,10 @@ def test_labels_match_the_spoken_word_even_when_one_is_plural():
     labels, cues = cr.spoken_order(["Phone call", "QR code"], words, duration=10)
     assert labels == ["QR code", "Phone call"] and cues[0] < cues[1]                  # in the order the narrator says them, not appended at the end
     assert cr._first_spoken("This one", words) is None and not cr._word_matches("this", "thi")
+
+
+def test_check_spec_reads_a_plan_wrapped_in_a_list():
+    spec, problem = art.check_spec(json.dumps([SPEC]), 3)
+    assert spec and not problem and spec["items"][0]["kind"] == "hacker"
+    assert art.check_spec(json.dumps([{"picture": SPEC}]), 3)[0]["items"][1]["kind"] == "server"
+    assert art.check_spec(json.dumps([1, 2]), 3)[0] is None and art.check_spec("[]", 3)[0] is None

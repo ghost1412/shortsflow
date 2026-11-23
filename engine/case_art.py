@@ -79,7 +79,9 @@ def _json_in(reply):
             data = json.loads(m.group(0))
         except ValueError:
             return None
-    if isinstance(data, dict) and "items" not in data:                  # the provider may wrap the answer: {"picture": {...}}
+    if isinstance(data, list):                                          # the provider may wrap the answer in a list: [ {...} ]
+        data = next((d for d in data if isinstance(d, dict) and ("items" in d or any(isinstance(v, dict) and "items" in v for v in d.values()))), None)
+    if isinstance(data, dict) and "items" not in data:                  # or in an object: {"picture": {...}}
         for v in data.values():
             if isinstance(v, dict) and "items" in v:
                 return v
