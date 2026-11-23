@@ -180,7 +180,7 @@ def make(section, topic, aspect, ask, cache_dir):
                 meta = json.load(f)
             if all(os.path.isfile(p) for p in [meta["path"], *meta["items"].values(), *(l["path"] for l in meta["links"])]):
                 return {"path": meta["path"], "points": {k: tuple(v) for k, v in meta["points"].items()}, "items": meta["items"],
-                        "centres": {k: tuple(v) for k, v in meta["centres"].items()}, "links": meta["links"]}
+                        "centres": {k: tuple(v) for k, v in meta["centres"].items()}, "links": meta["links"], "kinds": meta.get("kinds", {})}
         except (OSError, ValueError, KeyError):
             pass
     prompt, problem = request(section, topic, labels), ""
@@ -195,6 +195,7 @@ def make(section, topic, aspect, ask, cache_dir):
             print(f"[Log] The picture plan for '{section.get('title', '')}' was not usable: {problem}.")
             continue
         layered = kit.compose_layers(resolve_custom(spec, ask), art_aspect(aspect))
+        kinds = {l: it["kind"] for l, it in zip(labels, spec["items"])}                # which icon each label got (for the decisions report)
         os.makedirs(cache_dir, exist_ok=True)
 
         def write(name, svg):
@@ -206,11 +207,12 @@ def make(section, topic, aspect, ask, cache_dir):
                 "points": {l: list(p) for l, p in zip(labels, layered["badges"])},
                 "items": {l: write(f"i{i}", svg) for i, (l, svg) in enumerate(zip(labels, layered["items"]))},
                 "centres": {l: list(c) for l, c in zip(labels, layered["centres"])},
-                "links": [{"path": write(f"l{i}", l["svg"]), "from": labels[l["from"] - 1], "to": labels[l["to"] - 1]} for i, l in enumerate(layered["links"])]}
+                "links": [{"path": write(f"l{i}", l["svg"]), "from": labels[l["from"] - 1], "to": labels[l["to"] - 1]} for i, l in enumerate(layered["links"])],
+                "kinds": kinds}
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f)
         return {"path": meta["path"], "points": {k: tuple(v) for k, v in meta["points"].items()}, "items": meta["items"],
-                "centres": {k: tuple(v) for k, v in meta["centres"].items()}, "links": meta["links"]}
+                "centres": {k: tuple(v) for k, v in meta["centres"].items()}, "links": meta["links"], "kinds": kinds}
     return None
 
 

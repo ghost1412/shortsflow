@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: every run now writes **`decisions.md`** into its folder (the hook, each section's layout, mood and labels, which icon each picture label got and whether it is built in or was drawn by the model, narration timing warnings) and a **contact sheet** (`contact_16x9.png`, one per shape: 8 evenly spaced frames), so a reviewer can see at a glance what ShortsFlow decided. A problem while writing either never fails a run.
+
 - Case explainer: `--case length=short|standard|long` sets how many spoken sentences each section gets (2-3, 4-6 or 6-8: about 45, 80 or 110 seconds for four sections); the explainer's last section is "What to remember" (for a discovery or a natural phenomenon the one or two ideas worth keeping, not advice); after the narration a plain warning names any section whose first word is timed late or whose last word ends well before the audio does (no captions, a still presenter there).
 - Tests: every test runs with a private empty home folder (`~`), so none can read or write the real `~/.shortsflow`.
 

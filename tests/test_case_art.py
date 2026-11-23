@@ -238,3 +238,10 @@ def test_tests_run_with_a_private_home_folder():
     import os
     home = os.path.expanduser("~")
     assert "home" in home and os.path.isdir(home) and not os.listdir(home)                    # empty, and not the real home
+
+
+def test_the_picture_plan_remembers_which_icon_each_label_got(tmp_path):
+    got = art.make(SECTION, "T", "16:9", lambda p: json.dumps(SPEC), str(tmp_path))
+    assert got["kinds"] == {"Attacker": "hacker", "Server": "server", "Stolen data": "database"}
+    again = art.make(SECTION, "T", "16:9", lambda p: 1 / 0, str(tmp_path))                  # from the cache
+    assert again["kinds"] == got["kinds"]

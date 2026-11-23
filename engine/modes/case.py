@@ -196,7 +196,8 @@ def run(args, target_bitrate=None, target_preset=None):
         print("[Warning] voice_sample is used only with narrator=voice_server (the local voice server copies it); it is ignored.")
     audios, words = _narration(args, script, session_dir, bool(resume), avatar, opts["narrator"], opts["voice_sample"])
     timing = cr.plan_timing([cr._duration(a) for a in audios])
-    for problem in cr.timing_warnings(words, [cr._duration(a) for a in audios], [x.get("title") for x in script["sections"]]):
+    narration_warnings = cr.timing_warnings(words, [cr._duration(a) for a in audios], [x.get("title") for x in script["sections"]])
+    for problem in narration_warnings:
         print(f"[Warning] Narration timing: {problem}")
 
     music = getattr(args, "music", None)
@@ -211,7 +212,7 @@ def run(args, target_bitrate=None, target_preset=None):
     ask_code = make_ask("You write Manim Community Edition code.", opts["llm"])
     ask_art = make_ask("You are an art director who picks icons for flat cartoon pictures.", opts["llm"])
 
-    results = []
+    results, arts = [], {}
     for aspect in formats:
         tag = aspect.replace(":", "x")
         portrait = aspect == "9:16"
@@ -226,6 +227,7 @@ def run(args, target_bitrate=None, target_preset=None):
         footage = cr.backgrounds_for(script, session_dir, aspect, choice, has_pexels=bool(os.getenv("PEXELS_API_KEY")),
                                      cartoon=opts["cartoon"], ask=ask_art)
         art = cr.attach_art(script, session_dir, aspect, opts["cartoon"], ask_art, words=words, timing=timing)
+        arts[aspect] = art
         props = cr.build_props(script, timing, words, theme=theme, music_volume=0.2, clips=clips, footage=footage, portrait=portrait, avatar=avatar, transition=opts["transition"], art=art)
         voice_track = cr.join_audio(audios, timing, os.path.join(session_dir, f"voice_all_{tag}.mp3"),
                                     sfx=cr.sfx_for(props, os.path.join(session_dir, f"sfx_{tag}.wav")))
@@ -237,6 +239,9 @@ def run(args, target_bitrate=None, target_preset=None):
         results.append({"aspect": aspect, "file": out, "draft": draft})
         print(f"[Log] SUCCESS! {aspect} {'draft ' if draft else ''}video: {out}")
 
+    from engine import case_report
+    for path in case_report.write(session_dir, script, opts, arts, results, avatar, narration_warnings):      # what was decided, and a picture sheet of each video
+        print(f"[Log] Review file: {path}")
     if not draft:
         with open(os.path.join(session_dir, "case.json"), "w", encoding="utf-8") as f:
             json.dump({"title": script["title"], "verified": script["verified"], "sources": script["sources"], "videos": results}, f, indent=1)
