@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer script prompts: a diagram is for a real process, not a list of parts, materials or names (those become a picture); two picture sections may follow each other; with no figures in the sources "Why it matters" says what the work changes or makes possible, and funding, grant numbers, journal names, publication dates and institution lists are never used as labels or as the substance of a section.
+
 - Case explainer: **ShortsFlow now chooses picture scenes by itself.** The explainer template's "What it is" section is a picture scene by default; when the model's labels for it are sentences or numbers, ShortsFlow asks the model once for short names of the things the narration mentions (a device, a material, a person), and the script prompt tells the model to use the picture layout for sections about physical things. A picture section whose labels are not short names becomes a checklist.
 
 - Pictures that explain: the planner is told which ready-made icons the library of drawn icons holds (`~/.shortsflow/icons`), so a label like "Credit card" uses the real icon the next time instead of the nearest built-in one; a rejected picture plan now says why in the log.

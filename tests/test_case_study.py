@@ -326,3 +326,17 @@ def test_a_picture_section_with_sentence_labels_gets_names_asked_for_and_stays_a
 def test_the_explainer_template_starts_with_a_picture_section():
     from engine import case_study as cs
     assert cs.PRESETS["explainer"][0]["scene"] == "illustration"
+
+
+def test_two_pictures_may_follow_each_other_but_other_layouts_may_not():
+    from engine import case_study as cs
+    assert cs.pick_layout("diagram", "illustration", "illustration", "auto") == "illustration"
+    assert cs.pick_layout("diagram", "checklist", "checklist", "auto") == "diagram"          # the old rule for the others
+
+
+def test_the_prompt_keeps_diagrams_for_processes_and_publication_details_off_the_screen():
+    from engine import case_study as cs
+    prompt = cs.build_prompt("Topic", cs.PRESETS["explainer"], [{"id": "s1", "ref": "r", "text": "t"}], "auto")
+    assert "Not for a list of parts" in prompt and "two pictures may follow each other" in prompt
+    assert "Never use funding, grant numbers, journal names" in prompt
+    assert "If they hold no numbers, say what it changes" in prompt

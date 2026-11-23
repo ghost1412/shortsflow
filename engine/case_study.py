@@ -19,10 +19,12 @@ MAX_NAME_WORDS = 4       # a label of the picture scene names one thing: longer 
 LAYOUT_HELP = {
     "timeline": "events in order of time; labels are short dated events",
     "flow": "the steps of one mechanism, one after another; labels are the steps",
-    "diagram": "how things connect or happen when a plain row of steps is not enough: a process with branches, who talks to whom, states over time, how ideas relate; write Mermaid source in the section's \"diagram\" field (the on_screen labels are then only a fallback)",
+    "diagram": "how things connect or happen when a plain row of steps is not enough: a process with branches, who talks to whom, states over time, how ideas relate; write Mermaid source in the section's \"diagram\" field (the on_screen labels are then only a fallback). Not for a list of parts, "
+               "materials, chemicals or names: that is a picture (illustration), because a diagram would cut the names into pieces",
     "illustration": "a drawn picture that explains the idea as a small scene (a story, a cause and its effect, who did what to whom, how something looks from the inside); "
                     "labels are two to four SHORT NAMES of things that appear in that scene (like 'Attacker', 'Mail server', 'Stolen data'): each becomes a numbered "
-                    "marker on the picture. Use it for the human or physical story of a section, not for numbers or step lists",
+                    "marker on the picture. Use it for the human or physical story of a section, and for what a material, a device or a place is made of or how its parts "
+                    "are arranged; not for numbers or step lists",
     "counters": "two to four big numbers; labels are 'number and what it counts', like '300,000 computers'",
     "checklist": "actions or conclusions; labels are short imperative lines",
     "compare": "two things side by side (before and after, A and B); each label is 'left | right', and the FIRST label holds the two headings like 'Before | After'",
@@ -57,7 +59,8 @@ PRESETS = {
     "explainer": [
         {"id": "what", "title": "What it is", "question": "What is it, in one clear idea?", "scene": "illustration"},
         {"id": "how", "title": "How it works", "question": "How does it work, step by step?", "scene": "diagram"},
-        {"id": "why", "title": "Why it matters", "question": "Why does it matter, with real numbers if the sources have them?", "scene": "counters"},
+        {"id": "why", "title": "Why it matters", "question": "Why does it matter, with real numbers if the sources have them? If they hold no numbers, say what it changes or makes possible, and for whom: the "
+                    "consequences in plain words.", "scene": "counters"},
         {"id": "do", "title": "What to do", "question": "What should the viewer do or remember?", "scene": "checklist"},
     ],
     # a recipe page: the dish, the steps in order, the quantities / temperatures / times, the tips
@@ -248,6 +251,8 @@ def build_prompt(topic, template, sources, layouts="auto"):
               "The first sentence of the first section's narration must also open with that kind of fact, not with background. "
               "When the work is a paper, name the institution or lab at most once and never read out a list of author names. "
               "Advice in the last section may be general, but must not add facts. "
+              "Never use funding, grant numbers, journal names, publication dates or the list of institutions as an on-screen label or as the substance of a section: "
+              "they say nothing about the subject itself. "
               "VOICE: the narration is SPOKEN by a narrator talking to one viewer, not read from a report. Write the way a good presenter talks: short "
               "sentences of 8 to 16 words, one idea each; contractions (it's, didn't, that's); speak to the viewer as \"you\" now and then; turn a "
               "surprising point into a quick question and answer it (\"So what went wrong? ...\"); say what a term means the first time in plain words "
@@ -257,7 +262,7 @@ def build_prompt(topic, template, sources, layouts="auto"):
         parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  " + (f"Default layout: {s['scene']}" if layouts == "auto" else f"Scene kind: {s['scene']}")
                      + (f"  Narration length: {s['sentences']} short sentences." if s.get("sentences") else ""))
     if layouts == "auto":
-        parts += ["", "Pick the layout of each section yourself, from this list, whichever shows THAT section best, and do not use the same layout for two sections in a row:"]
+        parts += ["", "Pick the layout of each section yourself, from this list, whichever shows THAT section best, and do not use the same layout for two sections in a row (two pictures may follow each other):"]
         parts += [f"  {name}: {LAYOUT_HELP[name]}" for name in AUTO_LAYOUTS]
         parts.append("  (a section whose default layout is terminal, equation or animation keeps it)")
         parts.append("  Use the illustration layout for the section or two whose story is about physical things: a device, a material, a person, a place, who or what did "
@@ -324,7 +329,7 @@ def pick_layout(default, chosen, previous, layouts="auto"):
         return default
     if default == "diagram" and chosen == "flow":      # a drawn diagram is the better way to show a process than a plain row of boxes
         return default
-    if chosen == previous and default != previous:
+    if chosen == previous and chosen != "illustration" and default != previous:       # two pictures in a row are fine: their content differs
         return default
     return chosen
 
