@@ -402,3 +402,14 @@ def test_a_year_followed_by_a_noun_is_still_a_year_but_a_counted_thing_is_not():
     assert year("1913 home invention") and year("1672 discovery") and year("2013 launch") and year("1066 CE") and year("1999")
     assert not year("1500 servers") and not year("1500 customers") and not year("1500 degrees") and not year("2000 patients") and not year("1500 years")
     assert cs.drop_years(["3-5 C optimal range", "50 percent supermarket energy", "1913 home invention"]) == ["3-5 C optimal range", "50 percent supermarket energy"]
+
+
+def test_picture_labels_are_asked_to_be_things_you_can_see_not_ideas():
+    from engine import case_study as cs
+    prompt = cs.build_prompt("Topic", cs.PRESETS["explainer"], [], "auto")
+    assert "could SEE and point at in a drawing" in prompt
+    assert '"Heat transfer", "External environment" and "Vapor compression cycle" no' in prompt
+    asked = []
+    names = cs.picture_names_for("How", "A compressor pumps cold air through the door.", "T", lambda p: (asked.append(p), '{"names": ["Compressor", "Cold air"]}')[1])
+    assert names == ["Compressor", "Cold air"]
+    assert "point at in a drawing" in asked[0] and "not an idea or a process" in asked[0]

@@ -272,7 +272,8 @@ def build_prompt(topic, template, sources, layouts="auto", length="standard"):
         parts.append("  Use the illustration layout for the section or two whose story is about physical things: a device, a material, a person, a place, who or what did "
                      "something to whom or what. Most videos should have at least one. For it, every on_screen label is the SHORT NAME of one thing in the picture (one to "
                      "three words, like \"Attacker\", \"Atomic film\" or \"Chip\"), a word the narration actually says, in the order the narration reaches them: never a "
-                     "sentence, a number or a verb phrase.")
+                     "sentence, a number or a verb phrase. Each must be something you could SEE and point at in a drawing (an object, a device, a material, a person, a "
+                     "place), not an idea or a process: \"Compressor\" and \"Cold air\" yes; \"Heat transfer\", \"External environment\" and \"Vapor compression cycle\" no.")
     parts += ["", "Return raw JSON only:",
               '{"title": "<plain title, no emoji>", "hook": "<12 words or fewer>", "sections": [{"id": "<section id>", "narration": "<' + LENGTHS.get(length, LENGTHS["standard"]) + ' short spoken sentences, told like a presenter talking (see VOICE), concrete: who, what, when, how many, in order>", '
               '"scene": "<the layout you chose for this section>", "mood": "<how the narrator should sound here: tense, excited, serious, warm or calm>", '
@@ -479,7 +480,8 @@ def picture_names_for(title, narration, topic, ask):
     digits, and is a word the narration actually says (so the picture's icons can pop in as the narrator reaches them). Used when a section is meant to be a picture
     but the labels the model wrote are sentences or numbers."""
     reply = ask("Name the things a viewer should SEE in a cartoon picture for this part of a video about: " + str(topic) + "\n\nSection: " + str(title) + "\nNarration: "
-                + str(narration) + "\n\nGive 3 names (2 to 4 at most) of physical things the narration mentions: a device, a material, a person, a place. Each name is one to "
+                + str(narration) + "\n\nGive 3 names (2 to 4 at most) of physical things the narration mentions: a device, a material, a person, a place, something you could point at in a drawing "
+                "(not an idea or a process like \"heat transfer\"). Each name is one to "
                 "three words, in the order the narration reaches them; no sentences, no numbers, no verbs. Reply with raw JSON only: {\"names\": [\"...\", \"...\", \"...\"]}")
     data = parse_reply(reply)
     names = data.get("names") if isinstance(data, dict) else None

@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: picture-scene labels are asked to be things you could see and point at in a drawing ("Compressor", "Cold air"), not ideas or processes ("Heat transfer", "External environment"); the same rule is used when ShortsFlow asks the model again for the names of a picture's things.
+
 - Case explainer: an icon drawn by the small model on this PC (when the cloud model is down and the run falls back) is used for that video but no longer saved in the icon library, which every later video reuses; the cloud model redraws it next time. A year followed by an ordinary word ("1913 home invention") is a date, not a figure for a counter card; counted things ("1500 customers", "2000 patients", "1500 degrees") still are.
 
 - Case explainer: the cartoon picture behind a section (`background=cartoon`) is now chosen for the video's subject, not only for the loose stock-footage phrase: the model is told the video, the section and its labels, and which icons earlier backgrounds already use, so a rainbow video no longer gets a microscope and a gear, and the backgrounds do not all look alike.
