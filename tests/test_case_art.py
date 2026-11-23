@@ -221,3 +221,20 @@ def test_the_planner_is_told_the_ready_made_icons_and_a_rejected_plan_says_why(t
     assert "Also ready-made, usable as a kind: credit_card, qr_code." in art.request(SECTION, "T", ["A", "B"])
     assert art.make(SECTION, "T", "16:9", lambda p: json.dumps({"items": [{"kind": "server"}]}), str(tmp_path / "cache")) is None
     assert "was not usable: it had 1 items and 3 were needed" in capsys.readouterr().out   # the reason is printed, not just "No picture"
+
+
+def test_narration_timing_warnings_name_the_section_and_the_problem():
+    from engine import case_render as cr
+    ok = [{"word": "a", "start": 0.0, "end": 0.4}, {"word": "b", "start": 9.0, "end": 9.8}]
+    late = [{"word": "a", "start": 12.0, "end": 12.4}, {"word": "b", "start": 20.0, "end": 21.0}]
+    early = [{"word": "a", "start": 0.0, "end": 0.4}, {"word": "b", "start": 3.0, "end": 3.5}]
+    assert cr.timing_warnings([ok], [10.0]) == []
+    assert "first word is timed 12.0 s in" in cr.timing_warnings([late], [21.5], ["What it is"])[0] and cr.timing_warnings([late], [21.5], ["What it is"])[0].startswith("What it is:")
+    assert "ends 6.5 s before the audio does" in cr.timing_warnings([early], [10.0])[0]
+    assert "no word timings" in cr.timing_warnings([[]], [5.0])[0]
+
+
+def test_tests_run_with_a_private_home_folder():
+    import os
+    home = os.path.expanduser("~")
+    assert "home" in home and os.path.isdir(home) and not os.listdir(home)                    # empty, and not the real home

@@ -67,6 +67,23 @@ def read_words(path):
     return [w for w in out if w["word"]]
 
 
+def timing_warnings(words_per_section, durations, titles=None):
+    """Plain sentences for each section whose word timings look wrong: the first word comes more than 1.5 s into the audio, or the last word ends more than 2.5 s
+    before the audio does (the captions and the presenter would have nothing to follow there). `words_per_section` is a list of [{word, start, end}], `durations`
+    the length of each section's audio in seconds."""
+    out = []
+    for i, (ws, dur) in enumerate(zip(words_per_section, durations)):
+        name = (titles[i] if titles and i < len(titles) else f"Section {i + 1}")
+        if not ws:
+            out.append(f"{name}: no word timings at all (no captions, a still presenter).")
+            continue
+        if float(ws[0]["start"]) > 1.5:
+            out.append(f"{name}: the first word is timed {float(ws[0]['start']):.1f} s in, so the start has no captions.")
+        if dur and float(ws[-1]["end"]) < float(dur) - 2.5:
+            out.append(f"{name}: the last word ends {float(dur) - float(ws[-1]['end']):.1f} s before the audio does.")
+    return out
+
+
 def _word_matches(tok, key):
     """Whether a content word of a label and a spoken word are the same word: equal, sharing their first five letters, or equal apart from a plural s
     ("code" and "codes", "call" and "calls")."""

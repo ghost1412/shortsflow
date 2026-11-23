@@ -11,3 +11,13 @@ import pytest
 def _private_transcript_cache(tmp_path, monkeypatch):
     """Tests never read or write the real ~/.shortsflow cache."""
     monkeypatch.setenv("SHORTSFLOW_CACHE_DIR", str(tmp_path / "shortsflow-cache"))
+
+
+@pytest.fixture(autouse=True)
+def _private_home(tmp_path_factory, monkeypatch):
+    """Tests never read or write the real home folder (~/.shortsflow: the icon library, the picture cache, the puzzle history, ...): two tests once wrote
+    there and then failed on their second run. `~` points at an empty folder per test."""
+    home = tmp_path_factory.mktemp("home")                 # beside the test's own folder, never inside it (some tests check that nothing else was written there)
+    for name in ("HOME", "USERPROFILE"):
+        monkeypatch.setenv(name, str(home))
+    monkeypatch.setenv("SHORTSFLOW_ICONS", str(home / "icons"))

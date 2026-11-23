@@ -53,7 +53,7 @@ def _make_script(args, session_dir, opts):
     script, error = None, None
     for attempt in (1, 2):                  # a model that is busy sometimes answers with something that is not the script: one more try
         try:
-            script = cs.write_script(topic, template, sources, ask, opts["layouts"])
+            script = cs.write_script(topic, template, sources, ask, opts["layouts"], length=opts["length"])
             break
         except ValueError as e:
             error = e
@@ -196,6 +196,8 @@ def run(args, target_bitrate=None, target_preset=None):
         print("[Warning] voice_sample is used only with narrator=voice_server (the local voice server copies it); it is ignored.")
     audios, words = _narration(args, script, session_dir, bool(resume), avatar, opts["narrator"], opts["voice_sample"])
     timing = cr.plan_timing([cr._duration(a) for a in audios])
+    for problem in cr.timing_warnings(words, [cr._duration(a) for a in audios], [x.get("title") for x in script["sections"]]):
+        print(f"[Warning] Narration timing: {problem}")
 
     music = getattr(args, "music", None)
     if not music or not os.path.exists(music):

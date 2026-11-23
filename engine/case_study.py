@@ -61,7 +61,8 @@ PRESETS = {
         {"id": "how", "title": "How it works", "question": "How does it work, step by step?", "scene": "diagram"},
         {"id": "why", "title": "Why it matters", "question": "Why does it matter, with real numbers if the sources have them? If they hold no numbers, say what it changes or makes possible, and for whom: the "
                     "consequences in plain words.", "scene": "counters"},
-        {"id": "do", "title": "What to do", "question": "What should the viewer do or remember?", "scene": "checklist"},
+        {"id": "do", "title": "What to remember", "question": "What should the viewer remember, or do about it? For a discovery or a natural phenomenon: the one or two ideas "
+                    "worth keeping, not advice.", "scene": "checklist"},
     ],
     # a recipe page: the dish, the steps in order, the quantities / temperatures / times, the tips
     # a news story: sharp, attributed, balanced (every claim belongs to the person who made it; the video takes no side)
@@ -235,7 +236,10 @@ DIAGRAM_CHOICE = ("Choose the diagram type by the story: parties talking back an
                   "a life cycle is a stateDiagram-v2; related ideas are a mindmap.")
 
 
-def build_prompt(topic, template, sources, layouts="auto"):
+LENGTHS = {"short": "2-3", "standard": "4-6", "long": "6-8"}       # spoken sentences per section: about 45, 80 and 110 seconds for four sections
+
+
+def build_prompt(topic, template, sources, layouts="auto", length="standard"):
     parts = [f"Write an explainer video script about: {topic}", ""]
     if sources:
         parts.append("Use ONLY the facts in these sources. If a source does not say it, do not say it.")
@@ -270,7 +274,7 @@ def build_prompt(topic, template, sources, layouts="auto"):
                      "three words, like \"Attacker\", \"Atomic film\" or \"Chip\"), a word the narration actually says, in the order the narration reaches them: never a "
                      "sentence, a number or a verb phrase.")
     parts += ["", "Return raw JSON only:",
-              '{"title": "<plain title, no emoji>", "hook": "<12 words or fewer>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, told like a presenter talking (see VOICE), concrete: who, what, when, how many, in order>", '
+              '{"title": "<plain title, no emoji>", "hook": "<12 words or fewer>", "sections": [{"id": "<section id>", "narration": "<' + LENGTHS.get(length, LENGTHS["standard"]) + ' short spoken sentences, told like a presenter talking (see VOICE), concrete: who, what, when, how many, in order>", '
               '"scene": "<the layout you chose for this section>", "mood": "<how the narrator should sound here: tense, excited, serious, warm or calm>", '
               '"on_screen": ["<3-5 short labels, steps or figures shown on screen, never empty>"], "cites": ["S1"], '
               '"footage": ["<3 or 4 different searches for stock video, 2-4 plain words each, one per step of this section: things a camera can film, no brand, person or place names>"], "diagram": "<Mermaid source, only when the layout is diagram>"}]}',
@@ -488,12 +492,12 @@ def picture_names_for(title, narration, topic, ask):
     return good[:MAX_ILLUSTRATION] if len(good) >= 2 else []
 
 
-def write_script(topic, template, sources, ask, layouts="auto", check_diagram=None):
+def write_script(topic, template, sources, ask, layouts="auto", check_diagram=None, length="standard"):
     """The script: {"title", "verified", "sources": [{id, ref}], "sections": [{id, title, scene, narration, on_screen, cites}],
     "dropped": [{section, sentence, unsupported}]}. `ask(prompt)` returns the model's text. Raises ValueError when the answer holds no
     usable section. With sources, a sentence holding a number or name no source contains is dropped; without, nothing can be checked
     and "verified" is False."""
-    reply = ask(build_prompt(topic, template, sources, layouts))
+    reply = ask(build_prompt(topic, template, sources, layouts, length))
     data = parse_reply(reply)
     rows = data.get("sections") if isinstance(data, dict) else None
     if not isinstance(rows, list):

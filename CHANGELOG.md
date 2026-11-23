@@ -4,6 +4,9 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: `--case length=short|standard|long` sets how many spoken sentences each section gets (2-3, 4-6 or 6-8: about 45, 80 or 110 seconds for four sections); the explainer's last section is "What to remember" (for a discovery or a natural phenomenon the one or two ideas worth keeping, not advice); after the narration a plain warning names any section whose first word is timed late or whose last word ends well before the audio does (no captions, a still presenter there).
+- Tests: every test runs with a private empty home folder (`~`), so none can read or write the real `~/.shortsflow`.
+
 - Fix: the daily workflow failed with `StopIteration` in the puzzle modes (odd one out, find it, and any mode that picks a game character). The character was picked inside the search for it, so every comparison was a new random draw and about a third of the runs found no match (and each run wrote one history entry per character). It is picked once now.
 
 - Case explainer: a counter label with a raw exponent ("2 x 10^25 molecules") is left off the counter cards; with fewer than two real figures left the section becomes a checklist.

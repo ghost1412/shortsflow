@@ -379,3 +379,18 @@ def test_a_label_with_a_raw_exponent_is_left_off_the_counter_cards():
     assert cs.drop_unreadable(["2 x 10^25 molecules", "10^-5 fraction scattered", "1881 equations"]) == ["1881 equations"]
     assert cs.drop_unreadable(["10^3", "10^-5"]) == ["10^3", "10^-5"]                  # all of them: left alone
     assert cs.fit_layout("counters", cs.drop_unreadable(["2 x 10^25 molecules", "10^-5 fraction", "1881 equations"])) == "checklist"     # one real figure left
+
+
+def test_the_length_option_sets_the_sentences_per_section():
+    from engine import case_study as cs, case_options
+    t = cs.PRESETS["explainer"]
+    assert "<4-6 short spoken sentences" in cs.build_prompt("T", t, [], "auto")
+    assert "<2-3 short spoken sentences" in cs.build_prompt("T", t, [], "auto", "short")
+    assert "<6-8 short spoken sentences" in cs.build_prompt("T", t, [], "auto", "long")
+    assert "<4-6 short spoken sentences" in cs.build_prompt("T", t, [], "auto", "nonsense")          # an unknown length is the standard one
+    assert case_options.parse(["length=short"])["length"] == "short" and case_options.parse([])["length"] == "standard"
+
+
+def test_the_explainers_last_section_is_about_remembering():
+    from engine import case_study as cs
+    assert cs.PRESETS["explainer"][-1]["title"] == "What to remember"
