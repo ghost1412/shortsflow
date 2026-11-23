@@ -161,7 +161,7 @@ def usable_labels(section):
 
 
 def _key(section, labels, aspect):
-    raw = "|".join([str(section.get("title", "")), str(section.get("narration", "")), *labels, art_aspect(aspect), "kit-v5"])
+    raw = "|".join([str(section.get("title", "")), str(section.get("narration", "")), *labels, art_aspect(aspect), "kit-v6"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
