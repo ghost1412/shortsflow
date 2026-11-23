@@ -16,9 +16,12 @@ import xml.etree.ElementTree as ET
 from engine import art_kit as kit
 
 ALLOWED_TAGS = {"g", "rect", "circle", "ellipse", "line", "polyline", "polygon", "path"}
-ALLOWED_ATTRS = {"x", "y", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry", "d", "points", "fill", "stroke", "stroke-width", "stroke-linecap",
+ALLOWED_ATTRS = {"x", "y", "width", "height", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry", "d", "points", "fill", "stroke", "stroke-width", "stroke-linecap",
                  "stroke-linejoin", "opacity", "fill-opacity", "transform", "stroke-dasharray"}
 MIN_SHAPES = 4
+MIN_FILLED = 3                 # shapes with a fill: a drawing of outlines only is a few scratches, not an icon
+MIN_SPAN = 70                  # the drawing must be at least this wide and this tall (of 200): not a speck in the corner
+TRIES = 3
 MAX_SHAPES = 60
 MAX_BYTES = 12000
 LIMIT = 135                     # no coordinate may leave the 200 x 200 box by more than this: the icon must sit where the kit puts its icons
@@ -78,21 +81,51 @@ def clean(raw):
         if tag not in ALLOWED_TAGS:
             return None
         el.tag = tag
+        if tag == "rect" and not (NUMBER.fullmatch(el.attrib.get("width", "")) and NUMBER.fullmatch(el.attrib.get("height", ""))
+                                  and float(el.attrib["width"]) > 0 and float(el.attrib["height"]) > 0):
+            return None                                 # a rectangle with no size draws nothing (the model forgot width or height)
         if el is not root:
             shapes += tag != "g"
         for attr in list(el.attrib):
             value = el.attrib[attr]
             if attr not in ALLOWED_ATTRS or re.search(r"url\s*\(|javascript:|data:|http", value, re.I):
                 del el.attrib[attr]
-            elif attr in ("d", "points", "x", "y", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry") and any(abs(float(n)) > LIMIT for n in NUMBER.findall(value)):
+            elif attr in ("d", "points", "x", "y", "width", "height", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry") and any(abs(float(n)) > (2 * LIMIT if attr in ("width", "height") else LIMIT) for n in NUMBER.findall(value)):
                 return None
     if not MIN_SHAPES <= shapes <= MAX_SHAPES:
+        return None
+    filled = sum(1 for el in root.iter() if el.tag in ("rect", "circle", "ellipse", "polygon", "path") and el.attrib.get("fill", "#000") not in ("none", "transparent"))
+    xs, ys = _extent(root)
+    if filled < MIN_FILLED or (xs and max(xs) - min(xs) < MIN_SPAN) or (ys and max(ys) - min(ys) < MIN_SPAN):
         return None
     return "".join(ET.tostring(child, encoding="unicode").replace(" xmlns=\"http://www.w3.org/2000/svg\"", "") for child in root)
 
 
+def _extent(root):
+    """The x values and the y values the shapes reach (approximate: a path's numbers are read in pairs), to tell a real drawing from a speck."""
+    xs, ys = [], []
+    num = lambda el, k: float(el.attrib.get(k, 0) or 0) if NUMBER.fullmatch(str(el.attrib.get(k, 0) or 0)) else 0.0
+    for el in root.iter():
+        tag, a = el.tag, el.attrib
+        if tag in ("circle", "ellipse"):
+            rx, ry = num(el, "rx") or num(el, "r"), num(el, "ry") or num(el, "r")
+            xs += [num(el, "cx") - rx, num(el, "cx") + rx]
+            ys += [num(el, "cy") - ry, num(el, "cy") + ry]
+        elif tag == "rect":
+            xs += [num(el, "x"), num(el, "x") + num(el, "width")]
+            ys += [num(el, "y"), num(el, "y") + num(el, "height")]
+        elif tag == "line":
+            xs += [num(el, "x1"), num(el, "x2")]
+            ys += [num(el, "y1"), num(el, "y2")]
+        elif tag in ("polygon", "polyline", "path"):
+            nums = [float(n) for n in NUMBER.findall(a.get("points" if tag != "path" else "d", ""))]
+            xs += nums[0::2]
+            ys += nums[1::2]
+    return xs, ys
+
+
 def path_of(concept, directory=None):
-    return os.path.join(directory or home(), f"{slug(concept)}.svg")
+    return os.path.join(directory or home(), f"{slug(concept)}.v2.svg")      # v2: icons saved before the rectangle fix had invisible rectangles
 
 
 def load(concept, directory=None):
@@ -105,14 +138,14 @@ def load(concept, directory=None):
 
 
 def get(concept, ask, directory=None):
-    """The markup of an icon for `concept` (saved, else drawn by the model and saved), None when the model cannot draw it in two tries. Registers it
+    """The markup of an icon for `concept` (saved, else drawn by the model and saved), None when the model cannot draw it in three tries. Registers it
     with the kit so scenes can use it by name."""
     name = slug(concept)
     if not name:
         return None
     markup = load(name, directory)
     if not markup and ask is not None:
-        for _ in range(2):
+        for _ in range(TRIES):
             try:
                 markup = clean(ask(request(concept)))
             except Exception as e:

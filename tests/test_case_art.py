@@ -134,7 +134,7 @@ def test_a_thing_the_kit_lacks_is_drawn_saved_and_used_and_a_failure_falls_back(
     assert out["items"][0]["kind"] == "vaccine" and "custom" not in out["items"][0] and len(asked) == 1
     svg, _ = kit.compose(out, "16:9")
     ET.fromstring(svg)
-    assert (tmp_path / "vaccine.svg").is_file()
+    assert (tmp_path / "vaccine.v2.svg").is_file()
     spec, _ = art.check_spec(json.dumps({"items": [{"kind": "vaccine"}, {"kind": "server"}]}), 2)
     art.resolve_custom(spec, lambda p: 1 / 0, str(tmp_path))                     # saved already: the model is not asked again
     assert spec["items"][0]["kind"] == "vaccine"
@@ -155,3 +155,13 @@ def test_icon_check_keeps_flat_shapes_only_and_near_the_box():
     assert art_icons.clean("<circle r='9'/><circle r='9'/>") is None                        # too few shapes
     assert art_icons.clean(good.replace("r='40'", "r='400'")) is None                       # far outside the 200 x 200 box
     assert art_icons.clean("<g><rect></g>") is None and art_icons.clean("") is None
+
+
+def test_icon_check_keeps_rectangle_sizes_and_rejects_scratches_and_sizeless_rectangles():
+    from engine import art_icons
+    body = "<rect x='-60' y='-60' width='120' height='120' rx='8' fill='#3b82f6' stroke='#1f2937'/>" + "<circle cx='0' cy='0' r='30' fill='#fff'/>" * 3
+    out = art_icons.clean("<g>" + body + "</g>")
+    assert out and 'width="120"' in out and 'height="120"' in out                    # these were stripped once: every rectangle vanished
+    assert art_icons.clean("<g>" + body.replace(" width='120' height='120'", "") + "</g>") is None      # a rectangle with no size draws nothing
+    assert art_icons.clean("<g>" + "<path d='M-80 -80 L80 80' fill='none' stroke='#000'/>" * 6 + "</g>") is None   # outlines only: scratches
+    assert art_icons.clean("<g>" + "<circle cx='0' cy='0' r='10' fill='#fff'/>" * 5 + "</g>") is None            # a speck

@@ -110,5 +110,5 @@ def test_drawn_way_draws_an_icon_the_kit_lacks_and_gives_up_when_the_model_fails
     drawing = "<g>" + "<circle cx='0' cy='0' r='40' fill='#fff' stroke='#1f2937'/>" * 5 + "</g>"
     replies = iter([json.dumps({"items": [{"kind": "unicorn"}]}), json.dumps({"svg": drawing})])
     svg = cc.make_drawn("odd", "16:9", lambda p: next(replies))
-    assert svg and (tmp_path / "unicorn.svg").is_file()
+    assert svg and (tmp_path / "unicorn.v2.svg").is_file()
     assert cc.make_drawn("odd", "16:9", lambda p: 1 / 0) is None
