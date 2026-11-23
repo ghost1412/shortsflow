@@ -42,9 +42,8 @@ def is_abstract(label):
 
 def is_spoken(label, narration):
     """True when the narration says a content word of the label (a plural counts as the same word): the icon can pop in as the narrator reaches it."""
-    from engine import case_render
-    said = _words(narration)
-    return any(case_render._word_matches(w, s) for w in _words(label) if len(w) >= 4 for s in said)
+    from engine import case_study
+    return case_study.label_spoken(label, narration)               # the one definition, shared with the script step that repairs unspoken labels
 
 
 def score(script, length="standard"):
@@ -76,9 +75,11 @@ def score(script, length="standard"):
 
 
 def passes(m):
-    """The checks every script should meet: a picture scene, at most one idea-like picture label, no date or exponent on a counter card, a real hook, no fallback."""
-    return bool(m["picture_sections"] >= 1 and m["abstract_labels"] <= 1 and m["bad_counter_labels"] == 0 and m["hook_ok"] and m["fallbacks"] == 0
-                and m.get("empty_sections", 0) == 0 and m.get("thin_sections", 0) == 0)
+    """The checks every script should meet: a picture scene, at most one idea-like picture label, at least half of the picture labels said by the narrator (so
+    the icons pop in on time), no date or exponent on a counter card, a real hook, no section without labels and no thin narration. A checklist in the middle
+    is not a failure by itself (a section with no readable figures is meant to become one); the "fallbacks" column only reports how many there are."""
+    return bool(m["picture_sections"] >= 1 and m["abstract_labels"] <= 1 and m["spoken_labels"] * 2 >= m["picture_labels"] and m["bad_counter_labels"] == 0
+                and m["hook_ok"] and m.get("empty_sections", 0) == 0 and m.get("thin_sections", 0) == 0)
 
 
 def table(results):

@@ -214,7 +214,8 @@ def test_powers_of_ten_in_labels_are_spelled_as_words():
     from engine import case_study as cs
     assert cs.spell_powers("3 × 10^9 cycles between errors") == "3 billion cycles between errors"
     assert cs.spell_powers("1.5 x 10^6 users") == "1.5 million users"
-    assert cs.spell_powers("2 × 10^7 cells") == "2 × 10^7 cells"
+    assert cs.spell_powers("2 × 10^7 cells") == "2 × 10⁷ cells"                              # any other power: real superscripts, never a caret
+    assert cs.spell_powers("2 x 10^25 molecules per m^3 and 10^-5 fraction") == "2 x 10²⁵ molecules per m³ and 10⁻⁵ fraction"
     assert cs.spell_powers("300,000 computers") == "300,000 computers"
 
 
@@ -448,3 +449,9 @@ def test_a_counters_section_with_no_readable_figures_becomes_a_checklist():
     assert one_good["scene"] == "checklist" and one_good["on_screen"] == ["42 degrees"]                         # only one real figure is left
     two_good = script_with(["42 degrees", "10 million viewers", "10^-5 fraction scattered"])
     assert two_good["scene"] == "counters" and two_good["on_screen"] == ["42 degrees", "10 million viewers"]
+
+
+def test_exponents_in_either_form_are_unreadable_and_a_spoken_label_is_told_from_an_unspoken_one():
+    assert cs.has_power("10^-5 fraction") and cs.has_power("10⁻⁵ fraction") and not cs.has_power("42 degrees")
+    assert cs.bad_counter_label("10⁻⁵ fraction") and cs.drop_unreadable(["10⁻⁵ fraction", "42 degrees"]) == ["42 degrees"]
+    assert cs.label_spoken("Water droplets", "Sunlight hits a water droplet.") and not cs.label_spoken("Dragon", "A fridge keeps food cold.")

@@ -343,12 +343,24 @@ def pick_layout(default, chosen, previous, layouts="auto"):
 _POWERS = {3: "thousand", 6: "million", 9: "billion", 12: "trillion"}
 
 
+_SUPERSCRIPT = str.maketrans("0123456789-", "⁰¹²³⁴⁵⁶⁷⁸⁹⁻")
+
+
 def spell_powers(label):
-    """"3 x 10^9 cycles" (also "3 × 10^9", "3e9") as "3 billion cycles": a counter reads it like a number, not a formula."""
+    """"3 x 10^9 cycles" (also "3 × 10^9", "3e9") as "3 billion cycles": a counter reads it like a number, not a formula. Any other power is written with real
+    superscripts ("2 × 10^25" as "2 × 10²⁵", "m^2" as "m²") instead of a caret, which no one reads on a screen."""
     def repl(m):
         word = _POWERS.get(int(m.group(2)))
         return f"{m.group(1)} {word}" if word else m.group(0)
-    return re.sub(r"(\d+(?:\.\d+)?)\s*(?:[x×]|\\times)\s*10\s*\^\s*\{?(\d+)\}?", repl, str(label))
+    spelled = re.sub(r"(\d+(?:\.\d+)?)\s*(?:[x×]|\\times)\s*10\s*\^\s*\{?(\d+)\}?", repl, str(label))
+    return re.sub(r"\^\s*\{?(-?\d+)\}?", lambda m: m.group(1).translate(_SUPERSCRIPT), spelled)
+
+
+def label_spoken(label, narration):
+    """Whether the narration says a content word of the label (a plural counts as the same word): the label's icon can pop in as the narrator reaches it."""
+    from engine import case_render
+    said = re.findall(r"[a-z][a-z']+", str(narration).lower())
+    return any(case_render._word_matches(w, s) for w in re.findall(r"[a-z][a-z']+", str(label).lower()) if len(w) >= 4 for s in said)
 
 
 def fit_layout(scene, labels, previous=None):
@@ -387,10 +399,15 @@ def is_year(m):
     return not sign and bool(re.fullmatch(r"\d{4}", num)) and 1000 <= int(num) <= 2100 and unit not in UNITS and unit != "%"
 
 
+def has_power(label):
+    """Whether a label holds an exponent, as a caret ("10^-5") or as superscripts ("10⁻⁵"): a card would show only the "10" as its big number."""
+    return bool(re.search(r"\^|[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]", str(label)))
+
+
 def bad_counter_label(label):
-    """Whether a label cannot be a counter card: it starts with a calendar year (`is_year`) or holds a raw exponent ("10^-5 fraction")."""
+    """Whether a label cannot be a counter card: it starts with a calendar year (`is_year`) or holds an exponent (`has_power`)."""
     m = _NUMBER_LEAD.match(str(label))
-    return "^" in str(label) or bool(m and is_year(m))
+    return has_power(label) or bool(m and is_year(m))
 
 
 def drop_years(labels):
@@ -403,7 +420,7 @@ def drop_years(labels):
 def drop_unreadable(labels):
     """The counter labels without the ones that hold a raw exponent ("2 x 10^25 molecules", "10^-5 fraction": a card cannot show that as a big number). The labels are
     returned as they are when every one has one."""
-    kept = [x for x in labels if "^" not in str(x)]
+    kept = [x for x in labels if not has_power(x)]
     return kept or list(labels)
 
 
@@ -549,6 +566,12 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
             names = picture_names_for(sec["title"], narration, topic, ask)      # a picture section whose labels were sentences or numbers: ask for names of things
             if names:
                 scene, labels = "illustration", names
+        if scene == "illustration":
+            said = [x for x in labels if label_spoken(x, narration)]
+            if len(said) * 2 < len(labels):                  # fewer than half the labels are said: the icons would pop in off the narration, so ask for names it says
+                names = picture_names_for(sec["title"], narration, topic, ask)
+                if len([x for x in names if label_spoken(x, narration)]) > len(said):
+                    labels = names
         diagram = ""
         if scene == "diagram":
             grounding = source_text if sources else None
