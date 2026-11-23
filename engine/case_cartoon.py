@@ -38,8 +38,8 @@ def shape_of(aspect):
     return (576, 1024) if aspect == "9:16" else (1024, 576)
 
 
-def cache_file(cache_dir, phrase, aspect, source, ext):
-    key = hashlib.sha1(f"{phrase.lower().strip()}|{aspect}|{source}|{STYLE}|v3".encode("utf-8")).hexdigest()[:10]
+def cache_file(cache_dir, phrase, aspect, source, ext, context=""):
+    key = hashlib.sha1(f"{phrase.lower().strip()}|{aspect}|{source}|{STYLE}|v3|{context}".encode("utf-8")).hexdigest()[:10]
     slug = re.sub(r"[^a-z0-9]+", "_", phrase.lower()).strip("_")[:30]
     return os.path.join(cache_dir, f"{slug}_{aspect.replace(':', 'x')}_{source}_{key}.{ext}")
 
@@ -108,28 +108,34 @@ def make_local(prompt, aspect, post=None, url=None):
 
 # ---- drawn (a kit icon picked by the text model) ------------------------------------------------------------------------------------
 
-def background_request(phrase):
+def background_request(phrase, context="", used=None):
     from engine import art_kit as kit
     kinds = "\n".join(f"  {k}: {v}" for k, v in kit.HELP.items())
-    return (f"Pick ONE icon that best illustrates the phrase \"{phrase}\" for a picture behind an explainer video.\n{kinds}\n"
+    about = (f" The video is about: {context}. Choose the icon that fits THAT subject, whatever the loose phrase suggests (a stock-footage search phrase can point at "
+             "something unrelated).") if context else ""
+    varied = (f" These icons are already used behind other parts of this video: {', '.join(used)}. Pick a different one unless nothing else fits, so the backgrounds "
+              "do not all look alike.") if used else ""
+    return (f"Pick ONE icon that best illustrates the phrase \"{phrase}\" for a picture behind an explainer video.{about}{varied}\n{kinds}\n"
             f"Colours: {', '.join(kit.COLORS)}. Settings: {', '.join(kit.SETTINGS)} (space for astronomy and physics, night for security, cloud for online services, "
             "city for companies and the public, office for work).\n"
             'Answer with one JSON object and nothing else, like {"setting": "space", "items": [{"kind": "black_hole", "color": "orange"}]}.')
 
 
-def make_drawn(phrase, aspect, ask):
+def make_drawn(phrase, aspect, ask, context="", used=None):
     """SVG text of a cartoon for `phrase`: the text model `ask(prompt) -> str` picks one icon of the kit (engine/art_kit.py) and the setting, and the kit draws
     it large, off to one side (the scene's panel covers the middle). None after two tries that name no usable icon."""
     from engine import art_kit as kit, case_art
     w, h = shape_of(aspect)
     for _ in range(2):
         try:
-            spec, _problem = case_art.check_spec(ask(background_request(phrase)), 1)
+            spec, _problem = case_art.check_spec(ask(background_request(phrase, context, used)), 1)
             spec = case_art.resolve_custom(spec, ask) if spec else spec
         except Exception as e:
             print(f"[Warning] The text model could not pick a picture for '{phrase}' ({' '.join(str(e).split())[:100]}).")
             return None
         if spec:
+            if used is not None and spec["items"][0]["kind"] not in used:
+                used.append(spec["items"][0]["kind"])                    # the next background of this video is asked to choose another
             anchor = (50, 30) if h > w else (74, 50)
             layered = kit.compose_layers(dict(spec, links=[]), "16:9", canvas=(w, h), anchor=anchor, big=1.7 if h <= w else 1.5)
             return layered["background"][:-len("</svg>")] + "".join(i[i.index(">") + 1:i.rindex("</svg>")] for i in layered["items"]) + "</svg>"
@@ -161,7 +167,7 @@ def order(source, has_cloud_key, local_up):
     return (["local"] if local_up else []) + (["cloud"] if has_cloud_key else []) + ["drawn"]
 
 
-def make_image(phrase, cache_dir, aspect="16:9", source="auto", ask=None, makers=None):
+def make_image(phrase, cache_dir, aspect="16:9", source="auto", ask=None, makers=None, context="", used=None):
     """Path of a cartoon for `phrase`, None when no way worked. `makers` replaces the three makers (tests): {"local"|"cloud"|"drawn": fn(prompt)}."""
     phrase = " ".join(str(phrase or "").split())
     prompt = prompt_for(phrase)
@@ -170,11 +176,11 @@ def make_image(phrase, cache_dir, aspect="16:9", source="auto", ask=None, makers
     makers = makers or {
         "local": lambda p: make_local(p, aspect),
         "cloud": lambda p: make_cloud(p, aspect),
-        "drawn": lambda p: make_drawn(phrase, aspect, ask) if ask else None,
+        "drawn": lambda p: make_drawn(phrase, aspect, ask, context, used) if ask else None,
     }
     has_key = bool(os.getenv("GEMINI_API_KEY") or os.getenv("HF_API_KEY"))
     ways = order(source, has_key, local_ready() if source == "auto" else "local" in source)
-    files = {way: cache_file(cache_dir, phrase, aspect, way, "svg" if way == "drawn" else "png") for way in ways}
+    files = {way: cache_file(cache_dir, phrase, aspect, way, "svg" if way == "drawn" else "png", context if way == "drawn" else "") for way in ways}
     for way in ways:                                    # a picture made before is used first, so a re-run asks nobody again
         if os.path.isfile(files[way]):
             return files[way]
@@ -206,16 +212,17 @@ def attach(script, session_dir, aspect="16:9", source="auto", ask=None, cache_di
 
 
 def _attach(script, aspect, source, ask, cache_dir, makers):
-    out = []
+    out, used = [], []
     for sec in script["sections"]:
         if sec.get("scene") == "illustration":          # its own picture fills the scene: a background would be hidden behind it
             out.append(None)
             continue
         phrases = sec.get("footage") or []
         phrases = [phrases] if isinstance(phrases, str) else phrases
+        context = " / ".join(x for x in (str(script.get("title", "")), str(sec.get("title", "")), ", ".join(str(l) for l in (sec.get("on_screen") or [])[:4])) if x)
         found = []
         for phrase in phrases:
-            got = make_image(phrase, cache_dir, aspect, source, ask=ask, makers=makers) if phrase else None
+            got = make_image(phrase, cache_dir, aspect, source, ask=ask, makers=makers, context=context, used=used) if phrase else None
             if got and all(got != f["path"] for f in found):
                 found.append({"path": got, "kind": "cartoon"})
         out.append(found or None)

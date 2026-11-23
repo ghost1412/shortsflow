@@ -112,3 +112,35 @@ def test_drawn_way_draws_an_icon_the_kit_lacks_and_gives_up_when_the_model_fails
     svg = cc.make_drawn("odd", "16:9", lambda p: next(replies))
     assert svg and (tmp_path / "unicorn.v2.svg").is_file()
     assert cc.make_drawn("odd", "16:9", lambda p: 1 / 0) is None
+
+
+def test_a_background_icon_is_chosen_for_the_videos_subject_not_only_the_loose_phrase(tmp_path):
+    import json
+    prompts = []
+
+    def ask(prompt):
+        prompts.append(prompt)
+        return json.dumps({"setting": "cloud", "items": [{"kind": "sun", "color": "orange"}]})
+    script = {"title": "How a Rainbow Forms", "sections": [{"title": "How it works", "scene": "diagram", "on_screen": ["Refraction", "Dispersion"], "footage": ["protractor measuring angle"]}]}
+    out = cc.attach(script, str(tmp_path), "16:9", "drawn", ask=ask, cache_dir=str(tmp_path))
+    assert out[0] and "The video is about: How a Rainbow Forms / How it works / Refraction, Dispersion" in prompts[0] and "fits THAT subject" in prompts[0]
+    assert "The video is about" not in cc.background_request("rain cloud")                       # no context: the request is as before
+    assert cc.cache_file(str(tmp_path), "rain cloud", "16:9", "drawn", "svg", "Topic A") != cc.cache_file(str(tmp_path), "rain cloud", "16:9", "drawn", "svg", "Topic B")
+    assert cc.cache_file(str(tmp_path), "rain cloud", "16:9", "drawn", "svg") == cc.cache_file(str(tmp_path), "rain cloud", "16:9", "drawn", "svg", "")
+
+
+def test_each_background_is_asked_to_differ_from_the_ones_already_chosen(tmp_path):
+    import json
+    picks = iter(["sun", "cloud", "sun"])
+    prompts = []
+
+    def ask(prompt):
+        prompts.append(prompt)
+        return json.dumps({"setting": "cloud", "items": [{"kind": next(picks), "color": "orange"}]})
+    script = {"title": "T", "sections": [{"title": "A", "scene": "checklist", "on_screen": ["x"], "footage": ["one", "two"]},
+                                          {"title": "B", "scene": "checklist", "on_screen": ["y"], "footage": ["three"]}]}
+    cc.attach(script, str(tmp_path), "16:9", "drawn", ask=ask, cache_dir=str(tmp_path))
+    assert "already used" not in prompts[0]                                                  # the first one has nothing to differ from
+    assert "already used behind other parts of this video: sun" in prompts[1]
+    assert "already used behind other parts of this video: sun, cloud" in prompts[2]
+    assert "already used" not in cc.background_request("rain cloud", "T", None) and "already used" not in cc.background_request("rain cloud", "T", [])
