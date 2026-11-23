@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: a calendar year ("1672 year", "2013") is a date, not a number a counter card can show: it is dropped from the counters, and with fewer than two real figures left the section becomes a checklist. Quantities such as "1,672 users" or "1500 years" still count.
+
 - Case explainer: the opening line (hook) is no longer a stray `{`. When the first hook is rejected the model is asked again, and a provider that always answers in JSON returned `{ "hook": "..." }`; only its first line was read. The line is now taken out of a JSON answer, and a hook that starts with a bracket or has no letters is rejected.
 
 - Case explainer script prompts: a diagram is for a real process, not a list of parts, materials or names (those become a picture); two picture sections may follow each other; with no figures in the sources "Why it matters" says what the work changes or makes possible, and funding, grant numbers, journal names, publication dates and institution lists are never used as labels or as the substance of a section.

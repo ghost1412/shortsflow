@@ -352,3 +352,23 @@ def test_a_json_wrapped_hook_is_read_and_a_stray_bracket_is_never_a_hook():
     sections = [{"narration": "A long first sentence that goes on and on and on and on and on and on and on and on and on and on."}]
     reply = '{\n  "hook": "Every rainbow is really a full circle."\n}'
     assert cs.make_hook("", sections, None, lambda p: reply) == "Every rainbow is really a full circle."          # the model's answer to the second ask
+
+
+def test_a_year_is_a_date_not_a_figure_for_a_counter():
+    from engine import case_study as cs
+    year = lambda x: cs.is_year(cs._NUMBER_LEAD.match(x))
+    assert year("1672 year") and year("2013") and year("1999 AD") and year("1066 CE")
+    assert not year("1,672 users") and not year("1500 servers") and not year("$2013") and not year("42 degrees") and not year("12345") and not year("999")
+    assert cs.drop_years(["42 degrees", "7 colours", "1672 year"]) == ["42 degrees", "7 colours"]
+    assert cs.drop_years(["2013", "1999"]) == ["2013", "1999"]                       # all years: left alone
+    assert cs.fit_layout("counters", ["1672 year", "2013", "42 degrees"]) == "checklist"        # only one real figure is left
+    assert cs.fit_layout("counters", ["66% of sites", "17 million servers", "1672 year"]) == "counters"
+
+
+def test_the_script_leaves_a_year_off_the_counter_cards():
+    from engine import case_study as cs
+    template = [{"id": "why", "title": "Why", "question": "q", "scene": "counters"}]
+    rows = [{"id": "why", "narration": "Rainbows bend light by 42 degrees and split it into 7 colours, as Newton showed in 1672.",
+             "on_screen": ["42 degrees", "7 colours", "1672 year", "10 million viewers"], "scene": "counters"}]
+    script = cs.write_script("T", template, [], lambda p: json.dumps({"title": "T", "hook": "Rainbows bend light by exactly 42 degrees", "sections": rows}), "auto")
+    assert script["sections"][0]["scene"] == "counters" and "1672 year" not in script["sections"][0]["on_screen"]

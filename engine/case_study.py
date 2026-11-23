@@ -368,10 +368,29 @@ UNITS = {"k", "m", "b", "bn", "x", "ms", "s", "kb", "mb", "gb", "tb", "hz", "mhz
          "devices", "servers", "sites", "websites", "computers", "dollars", "euros", "records", "accounts", "bits", "bytes"}
 
 
+_NUMBER_LEAD = re.compile(r"\s*([$€£]?)(\d[\d,]*(?:\.\d+)?)\s*(%|[a-zA-Z]+)?")
+
+
+def is_year(m):
+    """Whether a label's leading number is a calendar year ("1672 year", "2013", "44 BC" is not: only four digits count): a bare four-digit number from 1000 to 2100,
+    or one followed by year, AD, BC, BCE or CE. A date is a point in time, not a quantity a counter can show ("1500 years" and "1,500" are quantities)."""
+    sign, num, unit = m.group(1), m.group(2), (m.group(3) or "").lower()
+    return not sign and bool(re.fullmatch(r"\d{4}", num)) and 1000 <= int(num) <= 2100 and unit in ("", "year", "ad", "bc", "bce", "ce")
+
+
+def drop_years(labels):
+    """The labels without the ones that start with a calendar year (see `is_year`): a counter card of "1672" says nothing. The labels are returned as they are
+    when every one is a year (something is better than nothing)."""
+    kept = [x for x in labels if not ((m := _NUMBER_LEAD.match(str(x))) and is_year(m))]
+    return kept or list(labels)
+
+
 def is_figure(m):
     """Whether a label's leading number (a match of fit_layout's pattern) is a real figure: money, a percentage, a decimal or thousands separator,
-    a value of 10 or more, or a number with a unit. A bare small number ("2 Algorithms") is a count of things, not a figure."""
+    a value of 10 or more, or a number with a unit. A bare small number ("2 Algorithms") is a count of things, not a figure, and a year is a date."""
     sign, num, unit = m.group(1), m.group(2), (m.group(3) or "").lower()
+    if is_year(m):
+        return False
     if sign or unit == "%" or "." in num or "," in num or unit in UNITS:
         return True
     return int(num.replace(",", "")) >= 10
@@ -497,6 +516,8 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
         footage = [p for p in (" ".join(re.findall(r"[A-Za-z0-9]+", str(x or "")))[:60] for x in raw_footage) if p][:4]
         scene = pick_layout(sec["scene"], row.get("scene"), previous, layouts)
         wants_picture = scene == "illustration"
+        if scene == "counters":
+            labels = drop_years(labels)                  # a year is a date, not a number to show big
         if layouts == "auto":
             scene = fit_layout(scene, labels, previous)
         if wants_picture and scene != "illustration" or (wants_picture and not [x for x in labels if x.strip()]):
