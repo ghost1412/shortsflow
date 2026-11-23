@@ -521,6 +521,21 @@ def picture_names_for(title, narration, topic, ask):
     return good[:MAX_ILLUSTRATION] if len(good) >= 2 else []
 
 
+MIN_NARRATION = {"short": 20, "standard": 35, "long": 50}       # spoken words a section needs at each length (the scorecard calls fewer thin)
+
+
+def refill_narration(title, kept, topic, source_text, ask, length="standard"):
+    """A longer narration for a section that lost sentences to the source check and became thin: the model is asked for more sentences, and each new one goes
+    through the same check. Returns the new checked text when it is longer than `kept`, else `kept` unchanged."""
+    reply = ask("Write more narration for the section \"" + str(title) + "\" of a video about: " + str(topic) + "\n\nSo far it says: " + (kept or "(nothing yet)")
+                + "\n\nWrite " + LENGTHS.get(length, "4-6") + " spoken sentences in total, using ONLY facts the source text below states; no number or name the source does not hold."
+                + "\n\nSource text:\n" + str(source_text)[:6000] + "\n\nReply with raw JSON only: {\"narration\": \"...\"}")
+    data = parse_reply(reply)
+    text = str(data.get("narration") or "").strip() if isinstance(data, dict) else ""
+    more, _ = clean_narration(text, source_text) if text else ("", [])
+    return more if len(more.split()) > len(str(kept).split()) else kept
+
+
 def write_script(topic, template, sources, ask, layouts="auto", check_diagram=None, length="standard"):
     """The script: {"title", "verified", "sources": [{id, ref}], "sections": [{id, title, scene, narration, on_screen, cites}],
     "dropped": [{section, sentence, unsupported}]}. `ask(prompt)` returns the model's text. Raises ValueError when the answer holds no
@@ -543,6 +558,8 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
         if sources:
             narration, cut = clean_narration(narration, source_text)
             dropped += [{"section": sec["id"], "sentence": s, "unsupported": bad} for s, bad in cut]
+            if cut and len(narration.split()) < MIN_NARRATION.get(length, 35):      # the check left too little: one more try, each new sentence checked again
+                narration = refill_narration(sec["title"], narration, topic, source_text, ask, length)
         labels = [str(x).strip()[:80] for x in (row.get("on_screen") or []) if str(x).strip()][:6] if isinstance(row.get("on_screen"), list) else []
         if sources:
             labels = [x for x in labels if not unsupported(x, source_text)]

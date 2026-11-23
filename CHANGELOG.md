@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: a section the source check leaves too short is asked once for more narration, and each new sentence goes through the same check.
+
 - Case explainer: powers of ten in labels become superscripts (10⁻⁵) and are never a counter card; a picture whose labels the narrator mostly does not say is re-asked for names the narration does say, so icons pop in on time; the scorecard judges that spoken share and no longer fails a section that was meant to become a checklist.
 
 - Case explainer: a scorecard (`python scripts/case_scorecard.py`) runs the script step on six fixed topics and scores what ShortsFlow chose, so a change to a prompt or rule is judged on numbers (and on which model wrote each script) instead of one sample. It found two real faults, now fixed: the model could replace the explainer's "What it is" picture with a timeline of dates (the template's picture section can no longer be overridden), and a "Why it matters" section whose figures were all raw exponents stayed a counters card (it becomes a plain checklist when fewer than two readable figures remain).

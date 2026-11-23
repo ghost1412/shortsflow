@@ -455,3 +455,15 @@ def test_exponents_in_either_form_are_unreadable_and_a_spoken_label_is_told_from
     assert cs.has_power("10^-5 fraction") and cs.has_power("10⁻⁵ fraction") and not cs.has_power("42 degrees")
     assert cs.bad_counter_label("10⁻⁵ fraction") and cs.drop_unreadable(["10⁻⁵ fraction", "42 degrees"]) == ["42 degrees"]
     assert cs.label_spoken("Water droplets", "Sunlight hits a water droplet.") and not cs.label_spoken("Dragon", "A fridge keeps food cold.")
+
+
+def test_a_section_thinned_by_the_source_check_is_refilled_with_checked_sentences():
+    src = "Compressors move heat. Fridges use refrigerant. The coil is cold."
+    calls = []
+
+    def ask(prompt):
+        calls.append(prompt)
+        return '{"narration": "Compressors move heat. Fridges use refrigerant. The coil is cold. It was invented in 1913."}' if "more narration" in prompt else ""
+    out = cs.refill_narration("How", "Compressors move heat.", "fridge", src, ask)
+    assert "refrigerant" in out and "1913" not in out and len(out.split()) > 3
+    assert cs.refill_narration("How", "Compressors move heat.", "fridge", src, lambda p: "nonsense") == "Compressors move heat."

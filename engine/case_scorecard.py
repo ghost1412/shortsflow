@@ -27,7 +27,7 @@ TOPICS = {
 ABSTRACT = {"process", "cycle", "transfer", "effect", "environment", "system", "concept", "method", "technique", "phenomenon", "principle", "theory", "reaction",
             "analysis", "efficiency", "dynamics", "mechanism", "relationship", "approach", "strategy", "model", "framework", "compression", "evolution", "interaction"}
 WORDS_PER_SECOND = 2.6
-MIN_WORDS = {"short": 20, "standard": 35, "long": 50}       # a section with fewer spoken words than this is thin for its length setting
+MIN_WORDS = {"short": 20, "standard": 35, "long": 50}       # (the script step refills to the same numbers: case_study.MIN_NARRATION) a section with fewer spoken words than this is thin for its length setting
 
 
 def _words(text):
