@@ -413,3 +413,38 @@ def test_picture_labels_are_asked_to_be_things_you_can_see_not_ideas():
     names = cs.picture_names_for("How", "A compressor pumps cold air through the door.", "T", lambda p: (asked.append(p), '{"names": ["Compressor", "Cold air"]}')[1])
     assert names == ["Compressor", "Cold air"]
     assert "point at in a drawing" in asked[0] and "not an idea or a process" in asked[0]
+
+
+def test_a_section_whose_default_is_the_picture_keeps_it_whatever_the_model_chooses():
+    from engine import case_study as cs
+    for chosen in ("timeline", "quote", "checklist", "diagram", "flow", "counters", "illustration", None):
+        assert cs.pick_layout("illustration", chosen, None, "auto") == "illustration"
+    assert cs.pick_layout("diagram", "timeline", None, "auto") == "timeline"                       # the other defaults can still be changed by the model
+    template = [{"id": "what", "title": "What it is", "question": "q", "scene": "illustration"}]
+    calls = []
+
+    def ask(prompt):
+        calls.append(prompt)
+        if len(calls) == 1:                                # the model answers with a timeline of dates for a section meant to be a picture
+            return json.dumps({"title": "T", "hook": "Sunlight scatters in the air above you", "sections": [{"id": "what", "scene": "timeline",
+                               "narration": "Sunlight hits tiny air molecules and blue light scatters most. Your eye sees that blue light from every direction.",
+                               "on_screen": ["1506: Da Vinci", "1871: Rayleigh"]}]})
+        return json.dumps({"names": ["Sunlight", "Air molecules", "Blue light"]})
+    sec = cs.write_script("Sky", template, [], ask, "auto")["sections"][0]
+    assert sec["scene"] == "illustration" and sec["on_screen"] == ["Sunlight", "Air molecules", "Blue light"]
+
+
+def test_a_counters_section_with_no_readable_figures_becomes_a_checklist():
+    from engine import case_study as cs
+    assert cs.bad_counter_label("10^-5 fraction scattered") and cs.bad_counter_label("1913 home invention") and not cs.bad_counter_label("42 degrees")
+    template = [{"id": "why", "title": "Why", "question": "q", "scene": "counters"}]
+
+    def script_with(labels):
+        rows = [{"id": "why", "narration": "Some words about the sky and its blue light and how far it goes.", "on_screen": labels, "scene": "counters"}]
+        return cs.write_script("T", template, [], lambda p: json.dumps({"title": "T", "hook": "The sky is blue for a reason", "sections": rows}), "auto")["sections"][0]
+    every_bad = script_with(["2 x 10^25 molecules per cubic meter", "10^-5 fraction scattered", "5.1 x 10^-31 m^2 cross section"])
+    assert every_bad["scene"] == "checklist" and len(every_bad["on_screen"]) == 3                              # shown as plain lines, not as big cards
+    one_good = script_with(["42 degrees", "10^-5 fraction scattered", "1913 home invention"])
+    assert one_good["scene"] == "checklist" and one_good["on_screen"] == ["42 degrees"]                         # only one real figure is left
+    two_good = script_with(["42 degrees", "10 million viewers", "10^-5 fraction scattered"])
+    assert two_good["scene"] == "counters" and two_good["on_screen"] == ["42 degrees", "10 million viewers"]

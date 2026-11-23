@@ -329,8 +329,9 @@ def clean_narration(text, source_text):
 def pick_layout(default, chosen, previous, layouts="auto"):
     """The layout of a section: the template's `default`, or the model's `chosen` one when layouts are "auto", it is one the model may pick, and
     it is not the same as the section before (then the default is used, and failing that the choice is kept). A section whose default is
-    terminal or equation keeps it."""
-    if layouts != "auto" or default in ("terminal", "equation", "animation") or chosen not in AUTO_LAYOUTS:
+    terminal or equation keeps it; so does a section whose default is the picture: the template means it to be one (the model once overrode "What it is" with
+    a timeline of discovery dates, and the video then had no picture at all). When its labels are not things, they are asked for again (picture_names_for)."""
+    if layouts != "auto" or default in ("terminal", "equation", "animation", "illustration") or chosen not in AUTO_LAYOUTS:
         return default
     if default == "diagram" and chosen == "flow":      # a drawn diagram is the better way to show a process than a plain row of boxes
         return default
@@ -384,6 +385,12 @@ def is_year(m):
     "discovery") makes it a date: a point in time, not a number a counter can show."""
     sign, num, unit = m.group(1), m.group(2), (m.group(3) or "").lower()
     return not sign and bool(re.fullmatch(r"\d{4}", num)) and 1000 <= int(num) <= 2100 and unit not in UNITS and unit != "%"
+
+
+def bad_counter_label(label):
+    """Whether a label cannot be a counter card: it starts with a calendar year (`is_year`) or holds a raw exponent ("10^-5 fraction")."""
+    m = _NUMBER_LEAD.match(str(label))
+    return "^" in str(label) or bool(m and is_year(m))
 
 
 def drop_years(labels):
@@ -534,6 +541,8 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
         wants_picture = scene == "illustration"
         if scene == "counters":
             labels = drop_unreadable(drop_years(labels))     # a year is a date, and a raw exponent is not a number to show big
+            if layouts == "auto" and len([x for x in labels if not bad_counter_label(x)]) < 2:
+                scene = "checklist"                          # fewer than two readable figures left (every label was a date or an exponent): plain lines, not big cards
         if layouts == "auto":
             scene = fit_layout(scene, labels, previous)
         if wants_picture and scene != "illustration" or (wants_picture and not [x for x in labels if x.strip()]):
