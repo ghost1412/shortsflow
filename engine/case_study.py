@@ -541,6 +541,8 @@ MOODS = ("tense", "excited", "serious", "warm", "calm")
 def check_hook(text, source_text=None):
     """(hook, '') when `text` can open the video, else ('', why): it must exist, be one short line, and hold nothing the sources do not say."""
     hook = " ".join(str(text or "").split()).strip().strip('"').strip()
+    if hook and (not re.search(r"[A-Za-z]{2,}", hook) or hook[0] in "{[<"):
+        return "", "it is not a line of words"                       # a stray bracket from a JSON answer is not a hook
     if not hook:
         return "", "the model gave none"
     if len(hook.split()) > HOOK_WORDS:
@@ -549,6 +551,25 @@ def check_hook(text, source_text=None):
     if bad:
         return "", "it holds " + ", ".join(bad[:3]) + ", which the sources do not"
     return hook[:110], ""
+
+
+def hook_line(reply):
+    """The line in a model's answer to "write the opening line": the text itself, or the string inside a JSON answer ({"hook": "..."}, which some providers
+    always return), whichever it is; '' when there is none."""
+    text = str(reply or "").strip()
+    if not text:
+        return ""
+    if text[0] in "{[":
+        data = parse_reply(text)
+        values = [v for v in (data.values() if isinstance(data, dict) else []) if isinstance(v, str) and v.strip()]
+        if not values:
+            try:
+                parsed = json.loads(text)
+                values = [v for v in (parsed if isinstance(parsed, list) else []) if isinstance(v, str) and v.strip()]
+            except ValueError:
+                values = []
+        return " ".join(values[0].split()) if values else ""
+    return text.splitlines()[0]
 
 
 def make_hook(first, sections, source_text, ask):
@@ -565,7 +586,7 @@ def make_hook(first, sections, source_text, ask):
                     + "\n\nReturn only the line, no quotes, no explanation.")
     except Exception as e:                      # the model is busy: fall back below
         reply, why = "", f"the model did not answer ({str(e)[:80]})"
-    hook, why2 = check_hook(str(reply or "").strip().splitlines()[0] if str(reply or "").strip() else "", source_text)
+    hook, why2 = check_hook(hook_line(reply), source_text)
     if hook:
         print(f"[Log] Hook: {hook}")
         return hook

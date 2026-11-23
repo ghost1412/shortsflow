@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: the opening line (hook) is no longer a stray `{`. When the first hook is rejected the model is asked again, and a provider that always answers in JSON returned `{ "hook": "..." }`; only its first line was read. The line is now taken out of a JSON answer, and a hook that starts with a bracket or has no letters is rejected.
+
 - Case explainer script prompts: a diagram is for a real process, not a list of parts, materials or names (those become a picture); two picture sections may follow each other; with no figures in the sources "Why it matters" says what the work changes or makes possible, and funding, grant numbers, journal names, publication dates and institution lists are never used as labels or as the substance of a section.
 
 - Case explainer: **ShortsFlow now chooses picture scenes by itself.** The explainer template's "What it is" section is a picture scene by default; when the model's labels for it are sentences or numbers, ShortsFlow asks the model once for short names of the things the narration mentions (a device, a material, a person), and the script prompt tells the model to use the picture layout for sections about physical things. A picture section whose labels are not short names becomes a checklist.

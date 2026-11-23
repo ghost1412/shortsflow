@@ -340,3 +340,15 @@ def test_the_prompt_keeps_diagrams_for_processes_and_publication_details_off_the
     assert "Not for a list of parts" in prompt and "two pictures may follow each other" in prompt
     assert "Never use funding, grant numbers, journal names" in prompt
     assert "If they hold no numbers, say what it changes" in prompt
+
+
+def test_a_json_wrapped_hook_is_read_and_a_stray_bracket_is_never_a_hook():
+    from engine import case_study as cs
+    assert cs.hook_line('{\n  "hook": "Rainbows are full circles, not arcs."\n}') == "Rainbows are full circles, not arcs."
+    assert cs.hook_line('["A plain list answer is still a line."]') == "A plain list answer is still a line."
+    assert cs.hook_line("Just the line.\nAnd an explanation.") == "Just the line." and cs.hook_line("") == "" and cs.hook_line("{}") == ""
+    assert cs.check_hook("{")[0] == "" and cs.check_hook("[")[0] == "" and cs.check_hook("12 34")[0] == ""
+    assert cs.check_hook("Rainbows are full circles, not arcs.")[0] == "Rainbows are full circles, not arcs."
+    sections = [{"narration": "A long first sentence that goes on and on and on and on and on and on and on and on and on and on."}]
+    reply = '{\n  "hook": "Every rainbow is really a full circle."\n}'
+    assert cs.make_hook("", sections, None, lambda p: reply) == "Every rainbow is really a full circle."          # the model's answer to the second ask
