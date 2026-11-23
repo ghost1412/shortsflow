@@ -98,3 +98,26 @@ def test_your_own_recording_can_be_the_voice_and_a_new_one_respeaks(tmp_path):
     own = case._narrator_tag("voice_server", str(rec), None)
     assert own.startswith("voice_server:own_") and own == case._narrator_tag("voice_server", str(rec), None)
     assert case._narrator_tag("voice_server", "", None) != own and case._narrator_tag("standard", str(rec), None) == "standard"
+
+
+
+def test_heard_words_must_cover_the_script_or_whisper_listens_again_without_the_hint(monkeypatch):
+    import sys
+    import types
+    from engine import expressive_voice as ev
+    text = " ".join(f"word{i}" for i in range(10))
+    start = [{"word": "word9", "start": 12.0, "end": 12.4}] * 3                      # the hint made it skip the start and hear 3 of 10 words
+    full = [{"word": f"word{i}", "start": i * 0.5, "end": i * 0.5 + 0.4} for i in range(10)]
+    assert not ev.covers(start, text) and ev.covers(full, text) and not ev.covers([], text)
+    assert not ev.covers([dict(w, start=w["start"] + 5) for w in full], text)          # complete but starting five seconds late
+    calls = []
+
+    class Model:
+        def transcribe(self, audio, **kw):
+            calls.append("initial_prompt" in kw)
+            words = start if "initial_prompt" in kw else full
+            return {"segments": [{"words": [{"word": w["word"], "start": w["start"], "end": w["end"]} for w in words]}]}
+    monkeypatch.setitem(sys.modules, "whisper", types.SimpleNamespace(load_model=lambda *a, **k: Model()))
+    monkeypatch.setattr(ev, "_WHISPER", {})
+    assert [w["start"] for w in ev.hear("x.mp3", text)][:2] == [0.0, 0.5]
+    assert calls == [True, False]                                                    # with the hint first, then without it

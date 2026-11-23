@@ -81,13 +81,24 @@ def align(script_text, heard):
 _WHISPER = {}
 
 
+def covers(heard, text):
+    """Whether Whisper's words cover the script: it heard most of the words and the first one comes at the start. With the script as a hint Whisper has been seen to skip
+    the first twelve seconds of a section and hear only a third of its words, which left the captions and the presenter with nothing to follow for that time."""
+    return bool(heard) and len(heard) >= 0.7 * len(text.split()) and float(heard[0]["start"]) <= 1.5
+
+
 def hear(audio, text):
-    """Whisper's word timings for `audio` (CPU, the 'base' model, the script as a hint)."""
+    """Whisper's word timings for `audio` (CPU, the 'base' model, the script as a hint). When the words do not cover the script (see `covers`) it listens again
+    without the hint, which the matching of heard words to script words does not need."""
     import whisper
     if "m" not in _WHISPER:
         _WHISPER["m"] = whisper.load_model(os.getenv("SHORTSFLOW_ALIGN_MODEL", "base"), device="cpu")
-    result = _WHISPER["m"].transcribe(audio, language="en", word_timestamps=True, fp16=False, initial_prompt=text[:800])
-    return [{"word": w["word"].strip(), "start": w["start"], "end": w["end"]} for seg in result.get("segments", []) for w in seg.get("words", [])]
+
+    def listen(**kw):
+        result = _WHISPER["m"].transcribe(audio, language="en", word_timestamps=True, fp16=False, **kw)
+        return [{"word": w["word"].strip(), "start": w["start"], "end": w["end"]} for seg in result.get("segments", []) for w in seg.get("words", [])]
+    heard = listen(initial_prompt=text[:800])
+    return heard if covers(heard, text) else (listen() or heard)
 
 
 def speak(text, out_audio, out_subs, sample=None, mood=None, first=False, url=None, post=None, listen=None):

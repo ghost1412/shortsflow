@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Expressive narration: the word timing no longer loses the start of a section. Given the script as a hint, Whisper sometimes skipped the first seconds of a spoken section (12 s in one video) and heard a third of its words, so there were no captions and the presenter did not move for that time; the timing now checks that the heard words cover the script and listens again without the hint when they do not.
+
 - Pictures that explain: a plan the model wraps in a list (`[ {...} ]`) is read like a plain object; before, such a plan was thrown away and the section fell back to a plain checklist.
 
 - Case explainer: a label now matches the spoken word when only a plural differs ("QR code" and "QR codes", "call" and "calls"), so labels pop in as the narrator says them instead of arriving late after the others.
