@@ -394,3 +394,11 @@ def test_the_length_option_sets_the_sentences_per_section():
 def test_the_explainers_last_section_is_about_remembering():
     from engine import case_study as cs
     assert cs.PRESETS["explainer"][-1]["title"] == "What to remember"
+
+
+def test_a_year_followed_by_a_noun_is_still_a_year_but_a_counted_thing_is_not():
+    from engine import case_study as cs
+    year = lambda x: cs.is_year(cs._NUMBER_LEAD.match(x))
+    assert year("1913 home invention") and year("1672 discovery") and year("2013 launch") and year("1066 CE") and year("1999")
+    assert not year("1500 servers") and not year("1500 customers") and not year("1500 degrees") and not year("2000 patients") and not year("1500 years")
+    assert cs.drop_years(["3-5 C optimal range", "50 percent supermarket energy", "1913 home invention"]) == ["3-5 C optimal range", "50 percent supermarket energy"]

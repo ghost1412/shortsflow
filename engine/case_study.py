@@ -369,17 +369,20 @@ def fit_layout(scene, labels, previous=None):
 
 UNITS = {"k", "m", "b", "bn", "x", "ms", "s", "kb", "mb", "gb", "tb", "hz", "mhz", "ghz", "km", "kg", "mph", "million", "billion", "trillion",
          "thousand", "hundred", "times", "percent", "seconds", "minutes", "hours", "days", "weeks", "months", "years", "users", "people",
-         "devices", "servers", "sites", "websites", "computers", "dollars", "euros", "records", "accounts", "bits", "bytes"}
+         "devices", "servers", "sites", "websites", "computers", "dollars", "euros", "records", "accounts", "bits", "bytes",
+         "customers", "patients", "cases", "deaths", "victims", "votes", "cars", "vehicles", "workers", "employees", "students", "homes", "houses", "buildings",
+         "items", "units", "tons", "miles", "meters", "metres", "litres", "liters", "degrees", "calories", "volts", "watts", "kwh", "pounds", "kilometers"}
 
 
 _NUMBER_LEAD = re.compile(r"\s*([$€£]?)(\d[\d,]*(?:\.\d+)?)\s*(%|[a-zA-Z]+)?")
 
 
 def is_year(m):
-    """Whether a label's leading number is a calendar year ("1672 year", "2013", "44 BC" is not: only four digits count): a bare four-digit number from 1000 to 2100,
-    or one followed by year, AD, BC, BCE or CE. A date is a point in time, not a quantity a counter can show ("1500 years" and "1,500" are quantities)."""
+    """Whether a label's leading number is a calendar year ("1672 year", "1913 home invention", "2013"): a bare four-digit number from 1000 to 2100 that is not
+    followed by a unit of quantity (UNITS: "1500 servers", "1500 years", "1500 degrees" and "1,500" are quantities). A word that is not a unit ("home invention",
+    "discovery") makes it a date: a point in time, not a number a counter can show."""
     sign, num, unit = m.group(1), m.group(2), (m.group(3) or "").lower()
-    return not sign and bool(re.fullmatch(r"\d{4}", num)) and 1000 <= int(num) <= 2100 and unit in ("", "year", "ad", "bc", "bce", "ce")
+    return not sign and bool(re.fullmatch(r"\d{4}", num)) and 1000 <= int(num) <= 2100 and unit not in UNITS and unit != "%"
 
 
 def drop_years(labels):

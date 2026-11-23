@@ -96,3 +96,17 @@ def test_make_ask_passes_json_mode_to_the_local_model_only():
         assert got.get("json_mode") is False
     finally:
         case_llm.local_chat = orig
+
+
+def test_the_ask_function_says_which_model_answered_last():
+    from engine import case_llm as cl
+    ask = cl.make_ask("S", "auto", cloud=lambda p, s: "cloud answer", local=lambda p, s: "local answer", log=lambda m: None)
+    assert ask.last_source is None
+    assert ask("x") == "cloud answer" and ask.last_source == "cloud"
+
+    def broken(p, s):
+        raise RuntimeError("503")
+    fallback = cl.make_ask("S", "auto", cloud=broken, local=lambda p, s: "local answer", log=lambda m: None)
+    assert fallback("x") == "local answer" and fallback.last_source == "local"
+    only_local = cl.make_ask("S", "local", cloud=broken, local=lambda p, s: "local answer", log=lambda m: None)
+    assert only_local("x") == "local answer" and only_local.last_source == "local"

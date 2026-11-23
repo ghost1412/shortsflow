@@ -50,14 +50,20 @@ def make_ask(system, mode="auto", cloud=None, local=None, log=print, clock=time.
             return local_chat(prompt, system, json_mode=json_mode)
     state = {"down_until": 0.0}
 
+    def via_local(prompt):
+        reply = local(prompt, system)
+        ask.last_source = "local"                  # which model answered last: callers that keep the result (the icon library) trust a local answer less
+        return reply
+
     def ask(prompt):
         if mode == "local":
-            return local(prompt, system)
+            return via_local(prompt)
         if mode == "auto" and clock() < state["down_until"]:
-            return local(prompt, system)
+            return via_local(prompt)
         try:
             reply = cloud(prompt, system)
             if str(reply or "").strip():
+                ask.last_source = "cloud"
                 return reply
             error = "an empty answer"
         except Exception as e:
@@ -66,5 +72,6 @@ def make_ask(system, mode="auto", cloud=None, local=None, log=print, clock=time.
             raise RuntimeError(f"The cloud text model failed: {error}")
         state["down_until"] = clock() + COOLDOWN
         log(f"[Log] The cloud text model did not answer ({error}); using the model on this PC from here on.")
-        return local(prompt, system)
+        return via_local(prompt)
+    ask.last_source = None
     return ask

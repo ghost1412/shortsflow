@@ -245,3 +245,17 @@ def test_the_picture_plan_remembers_which_icon_each_label_got(tmp_path):
     assert got["kinds"] == {"Attacker": "hacker", "Server": "server", "Stolen data": "database"}
     again = art.make(SECTION, "T", "16:9", lambda p: 1 / 0, str(tmp_path))                  # from the cache
     assert again["kinds"] == got["kinds"]
+
+
+def test_an_icon_drawn_by_the_local_fallback_is_used_but_not_kept_in_the_library(tmp_path):
+    from engine import art_icons
+    drawing = json.dumps({"svg": "<g><rect x='-60' y='-60' width='120' height='120' fill='#3b82f6' stroke='#1f2937'/>" + "<circle cx='0' cy='0' r='30' fill='#fff'/>" * 3 + "</g>"})
+
+    def ask_from(source):
+        def ask(prompt):
+            ask.last_source = source
+            return drawing
+        return ask
+    assert art_icons.get("heat pump", ask_from("local"), str(tmp_path)) and not (tmp_path / "heat_pump.v2.svg").exists()      # drawn, used, not saved
+    assert art_icons.get("heat pump", ask_from("cloud"), str(tmp_path)) and (tmp_path / "heat_pump.v2.svg").is_file()       # the cloud model's drawing is kept
+    assert art_icons.get("water drop", lambda p: drawing, str(tmp_path)) and (tmp_path / "water_drop.v2.svg").is_file()       # an ask with no record of its source is kept as before

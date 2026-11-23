@@ -160,9 +160,10 @@ def get(concept, ask, directory=None):
                 print(f"[Warning] The text model could not draw an icon for '{concept}' ({' '.join(str(e).split())[:100]}).")
                 return None
             if markup:
-                os.makedirs(directory or home(), exist_ok=True)
-                with open(path_of(name, directory), "w", encoding="utf-8") as f:
-                    f.write(markup)
+                if getattr(ask, "last_source", None) != "local":      # a drawing from the small model on this PC is used for this video but not kept:
+                    os.makedirs(directory or home(), exist_ok=True)   # the library is reused by every later video, which can have it redrawn by the cloud model
+                    with open(path_of(name, directory), "w", encoding="utf-8") as f:
+                        f.write(markup)
                 break
     if markup:
         kit.register(name, markup)
