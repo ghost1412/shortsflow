@@ -191,3 +191,13 @@ def test_the_picture_is_planned_in_the_order_the_narrator_reaches_the_labels(tmp
     asked = seen[0]
     assert asked.index("1. Attacker") < asked.index("2. Server") < asked.index("3. Stolen data")
     assert script["sections"][0]["on_screen"] == labels                              # the script itself is not changed
+
+
+def test_labels_match_the_spoken_word_even_when_one_is_plural():
+    from engine import case_render as cr
+    spoken = ["Attackers", "use", "QR", "codes", "and", "automated", "calls", "and", "texts"]
+    words = [{"word": w, "start": i * 0.5, "end": i * 0.5 + 0.4} for i, w in enumerate(spoken)]
+    assert cr._first_spoken("QR code", words) == 3 and cr._first_spoken("Phone call", words) == 6
+    labels, cues = cr.spoken_order(["Phone call", "QR code"], words, duration=10)
+    assert labels == ["QR code", "Phone call"] and cues[0] < cues[1]                  # in the order the narrator says them, not appended at the end
+    assert cr._first_spoken("This one", words) is None and not cr._word_matches("this", "thi")

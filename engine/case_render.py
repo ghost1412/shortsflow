@@ -67,6 +67,17 @@ def read_words(path):
     return [w for w in out if w["word"]]
 
 
+def _word_matches(tok, key):
+    """Whether a content word of a label and a spoken word are the same word: equal, sharing their first five letters, or equal apart from a plural s
+    ("code" and "codes", "call" and "calls")."""
+    if not tok or not key:
+        return False
+    if tok == key or (tok[:5] == key[:5] and len(key) >= 4):
+        return True
+    stem = lambda x: x[:-1] if len(x) > 4 and x.endswith("s") else x
+    return len(tok) >= 4 and stem(tok) == stem(key)
+
+
 def label_cues(labels, words, duration=None, min_gap=0.8):
     """Seconds (after the section's audio starts) at which each on-screen label is spoken: the first word, searched in order,
     that matches a content word of the label (numbers match by digits). A label with no match follows the previous one by
@@ -80,8 +91,7 @@ def label_cues(labels, words, duration=None, min_gap=0.8):
         tokens = [x for x in tokens if len(x) >= 4 or x.isdigit()]
         found = None
         for i in range(cursor, len(words)):
-            if any(tok and ((tok.isdigit() and digits[i] == tok) or (not tok.isdigit() and keys[i] and (tok == keys[i] or tok[:5] == keys[i][:5] and len(keys[i]) >= 4)))
-                   for tok in tokens):
+            if any(tok and ((tok.isdigit() and digits[i] == tok) or (not tok.isdigit() and _word_matches(tok, keys[i]))) for tok in tokens):
                 found = i
                 break
         if found is not None:
@@ -104,7 +114,7 @@ def _first_spoken(label, words):
     for i, w in enumerate(words):
         key, digits = re.sub(r"\W+", "", (w["word"] or "").lower()), re.sub(r"\D", "", w["word"] or "")
         for tok in tokens:
-            if tok and ((tok.isdigit() and digits == tok) or (not tok.isdigit() and key and (tok == key or (tok[:5] == key[:5] and len(key) >= 4)))):
+            if tok and ((tok.isdigit() and digits == tok) or (not tok.isdigit() and _word_matches(tok, key))):
                 return i
     return None
 
