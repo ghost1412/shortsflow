@@ -467,10 +467,19 @@ def attach_images(script, session_dir, aspect="16:9", fetch=None, cache_dir=None
     return out
 
 
-def attach_art(script, session_dir, aspect, source, ask):
-    """[None | {"path", "points"}] per section: the explaining picture of each `illustration` section (see engine.case_art)."""
+def attach_art(script, session_dir, aspect, source, ask, words=None, timing=None, cache_dir=None):
+    """[None | {"path", "points"}] per section: the explaining picture of each `illustration` section (see engine.case_art). With the words
+    of each section and its (start, end), the picture is planned with the labels in the order the narrator reaches them, which is also the order
+    they are numbered in, so the numbers run 1, 2, 3 across the picture."""
     from engine import case_art
-    return case_art.attach(script, session_dir, aspect, source, ask)
+    if words and timing:
+        sections = []
+        for sec, ws, (start, end) in zip(script["sections"], words, timing):
+            if sec.get("scene") == "illustration" and ws:
+                sec = dict(sec, on_screen=spoken_order(list(sec.get("on_screen") or []), ws, duration=end - start)[0])
+            sections.append(sec)
+        script = dict(script, sections=sections)
+    return case_art.attach(script, session_dir, aspect, source, ask, cache_dir=cache_dir)
 
 
 def user_background(script, path, probe=None):

@@ -165,3 +165,29 @@ def test_icon_check_keeps_rectangle_sizes_and_rejects_scratches_and_sizeless_rec
     assert art_icons.clean("<g>" + body.replace(" width='120' height='120'", "") + "</g>") is None      # a rectangle with no size draws nothing
     assert art_icons.clean("<g>" + "<path d='M-80 -80 L80 80' fill='none' stroke='#000'/>" * 6 + "</g>") is None   # outlines only: scratches
     assert art_icons.clean("<g>" + "<circle cx='0' cy='0' r='10' fill='#fff'/>" * 5 + "</g>") is None            # a speck
+
+
+def test_a_rough_stand_in_is_replaced_by_the_thing_to_draw():
+    spec, _ = art.check_spec(json.dumps({"items": [{"kind": "flask", "draw": "Syringe"}, {"kind": "bug", "draw": "bug"}, {"kind": "shield"}]}), 3)
+    assert spec["items"][0]["kind"] == "syringe" and spec["items"][0]["custom"]          # drawn instead of the flask
+    assert spec["items"][1]["kind"] == "bug" and not spec["items"][1].get("custom")      # the thing IS a kit icon: no drawing needed
+    assert spec["items"][2]["kind"] == "shield"
+    spec, _ = art.check_spec(json.dumps({"items": [{"kind": "flask", "draw": "!!"}, {"kind": "bug"}]}), 2)
+    assert spec["items"][0]["kind"] == "flask"                                           # an unusable name is ignored
+
+
+def test_the_picture_is_planned_in_the_order_the_narrator_reaches_the_labels(tmp_path):
+    from engine import case_render as cr
+    seen = []
+
+    def ask(prompt):
+        seen.append(prompt)
+        return json.dumps(SPEC)
+    labels = ["Server", "Attacker", "Stolen data"]                                   # the script order
+    spoken = ["An", "attacker", "hit", "a", "server", "and", "took", "stolen", "data"]
+    words = [{"word": w, "start": i * 0.5, "end": i * 0.5 + 0.4} for i, w in enumerate(spoken)]
+    script = {"title": "T", "sections": [dict(SECTION, id="a", scene="illustration", on_screen=labels)]}
+    cr.attach_art(script, str(tmp_path), "16:9", "auto", ask, words=[words], timing=[(0, 10)], cache_dir=str(tmp_path))
+    asked = seen[0]
+    assert asked.index("1. Attacker") < asked.index("2. Server") < asked.index("3. Stolen data")
+    assert script["sections"][0]["on_screen"] == labels                              # the script itself is not changed
