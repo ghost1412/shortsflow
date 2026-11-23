@@ -15,6 +15,7 @@ SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equ
 # the layouts the model may choose from by itself (terminal and formula only when a template asks for them: they suit few topics)
 AUTO_LAYOUTS = ("timeline", "flow", "counters", "checklist", "quote", "compare", "chart", "diagram", "illustration")
 MAX_ILLUSTRATION = 4     # things in an explaining picture that stay clear of each other
+MAX_NAME_WORDS = 4       # a label of the picture scene names one thing: longer ones are sentences
 LAYOUT_HELP = {
     "timeline": "events in order of time; labels are short dated events",
     "flow": "the steps of one mechanism, one after another; labels are the steps",
@@ -54,7 +55,7 @@ PRESETS = {
         {"id": "lesson", "title": "What we learn", "question": "What is the lesson?", "scene": "quote"},
     ],
     "explainer": [
-        {"id": "what", "title": "What it is", "question": "What is it, in one clear idea?", "scene": "quote"},
+        {"id": "what", "title": "What it is", "question": "What is it, in one clear idea?", "scene": "illustration"},
         {"id": "how", "title": "How it works", "question": "How does it work, step by step?", "scene": "diagram"},
         {"id": "why", "title": "Why it matters", "question": "Why does it matter, with real numbers if the sources have them?", "scene": "counters"},
         {"id": "do", "title": "What to do", "question": "What should the viewer do or remember?", "scene": "checklist"},
@@ -259,6 +260,10 @@ def build_prompt(topic, template, sources, layouts="auto"):
         parts += ["", "Pick the layout of each section yourself, from this list, whichever shows THAT section best, and do not use the same layout for two sections in a row:"]
         parts += [f"  {name}: {LAYOUT_HELP[name]}" for name in AUTO_LAYOUTS]
         parts.append("  (a section whose default layout is terminal, equation or animation keeps it)")
+        parts.append("  Use the illustration layout for the section or two whose story is about physical things: a device, a material, a person, a place, who or what did "
+                     "something to whom or what. Most videos should have at least one. For it, every on_screen label is the SHORT NAME of one thing in the picture (one to "
+                     "three words, like \"Attacker\", \"Atomic film\" or \"Chip\"), a word the narration actually says, in the order the narration reaches them: never a "
+                     "sentence, a number or a verb phrase.")
     parts += ["", "Return raw JSON only:",
               '{"title": "<plain title, no emoji>", "hook": "<12 words or fewer>", "sections": [{"id": "<section id>", "narration": "<4-6 short spoken sentences, told like a presenter talking (see VOICE), concrete: who, what, when, how many, in order>", '
               '"scene": "<the layout you chose for this section>", "mood": "<how the narrator should sound here: tense, excited, serious, warm or calm>", '
@@ -339,7 +344,9 @@ def fit_layout(scene, labels, previous=None):
     """Counters show big numbers: with fewer than two labels that start with a number (or hold a short figure) the cards would be long sentences
     crowding each other, so the section becomes a checklist (a timeline when the section before is one)."""
     if scene == "illustration":
-        return scene if len([x for x in labels if str(x).strip()]) >= 2 else "checklist"     # a picture needs at least two things to mark
+        names = [str(x).strip() for x in labels if str(x).strip()]
+        # a picture needs at least two things to mark, and each label is a short name (a sentence cannot be a badge's label)
+        return scene if len(names) >= 2 and all(len(x.split()) <= MAX_NAME_WORDS and not re.search(r"\d", x) for x in names) else "checklist"
     if scene != "counters":
         return scene
     leads = [re.match(r"\s*([$€£]?)(\d[\d,]*(?:\.\d+)?)\s*(%|[a-zA-Z]+)?", x) for x in labels]
@@ -429,6 +436,27 @@ def diagram_for(section, topic, ask, source_text=None, check=None):
     return resolve_diagram(reply, source_text, ask, section.get("title", ""), check)
 
 
+def picture_names_for(title, narration, topic, ask):
+    """Two to four short names of the things a picture for this section shows, or [] when the model gives none that fit: each is one to MAX_NAME_WORDS words, has no
+    digits, and is a word the narration actually says (so the picture's icons can pop in as the narrator reaches them). Used when a section is meant to be a picture
+    but the labels the model wrote are sentences or numbers."""
+    reply = ask("Name the things a viewer should SEE in a cartoon picture for this part of a video about: " + str(topic) + "\n\nSection: " + str(title) + "\nNarration: "
+                + str(narration) + "\n\nGive 3 names (2 to 4 at most) of physical things the narration mentions: a device, a material, a person, a place. Each name is one to "
+                "three words, in the order the narration reaches them; no sentences, no numbers, no verbs. Reply with raw JSON only: {\"names\": [\"...\", \"...\", \"...\"]}")
+    data = parse_reply(reply)
+    names = data.get("names") if isinstance(data, dict) else None
+    if not isinstance(names, list):
+        return []
+    heard = re.sub(r"[^a-z0-9 ]+", " ", str(narration).lower())
+    good = []
+    for raw in names:
+        name = " ".join(str(raw or "").split())
+        stems = [w[:5] for w in re.findall(r"[a-z]+", name.lower()) if len(w) >= 4]
+        if name and len(name.split()) <= MAX_NAME_WORDS and not re.search(r"\d", name) and stems and any(st in heard for st in stems) and name not in good:
+            good.append(name)
+    return good[:MAX_ILLUSTRATION] if len(good) >= 2 else []
+
+
 def write_script(topic, template, sources, ask, layouts="auto", check_diagram=None):
     """The script: {"title", "verified", "sources": [{id, ref}], "sections": [{id, title, scene, narration, on_screen, cites}],
     "dropped": [{section, sentence, unsupported}]}. `ask(prompt)` returns the model's text. Raises ValueError when the answer holds no
@@ -463,8 +491,13 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
         raw_footage = raw_footage if isinstance(raw_footage, list) else [raw_footage]
         footage = [p for p in (" ".join(re.findall(r"[A-Za-z0-9]+", str(x or "")))[:60] for x in raw_footage) if p][:4]
         scene = pick_layout(sec["scene"], row.get("scene"), previous, layouts)
+        wants_picture = scene == "illustration"
         if layouts == "auto":
             scene = fit_layout(scene, labels, previous)
+        if wants_picture and scene != "illustration" or (wants_picture and not [x for x in labels if x.strip()]):
+            names = picture_names_for(sec["title"], narration, topic, ask)      # a picture section whose labels were sentences or numbers: ask for names of things
+            if names:
+                scene, labels = "illustration", names
         diagram = ""
         if scene == "diagram":
             grounding = source_text if sources else None

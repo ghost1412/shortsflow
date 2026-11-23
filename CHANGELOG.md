@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: **ShortsFlow now chooses picture scenes by itself.** The explainer template's "What it is" section is a picture scene by default; when the model's labels for it are sentences or numbers, ShortsFlow asks the model once for short names of the things the narration mentions (a device, a material, a person), and the script prompt tells the model to use the picture layout for sections about physical things. A picture section whose labels are not short names becomes a checklist.
+
 - Pictures that explain: the planner is told which ready-made icons the library of drawn icons holds (`~/.shortsflow/icons`), so a label like "Credit card" uses the real icon the next time instead of the nearest built-in one; a rejected picture plan now says why in the log.
 
 - Expressive narration: the word timing no longer loses the start of a section. Given the script as a hint, Whisper sometimes skipped the first seconds of a spoken section (12 s in one video) and heard a third of its words, so there were no captions and the presenter did not move for that time; the timing now checks that the heard words cover the script and listens again without the hint when they do not.

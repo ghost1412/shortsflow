@@ -280,3 +280,49 @@ def test_the_hook_is_checked_retried_and_falls_back_with_a_reason(capsys):
         raise RuntimeError("503")
     assert cs.make_hook("", [{"narration": " ".join(["long"] * 30) + "."}], src, busy) == ""
     assert "No hook" in capsys.readouterr().out
+
+
+def test_the_model_is_told_to_give_the_story_of_things_a_picture_with_short_names():
+    from engine import case_study as cs
+    prompt = cs.build_prompt("Topic", cs.TEMPLATES["explainer"] if hasattr(cs, "TEMPLATES") else cs.PRESETS["explainer"], [], "auto")
+    assert "illustration" in prompt and "SHORT NAME" in prompt and "Most videos should have at least one" in prompt
+
+
+def test_a_picture_section_needs_short_names_of_things_or_it_becomes_a_checklist():
+    from engine import case_study as cs
+    assert cs.fit_layout("illustration", ["Attacker", "Fake email", "Your credentials"]) == "illustration"
+    assert cs.fit_layout("illustration", ["Only one"]) == "checklist"
+    assert cs.fit_layout("illustration", ["Attacker", "Steals 3 million records every year"]) == "checklist"           # a number and a sentence
+    assert cs.fit_layout("illustration", ["Attacker", "A very long label that is really a whole sentence"]) == "checklist"
+
+
+def test_picture_names_are_short_things_the_narration_says():
+    from engine import case_study as cs
+    narration = "Researchers placed a thin film on a crystal base. A metal layer blocks the field."
+    ask = lambda p: json.dumps({"names": ["Thin film", "Crystal base", "Metal layer"]})
+    assert cs.picture_names_for("How", narration, "T", ask) == ["Thin film", "Crystal base", "Metal layer"]
+    bad = lambda p: json.dumps({"names": ["The film is placed on a crystal and compressed", "3 layers", "Dragon"]})        # a sentence, a number, a thing never said
+    assert cs.picture_names_for("How", narration, "T", bad) == []
+    assert cs.picture_names_for("How", narration, "T", lambda p: "no json") == [] and cs.picture_names_for("How", narration, "T", lambda p: json.dumps({"names": "x"})) == []
+    assert len(cs.picture_names_for("How", narration, "T", lambda p: json.dumps({"names": ["Thin film", "Film", "Crystal base", "Metal layer", "Field", "Layer"]}))) <= cs.MAX_ILLUSTRATION
+
+
+def test_a_picture_section_with_sentence_labels_gets_names_asked_for_and_stays_a_picture():
+    from engine import case_study as cs
+    template = [{"id": "what", "title": "What it is", "question": "q", "scene": "illustration"}]
+    calls = []
+
+    def ask(prompt):
+        calls.append(prompt)
+        if len(calls) == 1:
+            return json.dumps({"title": "T", "hook": "A thin film changes the chip", "sections": [{"id": "what", "narration": "A thin film sits on a crystal base. A metal layer covers it.",
+                                                            "on_screen": ["We have shown that the dead layer can be removed."], "scene": "illustration"}]})
+        return json.dumps({"names": ["Thin film", "Crystal base", "Metal layer"]})
+    script = cs.write_script("Topic", template, [], ask, "auto")
+    sec = script["sections"][0]
+    assert len(calls) == 2 and sec["scene"] == "illustration" and sec["on_screen"] == ["Thin film", "Crystal base", "Metal layer"]
+
+
+def test_the_explainer_template_starts_with_a_picture_section():
+    from engine import case_study as cs
+    assert cs.PRESETS["explainer"][0]["scene"] == "illustration"
