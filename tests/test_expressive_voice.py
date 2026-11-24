@@ -121,3 +121,13 @@ def test_heard_words_must_cover_the_script_or_whisper_listens_again_without_the_
     monkeypatch.setattr(ev, "_WHISPER", {})
     assert [w["start"] for w in ev.hear("x.mp3", text)][:2] == [0.0, 0.5]
     assert calls == [True, False]                                                    # with the hint first, then without it
+
+
+def test_word_times_that_do_not_look_like_speech_are_spread_by_word_length_and_trigger_a_second_listen():
+    from engine import expressive_voice as ev
+    bad = [{"word": "Tiny", "start": 0.0, "end": 11.26}, {"word": "nitrogen", "start": 11.26, "end": 22.52}] + [{"word": "w", "start": 22.52 + i * 0.05, "end": 22.57 + i * 0.05} for i in range(8)]
+    good = [{"word": "a", "start": i * 0.3, "end": i * 0.3 + 0.28} for i in range(10)]
+    assert not ev.sane(bad) and ev.sane(good) and not ev.sane([])
+    assert not ev.covers(bad, "Tiny nitrogen " + "w " * 8)
+    out = ev.align("Tiny nitrogen and oxygen", bad[:2] + [{"word": "x", "start": 22.52, "end": 23.0}])
+    assert len(out) == 4 and out[0]["start"] == 0.0 and all(o["end"] - o["start"] < 11 for o in out) and out[1]["start"] < out[2]["start"] < out[3]["start"]

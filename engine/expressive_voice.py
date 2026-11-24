@@ -53,6 +53,14 @@ def align(script_text, heard):
         return []
     if not heard:
         return []
+    if not sane(heard):                                   # unusable times: spread the words over the span by their length (a longer word takes longer)
+        lo, hi = max(float(heard[0]["start"]), 0.0), float(heard[-1]["end"])
+        weights = [max(len(_norm(w)), 1) for w in words]
+        step, at, out = (hi - lo) / sum(weights), lo, []
+        for w, n in zip(words, weights):
+            out.append({"word": w, "start": round(at, 3), "end": round(at + step * n, 3)})
+            at += step * n
+        return out
     a, b = [_norm(w) for w in words], [_norm(h["word"]) for h in heard]
     times = [None] * len(words)
     for block in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks():
@@ -81,10 +89,19 @@ def align(script_text, heard):
 _WHISPER = {}
 
 
+def sane(heard):
+    """Whether Whisper's word times look like speech: no word lasts over two seconds and the typical word lasts at least a tenth of one. Whisper has been seen to give
+    the first words of a section eleven seconds each and then squeeze the rest into 0.05 s each, so the mouth and the captions went out of step."""
+    if not heard:
+        return False
+    d = sorted(float(h["end"]) - float(h["start"]) for h in heard)
+    return d[-1] <= 2.0 and d[len(d) // 2] >= 0.1
+
+
 def covers(heard, text):
     """Whether Whisper's words cover the script: it heard most of the words and the first one comes at the start. With the script as a hint Whisper has been seen to skip
     the first twelve seconds of a section and hear only a third of its words, which left the captions and the presenter with nothing to follow for that time."""
-    return bool(heard) and len(heard) >= 0.7 * len(text.split()) and float(heard[0]["start"]) <= 1.5
+    return bool(heard) and len(heard) >= 0.7 * len(text.split()) and float(heard[0]["start"]) <= 1.5 and sane(heard)
 
 
 def hear(audio, text):
@@ -98,7 +115,10 @@ def hear(audio, text):
         result = _WHISPER["m"].transcribe(audio, language="en", word_timestamps=True, fp16=False, **kw)
         return [{"word": w["word"].strip(), "start": w["start"], "end": w["end"]} for seg in result.get("segments", []) for w in seg.get("words", [])]
     heard = listen(initial_prompt=text[:800])
-    return heard if covers(heard, text) else (listen() or heard)
+    if covers(heard, text):
+        return heard
+    again = listen()
+    return again if covers(again, text) or not sane(heard) else heard
 
 
 def speak(text, out_audio, out_subs, sample=None, mood=None, first=False, url=None, post=None, listen=None):

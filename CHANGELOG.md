@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: when Whisper's word times for a narrated section do not look like speech (a word of eleven seconds, the rest at 0.05 s), it listens again without the hint, and as a last resort the words are spread by length, so the presenter's mouth and the captions follow the voice from the first second.
+
 - Case explainer: a section the source check leaves too short is asked once for more narration, and each new sentence goes through the same check.
 
 - Case explainer: powers of ten in labels become superscripts (10⁻⁵) and are never a counter card; a picture whose labels the narrator mostly does not say is re-asked for names the narration does say, so icons pop in on time; the scorecard judges that spoken share and no longer fails a section that was meant to become a checklist.
