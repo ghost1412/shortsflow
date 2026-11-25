@@ -830,6 +830,12 @@ def transcribe_video(video_path, output_dir, keep_fillers=False, language="en"):
     print(f"[Log] Transcription completed in {time.time() - start_time:.1f}s")
     return transcript_path
 
+def reel_merge_cap(target):
+    """The longest moment a highlights reel may build by joining neighbours BEFORE its moments are chosen. It used to be 150 s whatever the reel's length: three
+    moments of a short video became one, which was then trimmed from its end, so the reel lost its best moment (the last one). Chosen neighbours are still joined later."""
+    return min(150.0, max(45.0, float(target) / 4)) if target else 150.0
+
+
 def merge_segments(segments, min_gap=6.0, max_dur=95.0, score_sensitive=False):
     """
     Merges segments that are close together.
@@ -852,7 +858,10 @@ def merge_segments(segments, min_gap=6.0, max_dur=95.0, score_sensitive=False):
         if gap < min_gap and combined_dur <= max_dur and similarity_gate:
             curr['end'] = max(curr['end'], next_seg['end'])
             if len(curr.get('reason', '')) < 150:
-                curr['reason'] = f"{curr.get('reason', 'Segment')} & {next_seg.get('reason', 'Clip')}"
+                curr['reason'] = " & ".join(r for r in (curr.get('reason'), next_seg.get('reason')) if r)
+            if next_seg.get('final_score', 0) > curr.get('final_score', 0):      # the joined moment is named after its best part
+                curr['final_score'] = next_seg['final_score']
+                curr['hook_text'] = next_seg.get('hook_text') or curr.get('hook_text')
             # Keep the highest viral score if merging
             curr['viral_score'] = max(curr.get('viral_score', 0), next_seg.get('viral_score', 0))
         else:
@@ -1341,7 +1350,7 @@ def identify_highlights(transcript_path, video_path=None, clip_count=5, mode="sh
             
             # 🟢 NEW FLOW: Merge adjacent parts BEFORE trimming to count
             effective_target = target_duration if target_duration else 60.0
-            max_merge_dur = min(59.9, effective_target) if mode == "shorts" else 150.0 # Strict cap for shorts
+            max_merge_dur = min(59.9, effective_target) if mode == "shorts" else reel_merge_cap(target_duration)
             print(f"[Log] Merging adjacent highlights (score-aware, max={max_merge_dur}s)...")
             valid_highlights = merge_segments(valid_highlights, min_gap=8.0, max_dur=max_merge_dur, score_sensitive=True)
             

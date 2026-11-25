@@ -3,6 +3,7 @@ import json
 import re
 import random
 import os
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -264,6 +265,9 @@ def _call_anthropic(api_key, model, prompt, system_prompt, max_tokens=4096, temp
     data = resp.json()
     return data["content"][0]["text"]
 
+_GEMINI_COOLDOWN = {}          # Gemini model -> time until which it is not asked again after "429 Too Many Requests"
+
+
 def get_llm_response(
     prompt,
     system_prompt="You are a viral YouTube shorts creator. ALWAYS respond with raw JSON only. No conversational text.",
@@ -275,7 +279,6 @@ def get_llm_response(
     timeout=300
 ):
     import requests
-    import time
 
 
     target_provider = (provider or os.getenv("LLM_PROVIDER") or "auto").lower().strip()
@@ -349,6 +352,10 @@ def get_llm_response(
         # Deduplicate preserving order
         gemini_models = list(dict.fromkeys(gemini_models))
 
+        # A model that just said "too many requests" is left alone for a minute (every call used to wait through four tries of it first)
+        rested = [m for m in gemini_models if _GEMINI_COOLDOWN.get(m, 0) <= time.time() or m == target_model]
+        gemini_models = rested or gemini_models
+
         timeouts_in_a_row = 0
         for g_model in gemini_models:
             if timeouts_in_a_row >= 2:
@@ -382,6 +389,11 @@ def get_llm_response(
                     }
                     response = requests.post(url, headers=headers, json=payload, timeout=timeout)
                     
+                    if response.status_code == 429:
+                        _GEMINI_COOLDOWN[g_model] = time.time() + 60
+                        if g_model != target_model and g_model != gemini_models[-1]:
+                            print(f"[Warning] Gemini API ({g_model}) is rate limited (free-tier limit); using the next Gemini model.")
+                            break
                     if response.status_code in [429, 500, 502, 503, 504, 529]:
                         print(f"[Warning] Gemini API ({g_model}) returned transient status HTTP {response.status_code}. Retrying...")
                         if attempt < max_attempts - 1:

@@ -4,6 +4,10 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Highlights reel: neighbouring moments are joined before the choice only up to a quarter of the reel's length (at least 45 s; it was 150 s whatever the length), so a short reel no longer fuses everything into one moment and trims its best part away; a joined moment is named after its best part.
+
+- Gemini: a model that answers "429 Too Many Requests" is skipped at once for the next one and left alone for a minute, instead of being retried four times on every call (a model you chose yourself is still retried).
+
 - Small modes audit: photo reel stops with a clear error when `--photos_dir` is a file, ignores folders named like a photo, falls back to the default track (with a warning) when `--music` points at a missing file, and warns when `--reel_text` has more lines than photos. Music mode shrinks (and cuts at 58 characters) a long title so it no longer runs off the 1080 px video, turns line breaks into spaces, and creates `sessions/` when a custom `--session_dir` was used. Filter mode exits with a message for a missing or failed-download source and no longer needs an `hq` attribute. Explainer mode no longer cuts the finished video to 0.1 s when the voiceover length cannot be read (it keeps the silent animation and says so).
 
 - Transcript cuts (`--cut`, `--edit_transcript`): words in other scripts (Hindi, Arabic, accented Latin) were dropped as "no letters" so nothing could be matched or cut in such videos; they now match. An empty or wrong edit file used to cut every word of the video; it is now refused with a plain message. A `--cut` phrase that is not in the transcript now says so (it used to print only "nothing to cut"). A cut reaching the end of the video no longer asks ffmpeg for a piece starting past the end. The edit file is read with a BOM tolerated.
