@@ -729,7 +729,7 @@ def write_outputs(args, session_dir, highlights, extracted_files, transcript_pat
                 **({"fallback": True} if h.get("fallback") else {}),       # a fixed window, not a picked moment (analysis failed)
                 "viral_score": h.get("viral_score", 85),
                 "hook": h.get("hook_text", meta_item.get("title", "")),
-                "reason": h.get("reason", "High-engagement segment"),
+                "reason": h.get("reason") or h.get("llm_reason") or "High-engagement segment",
                 "title": meta_item.get("title", f"Clip #{i+1}"),
                 "description": meta_item.get("description", ""),
                 "tags": meta_item.get("tags", []),
