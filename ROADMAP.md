@@ -60,5 +60,5 @@ See [CHANGELOG.md](CHANGELOG.md) for the full list. Highlights since the first p
 - **Picking is the weakest number**: see "Weak spots, honestly" in [docs/BENCHMARKS.md](docs/BENCHMARKS.md). The gold sets are model-labelled.
 - The bundled caption fonts are not loaded by the Remotion bundle; captions fall back to system fonts.
 - Remotion props are not schema-validated at render time; `null` is passed for optional fields and works today.
-- `get_video_duration` in `engine/modes/generate.py` returns 10.0 on ffprobe failure, which can mis-size backgrounds silently.
+- `get_video_duration` in `engine/modes/generate.py` returns 10.0 on ffprobe failure (it prints a warning first); for the narration audio that would mis-size the whole video.
 - The command line has many flags and no grouping in `--help`.
