@@ -572,7 +572,7 @@ def write_outputs(args, session_dir, highlights, extracted_files, transcript_pat
             i, h = idx_h
             if i >= len(extracted_files): return None
             # Sanitize technical jargon from the context/reason
-            raw_context = h.get('context', h.get('reason', 'Viral Highlight'))
+            raw_context = h.get('context') or h.get('reason') or h.get('llm_reason') or 'Viral Highlight'
             if any(j in raw_context for j in ["Recovered", "Regex", "FFmpeg", "stderr"]):
                 raw_context = "Viral Clip Highlight"
             
