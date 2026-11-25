@@ -98,7 +98,11 @@ class JobManager:
             headers["X-ShortsFlow-Signature"] = sign(self.webhook_secret, body)
         for attempt in range(3):
             try:
-                requests.post(job["webhook_url"], data=body, headers=headers, timeout=10).raise_for_status()
+                # no redirects: a hook answering 307 to an internal address must not lead past the private-address check
+                reply = requests.post(job["webhook_url"], data=body, headers=headers, timeout=10, allow_redirects=False)
+                reply.raise_for_status()
+                if 300 <= reply.status_code < 400:
+                    job["log"] += f"\n[Warning] The webhook answered {reply.status_code} (a redirect), which is not followed: use the final address."
                 return
             except requests.RequestException:
                 time.sleep(2 ** attempt)

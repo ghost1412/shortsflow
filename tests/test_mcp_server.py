@@ -168,8 +168,8 @@ def test_create_explainer_builds_the_case_command_and_asks_for_a_source(monkeypa
 def test_dub_video_needs_a_language_from_the_list(monkeypatch):
     seen = _capture_job(monkeypatch)
     assert mcp_server.handle_tool_call("dub_video", {"source_video": "a.mp4", "target_lang": "xx"})["isError"]
-    mcp_server.handle_tool_call("dub_video", {"source_video": "a.mp4", "target_lang": "es", "dub_captions": True, "dub_voice": "male"})
-    assert seen["args"] == ["--mode", "DUB", "--source_video", "a.mp4", "--target_lang", "es", "--dub_captions", "--dub_voice", "male"]
+    mcp_server.handle_tool_call("dub_video", {"source_video": "https://example.com/a.mp4", "target_lang": "es", "dub_captions": True, "dub_voice": "male"})
+    assert seen["args"] == ["--mode", "DUB", "--source_video", "https://example.com/a.mp4", "--target_lang", "es", "--dub_captions", "--dub_voice", "male"]
 
 
 def test_publish_video_previews_by_default_and_refuses_paths_outside_sessions(monkeypatch, tmp_path):
@@ -199,3 +199,189 @@ def test_list_videos_reports_shape_and_where_it_was_published(monkeypatch, tmp_p
     out = json.loads(mcp_server.handle_tool_call("list_videos", {"shape": "tall"})["content"][0]["text"])
     assert out["count"] == 1 and out["videos"][0]["shape"] == "tall" and out["videos"][0]["published_to"] == []
     assert json.loads(mcp_server.handle_tool_call("list_videos", {"shape": "wide"})["content"][0]["text"])["count"] == 0
+
+
+def _error(tool, args):
+    reply = mcp_server.handle_tool_call(tool, args)
+    assert reply.get("isError"), (tool, args)
+    return reply["content"][0]["text"]
+
+
+def test_bad_input_is_a_plain_error_and_starts_no_job(monkeypatch, tmp_path):
+    seen = _capture_job(monkeypatch)
+    link = "https://example.com/v.mp4"
+    for tool, args, word in (
+            ("generate_short", {"mode": "NOPE"}, "mode"), ("generate_short", {"use_remotion": "false"}, "use_remotion"),
+            ("generate_short", {"category": "--upload_drive"}, "category"), ("generate_short", {"prompt": 5}, "prompt"),
+            ("generate_short", {"mode": "ARTICLE"}, "topic"), ("generate_short", ["FACTS"], "object"),
+            ("extract_clips", {"source_video": link, "clip_count": -2}, "clip_count"),
+            ("extract_clips", {"source_video": link, "clip_count": True}, "clip_count"),
+            ("extract_clips", {"source_video": link, "layout": "nope"}, "layout"),
+            ("extract_clips", {"source_video": str(tmp_path / "gone.mp4")}, "no such file"),
+            ("extract_clips", {"source_video": str(tmp_path)}, "no such file"),
+            ("extract_clips", {"source_video": "ftp://example.com/v.mp4"}, "link"),
+            ("extract_clips", {"source_video": "https://"}, "link"), ("extract_clips", {"source_video": "http://[bad"}, "link"),
+            ("dub_video", {"source_video": "gone.mp4", "target_lang": "es"}, "no such file"),
+            ("create_explainer", {"topic": "T", "sources": ["gone.pdf"]}, "gone.pdf"),
+            ("create_explainer", {"topic": "T", "sources": "https://example.com"}, "list"),
+            ("create_explainer", {"topic": "T", "kind": "animate", "formats": "3:2"}, "formats"),
+            ("create_explainer", {"topic": "  "}, "topic"),
+            ("list_videos", {"limit": -1}, "limit"), ("list_videos", {"shape": "round"}, "shape"),
+            ("generate_social_package", {}, "topic"), ("get_render_status", {}, "job_id"),
+            ("publish_video", {"path": "x", "platforms": ["tiktok", "myspace"]}, "myspace")):
+        assert word in _error(tool, args), (tool, args)
+    assert "args" not in seen
+
+
+def test_nulls_count_as_left_out_and_numbers_sent_as_text_work(monkeypatch):
+    seen = _capture_job(monkeypatch)
+    mcp_server.handle_tool_call("generate_short", {"mode": None, "category": None, "caption_style": None})
+    assert seen["args"][:2] == ["--mode", "FACTS"] and None not in seen["args"]
+    mcp_server.handle_tool_call("extract_clips", {"source_video": " https://example.com/v.mp4 ", "clip_count": "4"})
+    assert seen["args"][seen["args"].index("--clip_count") + 1] == "4" and "https://example.com/v.mp4" in seen["args"]
+
+
+def test_pasted_notes_and_a_dash_list_are_still_accepted(monkeypatch):
+    seen = _capture_job(monkeypatch)
+    mcp_server.handle_tool_call("create_explainer", {"topic": "T", "sources": ["The notes say that water boils at 100 degrees."]})
+    assert "The notes say that water boils at 100 degrees." in seen["args"]
+    mcp_server.handle_tool_call("generate_short", {"script": "- one thing\n- another"})
+    assert "- one thing\n- another" in seen["args"]
+
+
+def _fake_job(monkeypatch, tmp_path, line="working", during=None):
+    """Run run_main_command with a fake process; returns the Popen keywords and command."""
+    seen = {}
+    (tmp_path / "main.py").write_text("")
+    monkeypatch.setattr(mcp_server, "ROOT_DIR", str(tmp_path))
+
+    class Out:
+        lines = [line + "\n", ""]
+
+        def readline(self):
+            if len(self.lines) == 1 and during:
+                during()
+            return self.lines.pop(0)
+
+    def popen(cmd, **kwargs):
+        seen.update(kwargs, cmd=cmd)
+        return type("P", (), {"stdout": Out(), "returncode": 0, "wait": lambda self: 0})()
+
+    monkeypatch.setattr(mcp_server.subprocess, "Popen", popen)
+    return seen
+
+
+def test_a_finished_dub_lists_its_video(monkeypatch, tmp_path):
+    from shortsflow import settings
+    monkeypatch.setattr(settings, "video_info", lambda path: {"width": 0, "height": 0, "seconds": 0})     # the real one starts FFmpeg
+    folder = tmp_path / "sessions" / "dub_1"
+
+    def finish():
+        folder.mkdir(parents=True)
+        for name in ("source_video.mp4", "source_video_dub_es.mp4"):
+            (folder / name).write_bytes(b"x" * 2000)
+
+    _fake_job(monkeypatch, tmp_path, during=finish)
+    mcp_server.run_main_command("dubjob", ["--mode", "DUB", "--source_video", "https://example.com/v", "--target_lang", "es"])
+    job = mcp_server.JOBS["dubjob"]
+    assert [os.path.basename(p) for p in job.get("outputs", [])] == ["source_video_dub_es.mp4"] and job["output"] == job["outputs"][0]
+
+
+def test_a_running_job_shows_its_log_and_cannot_read_the_client_messages(monkeypatch, tmp_path):
+    live = {}
+    seen = _fake_job(monkeypatch, tmp_path, "step 1", lambda: live.update(logs=list(mcp_server.JOBS["livejob"]["logs"])))
+    mcp_server.run_main_command("livejob", ["--mode", "FACTS"])
+    assert live["logs"] == ["step 1"] and seen.get("stdin") == subprocess.DEVNULL
+
+
+def test_a_job_is_known_before_its_thread_runs(monkeypatch):
+    monkeypatch.setattr(mcp_server.threading, "Thread", lambda target, args: type("T", (), {"start": lambda self: None})())
+    for tool, args in (("generate_short", {}), ("extract_clips", {"source_video": "https://example.com/v"})):
+        job_id = json.loads(mcp_server.handle_tool_call(tool, args)["content"][0]["text"])["job_id"]
+        status = json.loads(mcp_server.handle_tool_call("get_render_status", {"job_id": job_id})["content"][0]["text"])
+        assert status["status"] == "processing"
+
+
+def test_publish_video_refuses_links_out_non_videos_and_missing_files(monkeypatch, tmp_path):
+    from shortsflow import settings
+    monkeypatch.setattr(mcp_server, "ROOT_DIR", str(tmp_path))
+    sent = []
+    monkeypatch.setattr(settings, "publish_file", lambda *a, **k: sent.append((a, k)) or (True, []))
+    folder = tmp_path / "sessions" / "a"
+    folder.mkdir(parents=True)
+    (folder / "notes.json").write_text("{}")
+    (folder / "v.mp4").write_bytes(b"x")
+    (tmp_path / "secret.mp4").write_bytes(b"x")
+    ask = {"platforms": ["tiktok"], "dry_run": False}
+    assert "not a video" in _error("publish_video", {"path": str(folder / "notes.json"), **ask})
+    assert "No such video" in _error("publish_video", {"path": str(folder / "gone.mp4"), **ask})
+    assert "sessions" in _error("publish_video", {"path": str(folder / ".." / ".." / "secret.mp4"), **ask})
+    try:
+        os.symlink(tmp_path / "secret.mp4", folder / "link.mp4")
+    except OSError:
+        pass                                                          # Windows without the right to make links
+    else:
+        assert "sessions" in _error("publish_video", {"path": str(folder / "link.mp4"), **ask})
+    assert not sent
+    for not_false in ("false", 0, "no"):                              # only the JSON value false publishes
+        _error("publish_video", {"path": str(folder / "v.mp4"), "platforms": ["tiktok"], "dry_run": not_false})
+    mcp_server.handle_tool_call("publish_video", {"path": str(folder / "v.mp4"), "platforms": ["tiktok", "tiktok"], "dry_run": None})
+    assert len(sent) == 1 and sent[0][1]["dry_run"] is True and sent[0][0][4] == ["tiktok"]
+
+
+def test_publish_video_checks_the_real_location(monkeypatch, tmp_path):
+    """The same as a link out of sessions/, for systems where a test may not make one."""
+    from shortsflow import settings
+    monkeypatch.setattr(mcp_server, "ROOT_DIR", str(tmp_path))
+    monkeypatch.setattr(settings, "publish_file", lambda *a, **k: (True, []))
+    folder = tmp_path / "sessions"
+    folder.mkdir()
+    (folder / "link.mp4").write_bytes(b"x")
+    real = os.path.realpath
+    monkeypatch.setattr(os.path, "realpath", lambda p, **k: str(tmp_path / "secret.mp4") if str(p).endswith("link.mp4") else real(p, **k))
+    assert "sessions" in _error("publish_video", {"path": str(folder / "link.mp4"), "platforms": ["tiktok"]})
+
+
+def test_protocol_errors_get_an_answer(tmp_path):
+    out = subprocess.run([sys.executable, os.path.join(ROOT, "mcp_server.py")], capture_output=True, text=True, encoding="utf-8", cwd=str(tmp_path), timeout=60,
+                         input="not json\n[1]\n" + json.dumps({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": None}) + "\n").stdout
+    codes = [json.loads(line)["error"]["code"] for line in out.splitlines() if line.strip()]
+    assert codes == [-32700, -32600, -32602]
+
+
+def test_stdin_is_read_as_utf8(tmp_path):
+    """A Windows pipe defaults to the ANSI code page, which garbled Hindi or accented text sent by the client."""
+    line = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                       "params": {"name": "get_render_status", "arguments": {"job_id": "h\u00e9llo \u0928\u092e"}}}, ensure_ascii=False)
+    out = subprocess.run([sys.executable, os.path.join(ROOT, "mcp_server.py")], input=(line + "\n").encode("utf-8"), capture_output=True, cwd=str(tmp_path),
+                         timeout=60, env={k: v for k, v in os.environ.items() if k not in ("PYTHONUTF8", "PYTHONIOENCODING")}).stdout.decode("utf-8")
+    text = json.loads(out.strip())["result"]["content"][0]["text"]
+    assert "h\u00e9llo \u0928\u092e" in json.loads(text)["message"]
+
+
+def test_engine_prints_never_reach_the_reply_stream(monkeypatch, capsys):
+    """stdout carries JSON-RPC only; one printed engine line there broke the client's parser."""
+    import io
+
+    def noisy(*a, **k):
+        print("[Warning] engine chatter")
+        raise ValueError("boom")
+
+    monkeypatch.setattr(mcp_server, "handle_tool_call", noisy)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list_videos"}}) + "\n"))
+    mcp_server.main()
+    captured = capsys.readouterr()
+    reply = json.loads(captured.out)                                  # exactly one JSON line
+    assert reply["result"]["isError"] and "boom" in reply["result"]["content"][0]["text"] and "engine chatter" in captured.err
+
+
+def test_every_tool_states_returns_and_hints():
+    for tool in mcp_server.TOOLS_DEFINITIONS:
+        assert "Returns" in tool["description"], tool["name"]
+        hints = tool["annotations"]
+        assert hints["title"] and all(isinstance(hints[k], bool) for k in ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"))
+        for prop in tool["inputSchema"]["properties"].values():
+            assert prop["type"] in ("string", "integer", "boolean", "array")
+    by_name = {t["name"]: t for t in mcp_server.TOOLS_DEFINITIONS}
+    assert by_name["publish_video"]["annotations"]["destructiveHint"] and not by_name["publish_video"]["annotations"]["readOnlyHint"]
+    assert set(mcp_server.CAPTION_STYLES) == _cli_choices()["--caption_style"]

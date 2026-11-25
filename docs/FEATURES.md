@@ -408,15 +408,17 @@ Claude Desktop / Cursor: add this under `mcpServers` in the tool's config JSON (
 ```
 
 ### Available MCP Tools:
-* `generate_short`: Create AI shorts from topics or prompts.
+* `generate_short`: Create AI shorts from topics or prompts (always 9:16; `aspect_ratio`, `auto_ducking` and `sfx_preset` are accepted but have no effect yet).
 * `extract_clips`: Slice long YouTube videos into vertical shorts with face tracking, a stacked two-speaker split (`layout: split`) or active-speaker switching (`layout: active`).
-* `generate_social_package`: Generate platform metadata (`.meta.json`) for YouTube Shorts, TikTok, and Reels.
-* `get_render_status`: Query live rendering job progress.
+* `generate_social_package`: Write a title, description and tags for a topic (returned directly; no file is written).
+* `get_render_status`: A job's status, live log lines, error, and the finished files (`outputs`) of clip, explainer and dub jobs.
 * `list_supported_modes`: List the content modes, caption styles and options the server accepts.
 * `create_explainer`: A narrated explainer from a topic and sources (`kind: case`) or one continuous animation (`kind: animate`); templates, themes and shapes as in `--mode CASE`. Poll `get_render_status`; the finished videos are listed under `outputs`.
-* `dub_video`: Translate and re-voice a video into one of 17 languages (optional burned-in subtitles, male or female voice).
+* `dub_video`: Translate English speech and re-voice the video in one of 17 languages (optional burned-in subtitles, male or female voice).
 * `list_videos`: The finished videos (path, title, shape, where already published), newest first; read-only.
-* `publish_video`: Publish one finished video through Upload-Post or direct to your own YouTube channel. **It only previews unless `dry_run` is false**, never posts the same video twice to a platform, and only takes paths inside the sessions folder.
+* `publish_video`: Publish one finished video through Upload-Post or direct to your own YouTube channel. **It only previews unless `dry_run` is false**, never posts the same video twice to a platform, and only takes video files inside the sessions folder (links that lead out of it are refused).
+
+Every tool checks its input against its own schema before anything starts: a wrong type, a value outside an `enum`, a count out of range, a missing local file or a value that looks like a command-line flag comes back as a plain tool error (`isError`) and no job is started. `generate_short`, `extract_clips`, `create_explainer` and `dub_video` return a `job_id`; the others answer directly. A local `source_video` or source file is only read, never changed (a relative path means from the ShortsFlow folder).
 
 ---
 
@@ -449,9 +451,11 @@ curl localhost:8080/v1/jobs/a1b2c3 -H "Authorization: Bearer change-me"   # stat
 
 Set `SHORTSFLOW_API_KEY` before exposing the API beyond localhost; webhook URLs pointing at private addresses are rejected unless `SHORTSFLOW_ALLOW_PRIVATE_WEBHOOKS=1`.
 
+Endpoints: `POST /v1/shorts` and `POST /v1/clips` (both answer `202` with the job), `GET /v1/jobs/{id}` (`?log=true` adds the log tail; status is `queued`, `running`, `succeeded` or `failed`), `GET /v1/jobs/{id}/files/{name}` (download) and `GET /health` (no key needed). Errors: `401` bad or missing key, `404` unknown job or file, `422` invalid body (unknown `mode` or `llm_provider`, a `source_video` that is neither an http(s) link nor an existing file on the server, text starting with `-`, a webhook to a private address). Jobs live in memory, so a restart forgets them. A webhook is tried up to 3 times and redirects are not followed. Jobs never upload or post.
+
 `POST /v1/shorts` generates from an idea (`mode`, `category`, `prompt`...). Webhooks are signed with
 `X-ShortsFlow-Signature: sha256=<HMAC of body>` when `SHORTSFLOW_WEBHOOK_SECRET` is set. Jobs run one at a time by default
-(`SHORTSFLOW_MAX_CONCURRENT`). With Docker: `SHORTSFLOW_API_KEY=change-me docker compose --profile api up api` (refuses to start without a key). A ready-made n8n flow lives in [`examples/n8n/`](../examples/n8n/shortsflow-clip-workflow.json).
+(`SHORTSFLOW_MAX_CONCURRENT`). With Docker: `SHORTSFLOW_API_KEY=change-me docker compose --profile api up api` (refuses to start without a key).
 
 ---
 

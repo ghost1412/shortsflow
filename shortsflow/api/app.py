@@ -4,6 +4,10 @@
   POST /v1/clips         clip a long video / YouTube link into shorts
   GET  /v1/jobs/{id}     status and result (add ?log=true for the log tail)
   GET  /v1/jobs/{id}/files/{name}   download a rendered video
+  GET  /health           liveness probe (no key needed)
+
+Errors: 401 bad or missing key, 404 unknown job or file, 422 invalid body (the detail names the field).
+Job status: queued, running, succeeded or failed. Jobs are kept in memory only (a restart forgets them).
 
 Auth: set SHORTSFLOW_API_KEY and send `Authorization: Bearer <key>` (or `X-API-Key`).
 Webhooks: pass `webhook_url` in a request; set SHORTSFLOW_WEBHOOK_SECRET to get an
@@ -20,12 +24,18 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 
+from engine.paths import project_root
 from shortsflow.api.jobs import JobManager, public_view
 
 app = FastAPI(title="ShortsFlow API", version="1.0.0",
               description="Self-hosted Opus Clip alternative. Submit a job, poll it or receive a webhook.")
 manager = JobManager(max_concurrent=int(os.getenv("SHORTSFLOW_MAX_CONCURRENT", "1")),
                      webhook_secret=os.getenv("SHORTSFLOW_WEBHOOK_SECRET"))
+
+# the modes main.py accepts (a test pins this list to the CLI), without PODCAST and SPLIT_SCREEN, which it refuses as not implemented
+MODES = ["FACTS", "STORY", "FIND_IT", "WYR", "REDDIT", "TRIVIA", "QUOTE", "ODD_ONE_OUT", "NEWS", "NEWS_SERIOUS", "GUESS_SOUND", "RIDDLE",
+         "TREND", "CHALLENGE", "JWST", "TRAILER_MISSED", "MUSIC", "EXPLAINER", "FILTER", "EMOJI_GUESS", "PHOTO_REEL", "FUNNY_EXPLAINER",
+         "TEACH", "DUB", "TOP_5", "CHAT_STORY", "HORROR", "TRUE_CRIME", "BIBLE", "ARTICLE", "UGC", "AUTO", "TRIP", "CASE", "ANIMATE", "VOICEOVER"]
 
 CaptionStyle = Literal["HORMOZI", "GLOW_BOX", "BOUNCE", "MINIMAL", "KARAOKE", "NEON", "BAR", "MARKER", "SOFT", "WORDCUT", "NEGATIVE", "HANDWRITTEN", "SIMPLE", "TYPEWRITER", "AUTO", "RANDOM"]
 
@@ -69,7 +79,7 @@ class Common(BaseModel):
     caption_style: CaptionStyle = "HORMOZI"
     aspect_ratio: Literal["9:16", "16:9", "1:1", "4:5"] = "9:16"
     use_remotion: bool = True
-    llm_provider: str = "auto"
+    llm_provider: Literal["auto", "gemini", "ollama", "openai", "anthropic", "deepseek", "groq", "openrouter", "custom"] = "auto"
     webhook_url: Optional[str] = Field(None, description="POSTed once when the job finishes")
     tts_provider: Literal["auto", "elevenlabs", "voicestudio", "edgetts", "local", "kokoro"] = "auto"
 
@@ -78,23 +88,27 @@ class Common(BaseModel):
     def _webhook_ok(cls, v):
         return _check_webhook(v)
 
-    @field_validator("llm_provider")
-    @classmethod
-    def _provider_ok(cls, v):
-        return _no_flag(v)
-
 
 class ShortRequest(Common):
-    mode: str = "FACTS"
-    category: Optional[str] = None
-    prompt: Optional[str] = None
-    script: Optional[str] = None
+    mode: str = Field("FACTS", description="Content format, in any letter case: FACTS, STORY, WYR, TOP_5, TRIVIA, NEWS, HORROR, ...")
+    category: Optional[str] = Field(None, description="Topic area, e.g. 'space mysteries'. Left out, one that suits the mode is picked")
+    prompt: Optional[str] = Field(None, description="The exact topic or idea; used instead of category")
+    script: Optional[str] = Field(None, description="A finished script to narrate as written (no AI script is made)")
     vibe: Literal["suspense", "spooky", "cinematic", "upbeat", "sarcastic", "funny"] = "suspense"
 
     @field_validator("mode", "category", "prompt", "script")
     @classmethod
     def _no_flag_ok(cls, v):
         return _no_flag(v)
+
+
+    @field_validator("mode")
+    @classmethod
+    def _mode_known(cls, v):
+        mode = v.strip().upper()
+        if mode not in MODES:
+            raise ValueError("unknown mode; use one of: " + ", ".join(MODES))
+        return mode
 
 
 class ClipRequest(Common):
@@ -119,6 +133,18 @@ class ClipRequest(Common):
     @classmethod
     def _no_flag_ok(cls, v):
         return _no_flag(v)
+
+
+    @field_validator("source_video")
+    @classmethod
+    def _source_exists(cls, v):
+        """A link as the pipeline defines it (engine.media_gen.is_url), or an existing file; relative paths mean the folder jobs run in."""
+        v = v.strip()
+        if v.startswith("www.") or (v.startswith(("http://", "https://")) and urlparse(v).hostname):
+            return v
+        if not os.path.isfile(os.path.join(project_root(), v)):
+            raise ValueError("source_video is not an http(s) link and no such file exists on the server")
+        return v
 
 
 def _common_args(r: Common):
@@ -179,7 +205,7 @@ def get_job(job_id: str, log: bool = False):
 def get_file(job_id: str, name: str):
     job = _job_or_404(job_id)
     for path in job["files"]:
-        if os.path.basename(path) == name:
+        if os.path.basename(path) == name and os.path.isfile(path):
             return FileResponse(path, media_type="video/mp4", filename=name)
     raise HTTPException(404, "No such file for this job")
 

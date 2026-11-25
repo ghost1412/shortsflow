@@ -120,19 +120,19 @@ def test_api_clip_request_passes_language_and_auto_edit(monkeypatch):
     from shortsflow.api import app as api
     seen = {}
     monkeypatch.setattr(api.manager, "submit", lambda args, webhook=None: seen.update(args=args) or {"id": "j", "status": "queued"})
-    api.create_clips(api.ClipRequest(source_video="a.mp4", language="hi", auto_edit="hype", edit_strength="hyped", cold_open=True))
+    api.create_clips(api.ClipRequest(source_video="https://example.com/a.mp4", language="hi", auto_edit="hype", edit_strength="hyped", cold_open=True))
     args = seen["args"]
     assert args[args.index("--language") + 1] == "hi" and "--cold_open" in args
     assert args[args.index("--auto_edit") + 1] == "hype" and args[args.index("--edit_strength") + 1] == "hyped"
     with pytest.raises(Exception):
-        api.ClipRequest(source_video="a.mp4", target_duration=90)           # shorts are never longer than 60 s
+        api.ClipRequest(source_video="https://example.com/a.mp4", target_duration=90)           # shorts are never longer than 60 s
 
 
 def test_mcp_extract_clips_passes_language_and_auto_edit(monkeypatch):
     import mcp_server
     seen = {}
     monkeypatch.setattr(mcp_server, "run_main_command", lambda job_id, cli_args: seen.update(args=cli_args))
-    mcp_server.handle_tool_call("extract_clips", {"source_video": "a.mp4", "language": "es", "auto_edit": "vlog"})
+    mcp_server.handle_tool_call("extract_clips", {"source_video": "https://example.com/a.mp4", "language": "es", "auto_edit": "vlog"})
     import time
     time.sleep(0.2)                                                          # the tool starts a worker thread
     args = seen.get("args", [])
