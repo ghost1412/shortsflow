@@ -18,7 +18,7 @@ MAX_ILLUSTRATION = 4     # things in an explaining picture that stay clear of ea
 MAX_NAME_WORDS = 4       # a label of the picture scene names one thing: longer ones are sentences
 LAYOUT_HELP = {
     "timeline": "events in order of time; labels are short dated events",
-    "flow": "the steps of one mechanism, one after another; labels are the steps",
+    "flow": "the steps of one mechanism, each leading to the next; labels are the steps (terms, parts or demands that do not lead to each other are not a flow)",
     "diagram": "how things connect or happen when a plain row of steps is not enough: a process with branches, who talks to whom, states over time, how ideas relate; write Mermaid source in the section's \"diagram\" field (the on_screen labels are then only a fallback). Not for a list of parts, "
                "materials, chemicals or names: that is a picture (illustration), because a diagram would cut the names into pieces",
     "illustration": "a drawn picture that explains the idea as a small scene (a story, a cause and its effect, who did what to whom, how something looks from the inside); "
@@ -26,8 +26,8 @@ LAYOUT_HELP = {
                     "marker on the picture. Use it for the human or physical story of a section, and for what a material, a device or a place is made of or how its parts "
                     "are arranged; not for numbers or step lists",
     "counters": "two to four big numbers; labels are 'number and what it counts', like '300,000 computers'",
-    "checklist": "actions or conclusions; labels are short imperative lines",
-    "compare": "two things side by side (before and after, A and B); each label is 'left | right', and the FIRST label holds the two headings like 'Before | After'",
+    "checklist": "actions (short imperative lines) or conclusions (short plain statements: an idea, a fact or a result is stated, never turned into a command like 'Note the date')",
+    "compare": "two things side by side (before and after, A and B); each label is 'left | right', the FIRST label holds the two headings (what is compared, by name; 'Before | After' only for a real change over time), and every row says the same kind of thing about the left and the right one",
     "chart": "three to five quantities of the same kind compared by bar length; each label is 'Name: number' with the number exactly as the sources give it",
     "quote": "one key line that sums the section up; the first label is the line",
 }
@@ -62,7 +62,7 @@ PRESETS = {
         {"id": "why", "title": "Why it matters", "question": "Why does it matter, with real numbers if the sources have them? If they hold no numbers, say what it changes or makes possible, and for whom: the "
                     "consequences in plain words.", "scene": "counters"},
         {"id": "do", "title": "What to remember", "question": "What should the viewer remember, or do about it? For a discovery or a natural phenomenon: the one or two ideas "
-                    "worth keeping, not advice.", "scene": "checklist"},
+                    "worth keeping, not advice. The same for an event, a law or an idea. No new trivia here.", "scene": "checklist"},
     ],
     # a recipe page: the dish, the steps in order, the quantities / temperatures / times, the tips
     # a news story: sharp, attributed, balanced (every claim belongs to the person who made it; the video takes no side)
@@ -252,16 +252,18 @@ def build_prompt(topic, template, sources, layouts="auto", length="standard"):
               "not how the work was set up; if the sources hold no such outcomes, say what they do claim. "
               "HOOK: the viewer decides in two seconds whether to keep watching. Give a top-level \"hook\": ONE line of 12 words or fewer, the most surprising or "
               "highest-stakes fact the sources report, or a sharp question they answer; no greeting, no \"in this video\", no clickbait the sources do not back. "
-              "The first sentence of the first section's narration must also open with that kind of fact, not with background. "
+              "A definition (\"X is ...\") is not a hook, and a hook uses words a newcomer knows. "
+              "The first sentence of the first section's narration must also open with that kind of fact, not with background, and not repeat the hook word for word. "
               "When the work is a paper, name the institution or lab at most once and never read out a list of author names. "
               "Advice in the last section may be general, but must not add facts. "
               "Never use funding, grant numbers, journal names, publication dates or the list of institutions as an on-screen label or as the substance of a section: "
               "they say nothing about the subject itself. "
               "VOICE: the narration is SPOKEN by a narrator talking to one viewer, not read from a report. Write the way a good presenter talks: short "
-              "sentences of 8 to 16 words, one idea each; contractions (it's, didn't, that's); speak to the viewer as \"you\" now and then; turn a "
-              "surprising point into a quick question and answer it (\"So what went wrong? ...\"); say what a term means the first time in plain words "
-              "instead of stacking jargon; link the sentences (so, but, then, that's why) so it flows as a story. Never start two sentences in a row the "
-              "same way, and no bullet-point phrasing.", "", "One section per question, in this order:"]
+              "sentences of 8 to 16 words, one idea each; contractions (it's, didn't, that's); speak to the viewer as \"you\" now and then (only the viewer: never a country, company or person in the story; do not open sections or sentence after sentence with \"You\"); "
+              "at most once in the whole video turn a surprising point into a quick question and answer it, and never open a section by restating its question; say what a term means the first time in plain words "
+              "instead of stacking jargon; link the sentences (but, then, and) so it flows as a story. Never start two sentences in a row the "
+              "same way, and no bullet-point phrasing. Use a cause word (that's why, because, so) ONLY when the sources state that very cause, and never add a "
+              "consequence, motive or comparison the sources do not give.", "", "One section per question, in this order:"]
     for s in template:
         parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  " + (f"Default layout: {s['scene']}" if layouts == "auto" else f"Scene kind: {s['scene']}")
                      + (f"  Narration length: {s['sentences']} short sentences." if s.get("sentences") else ""))
@@ -269,6 +271,9 @@ def build_prompt(topic, template, sources, layouts="auto", length="standard"):
         parts += ["", "Pick the layout of each section yourself, from this list, whichever shows THAT section best, and do not use the same layout for two sections in a row (two pictures may follow each other):"]
         parts += [f"  {name}: {LAYOUT_HELP[name]}" for name in AUTO_LAYOUTS]
         parts.append("  (a section whose default layout is terminal, equation or animation keeps it)")
+        parts.append("  Match the layout to the KIND of material: dated events in order are a timeline; steps that lead to each other are a diagram; real quantities about the "
+                     "subject are counters or a chart; two views, parties or options are compare; terms, laws, ideas and arguments without figures are a checklist or a quote. "
+                     "Never pick counters with fewer than two real figures: a year is a date, and counting the things you just named (\"2 opposing critics\") is not a figure.")
         parts.append("  Use the illustration layout for the section or two whose story is about physical things: a device, a material, a person, a place, who or what did "
                      "something to whom or what. Most videos should have at least one. For it, every on_screen label is the SHORT NAME of one thing in the picture (one to "
                      "three words, like \"Attacker\", \"Atomic film\" or \"Chip\"), a word the narration actually says, in the order the narration reaches them: never a "
@@ -304,6 +309,9 @@ def _digits(s):
 def unsupported(sentence, source_text):
     """The numbers and capitalised names in `sentence` that the sources never mention (case-insensitive; numbers compared by digits)."""
     low = source_text.lower()
+    for sign, word in (("°f", " fahrenheit"), ("°c", " celsius")):      # a page writes "81 °F", the narrator says "81 degrees Fahrenheit"
+        if sign in low.replace("°\u00a0", "°").replace("° ", "°"):
+            low += word
     source_numbers = {_digits(n) for n in _NUMBER.findall(source_text)}
     sentence = _ORDINAL.sub(" ", sentence)         # "Step 2:" numbers the steps of a diagram; it is not a claim about the world
     out = []
@@ -396,6 +404,8 @@ def is_year(m):
     followed by a unit of quantity (UNITS: "1500 servers", "1500 years", "1500 degrees" and "1,500" are quantities). A word that is not a unit ("home invention",
     "discovery") makes it a date: a point in time, not a number a counter can show."""
     sign, num, unit = m.group(1), m.group(2), (m.group(3) or "").lower()
+    if not sign and m.group(3) in ("BC", "BCE", "AD", "CE") and num.isdigit():      # "3700 BC", "800 AD": a date whatever its size ("30 ad campaigns" is not)
+        return True
     return not sign and bool(re.fullmatch(r"\d{4}", num)) and 1000 <= int(num) <= 2100 and unit not in UNITS and unit != "%"
 
 
@@ -499,6 +509,51 @@ def diagram_for(section, topic, ask, source_text=None, check=None):
     return resolve_diagram(reply, source_text, ask, section.get("title", ""), check)
 
 
+# words that make a label an idea or a process, not something you could point at in a drawing
+ABSTRACT = {"process", "cycle", "transfer", "effect", "environment", "system", "concept", "method", "technique", "phenomenon", "principle", "theory", "reaction",
+            "analysis", "efficiency", "dynamics", "mechanism", "relationship", "approach", "strategy", "model", "framework", "compression", "evolution", "interaction"}
+ABSTRACT_HEADS = {"liberty", "freedom", "justice", "rights", "terms", "law", "policy", "idea", "history", "growth", "demand"}        # only as the last word: "Law book" is a thing
+_ABSTRACT_ENDINGS = ("tion", "sion", "ity", "ness")
+_CONCRETE = {"station", "nation", "section", "junction", "intersection", "reception", "television", "mansion", "population", "collection", "plantation",
+             "city", "university", "cavity", "facility", "community", "celebrity", "electricity", "witness", "harness"}
+
+
+def abstract_label(label):
+    """True when a picture label is an idea, not a thing you could point at in a drawing: a sentence (over MAX_NAME_WORDS words), a label with a digit, one with a word
+    of ABSTRACT, or one whose last word (the thing it names) is an idea: ABSTRACT_HEADS or an ending like -tion and -ity. "Mechanical digestion" is an idea, "Fermentation
+    tank" a thing. A word list is a guess, so it only ever asks for other names. The scorecard uses the same definition."""
+    words = re.findall(r"[a-z][a-z']+", str(label or "").lower())
+    if len(words) > MAX_NAME_WORDS or re.search(r"\d", str(label)) or any(w in ABSTRACT for w in words):
+        return True
+    last = words[-1] if words else ""
+    return last in ABSTRACT_HEADS or (last.endswith(_ABSTRACT_ENDINGS) and last not in _CONCRETE)
+
+
+def cut_labels(labels, narration, cut):
+    """The labels without those whose number stood only in a sentence the source check removed (`cut`): the screen would show a figure the narrator never says."""
+    said = {_digits(n) for n in _NUMBER.findall(narration)}
+    gone = {_digits(n) for sentence, _ in cut for n in _NUMBER.findall(sentence)} - said
+    return [x for x in labels if not any(_digits(n) in gone for n in _NUMBER.findall(x))]
+
+
+def checklist_lines_for(title, narration, topic, ask, source_text=None):
+    """Two or three short takeaway lines for a section that was meant to show big numbers but holds none (its labels are cut-up figures like "1 treaty signed"): each is
+    2 to 6 words, is said by the narration (a content word, and every figure) and, with sources, passes the same source check. [] when the model gives fewer than two."""
+    reply = ask("Give the 3 short on-screen lines that sum up this part of a video about: " + str(topic) + "\n\nSection: " + str(title) + "\nNarration: " + str(narration)
+                + "\n\nEach line is 2 to 6 words, a plain conclusion, consequence or fact the narration states, in the order the narration says them. No full sentences, no "
+                "number fragments, nothing the narration does not say. Reply with raw JSON only: {\"lines\": [\"...\", \"...\", \"...\"]}")
+    data = parse_reply(reply)
+    lines = data.get("lines") if isinstance(data, dict) else None
+    said = {_digits(n) for n in _NUMBER.findall(narration)}
+    good = []
+    for raw in lines if isinstance(lines, list) else []:
+        line = " ".join(str(raw or "").split())
+        if (2 <= len(line.split()) <= 6 and label_spoken(line, narration) and all(_digits(n) in said for n in _NUMBER.findall(line))
+                and not (source_text and unsupported(line, source_text)) and not bad_counter_label(line) and line not in good):
+            good.append(line[0].upper() + line[1:])
+    return good[:MAX_CHECKLIST] if len(good) >= 2 else []
+
+
 def picture_names_for(title, narration, topic, ask):
     """Two to four short names of the things a picture for this section shows, or [] when the model gives none that fit: each is one to MAX_NAME_WORDS words, has no
     digits, and is a word the narration actually says (so the picture's icons can pop in as the narrator reaches them). Used when a section is meant to be a picture
@@ -525,11 +580,11 @@ MIN_NARRATION = {"short": 20, "standard": 35, "long": 50}       # spoken words a
 
 
 def refill_narration(title, kept, topic, source_text, ask, length="standard"):
-    """A longer narration for a section that lost sentences to the source check and became thin: the model is asked for more sentences, and each new one goes
+    """A longer narration for a thin section (written short, or cut by the source check): the model is asked for more sentences, and each new one goes
     through the same check. Returns the new checked text when it is longer than `kept`, else `kept` unchanged."""
     reply = ask("Write more narration for the section \"" + str(title) + "\" of a video about: " + str(topic) + "\n\nSo far it says: " + (kept or "(nothing yet)")
                 + "\n\nWrite " + LENGTHS.get(length, "4-6") + " spoken sentences in total, using ONLY facts the source text below states; no number or name the source does not hold."
-                + "\n\nSource text:\n" + str(source_text)[:6000] + "\n\nReply with raw JSON only: {\"narration\": \"...\"}")
+                + "\n\nSource text:\n" + str(source_text)[:MAX_SOURCE_CHARS] + "\n\nReply with raw JSON only: {\"narration\": \"...\"}")
     data = parse_reply(reply)
     text = str(data.get("narration") or "").strip() if isinstance(data, dict) else ""
     more, _ = clean_narration(text, source_text) if text else ("", [])
@@ -558,11 +613,11 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
         if sources:
             narration, cut = clean_narration(narration, source_text)
             dropped += [{"section": sec["id"], "sentence": s, "unsupported": bad} for s, bad in cut]
-            if cut and len(narration.split()) < MIN_NARRATION.get(length, 35):      # the check left too little: one more try, each new sentence checked again
+            if (narration or cut) and len(narration.split()) < MIN_NARRATION.get(length, 35):      # too little, cut by the check or written short: one more try, each new sentence checked again
                 narration = refill_narration(sec["title"], narration, topic, source_text, ask, length)
         labels = [str(x).strip()[:80] for x in (row.get("on_screen") or []) if str(x).strip()][:6] if isinstance(row.get("on_screen"), list) else []
         if sources:
-            labels = [x for x in labels if not unsupported(x, source_text)]
+            labels = cut_labels([x for x in labels if not unsupported(x, source_text)], narration, cut)
         labels = [spell_powers(x) for x in labels]
         if not narration:
             continue
@@ -573,21 +628,32 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
         footage = [p for p in (" ".join(re.findall(r"[A-Za-z0-9]+", str(x or "")))[:60] for x in raw_footage) if p][:4]
         scene = pick_layout(sec["scene"], row.get("scene"), previous, layouts)
         wants_picture = scene == "illustration"
+        wants_counters = scene == "counters"
+        if wants_counters and layouts == "auto" and len(labels) >= 3 and previous != "timeline" and all((m := _NUMBER_LEAD.match(x)) and is_year(m) for x in labels):
+            scene, wants_counters = "timeline", False            # every label is a dated event: a timeline, not big numbers
         if scene == "counters":
             labels = drop_unreadable(drop_years(labels))     # a year is a date, and a raw exponent is not a number to show big
             if layouts == "auto" and len([x for x in labels if not bad_counter_label(x)]) < 2:
                 scene = "checklist"                          # fewer than two readable figures left (every label was a date or an exponent): plain lines, not big cards
         if layouts == "auto":
             scene = fit_layout(scene, labels, previous)
+            if scene == "counters":
+                labels = [x for x in labels if re.search(r"\d|hundred|thousand|illion", x, re.I)]       # a card without a number ("Purchasing power erodes") shows nothing big
+            elif wants_counters:                                  # the cards were dates or cut-up figures: real takeaway lines instead
+                labels = checklist_lines_for(sec["title"], narration, topic, ask, source_text if sources else None) or labels
         if wants_picture and scene != "illustration" or (wants_picture and not [x for x in labels if x.strip()]):
             names = picture_names_for(sec["title"], narration, topic, ask)      # a picture section whose labels were sentences or numbers: ask for names of things
             if names:
                 scene, labels = "illustration", names
         if scene == "illustration":
-            said = [x for x in labels if label_spoken(x, narration)]
-            if len(said) < len(labels):                      # a label the narrator never says would pop in off the narration, so ask for names it does say (taken only when more of them are said)
+            # a label the narration never says pops in off the voice, and an idea cannot be drawn: ask once for other names, taken only when more of them are
+            # said and things (or as many, with fewer that are not)
+            def rank(names, spoken=narration):
+                good = sum(label_spoken(x, spoken) and not abstract_label(x) for x in names)
+                return good, good - len(names)
+            if rank(labels)[1] < 0:
                 names = picture_names_for(sec["title"], narration, topic, ask)
-                if len([x for x in names if label_spoken(x, narration)]) > len(said):
+                if names and rank(names) > rank(labels):
                     labels = names
         diagram = ""
         if scene == "diagram":

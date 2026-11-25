@@ -101,7 +101,8 @@ def test_a_broken_diagram_is_sent_back_once_and_then_fixed_or_replaced_by_a_flow
         return (code == FLOW, "Parse error on line 2")
     script = cs.write_script("T", t, src, ask, check_diagram=check)
     assert script["sections"][1]["scene"] == "diagram" and script["sections"][1]["diagram"] == FLOW
-    assert "Parse error on line 2" in asked[1] and "Fix this Mermaid diagram" in asked[1]
+    fixes = [p for p in asked if "Fix this Mermaid diagram" in p]              # (the short test narrations are also sent back for more text)
+    assert len(fixes) == 1 and "Parse error on line 2" in fixes[0]
 
     asked.clear()
     stubborn = cs.write_script("T", t, src, lambda p: (asked.append(p) or reply), check_diagram=lambda c: (False, "still broken"))

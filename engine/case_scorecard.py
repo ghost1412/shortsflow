@@ -10,7 +10,6 @@ real line; sections that fell back to a plain checklist; sentences removed becau
 """
 import json
 import os
-import re
 import subprocess
 import sys
 
@@ -21,23 +20,22 @@ TOPICS = {
     "phishing": ("How phishing attacks trick people, and how to spot them", "https://en.wikipedia.org/wiki/Phishing"),
     "sky": ("Why the sky is blue, explained simply", "https://en.wikipedia.org/wiki/Rayleigh_scattering"),
     "telescope": ("How the Event Horizon Telescope imaged a black hole", "https://en.wikipedia.org/wiki/Event_Horizon_Telescope"),
+    "versailles": ("How the Treaty of Versailles ended the First World War and what it demanded of Germany", "https://en.wikipedia.org/wiki/Treaty_of_Versailles"),
+    "inflation": ("Why prices rise over time: what inflation is and who it hurts", "https://en.wikipedia.org/wiki/Inflation"),
+    "digestion": ("How your body digests food, step by step", "https://en.wikipedia.org/wiki/Digestion"),
+    "binsearch": ("How binary search finds an item in a sorted list", "https://en.wikipedia.org/wiki/Binary_search_algorithm"),
+    "habeas": ("What habeas corpus is and why it protects people from unlawful detention", "https://en.wikipedia.org/wiki/Habeas_corpus"),
+    "sourdough": ("How to make sourdough bread at home, explained simply", "https://en.wikipedia.org/wiki/Sourdough"),
 }
 
-# words that make a label an idea or a process, not something you could point at in a drawing
-ABSTRACT = {"process", "cycle", "transfer", "effect", "environment", "system", "concept", "method", "technique", "phenomenon", "principle", "theory", "reaction",
-            "analysis", "efficiency", "dynamics", "mechanism", "relationship", "approach", "strategy", "model", "framework", "compression", "evolution", "interaction"}
 WORDS_PER_SECOND = 2.6
 MIN_WORDS = {"short": 20, "standard": 35, "long": 50}       # (the script step refills to the same numbers: case_study.MIN_NARRATION) a section with fewer spoken words than this is thin for its length setting
 
 
-def _words(text):
-    return re.findall(r"[A-Za-z][A-Za-z']+", str(text or "").lower())
-
-
 def is_abstract(label):
-    """True when a picture label is an idea or a process (it holds a word of ABSTRACT), is a sentence (more than four words) or holds a digit."""
-    words = _words(label)
-    return len(words) > 4 or bool(re.search(r"\d", str(label))) or any(w in ABSTRACT for w in words)
+    """True when a picture label is an idea or a process, a sentence or holds a digit (the one definition, shared with the script step that asks for other names)."""
+    from engine import case_study
+    return case_study.abstract_label(label)
 
 
 def is_spoken(label, narration):

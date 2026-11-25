@@ -54,7 +54,7 @@ def test_the_command_runs_the_script_step_only_for_a_known_topic():
     cmd = sc.command("fridge", "out/fridge", "short", "local", python="py")
     assert cmd[:4] == ["py", "main.py", "--mode", "CASE"] and "How a refrigerator keeps food cold, explained simply" in cmd
     assert "https://en.wikipedia.org/wiki/Refrigerator" in cmd and "plan_only" in cmd and "length=short" in cmd and "llm=local" in cmd and cmd[-2:] == ["--session_dir", "out/fridge"]
-    assert set(sc.TOPICS) >= {"rainbow", "fridge", "vaccine", "phishing", "sky", "telescope"}
+    assert set(sc.TOPICS) >= {"rainbow", "fridge", "vaccine", "phishing", "sky", "telescope", "versailles", "inflation", "digestion", "binsearch", "habeas", "sourdough"}
 
 
 def test_the_runner_reads_the_script_each_run_wrote_and_survives_a_run_that_wrote_none(tmp_path):

@@ -467,3 +467,85 @@ def test_a_section_thinned_by_the_source_check_is_refilled_with_checked_sentence
     out = cs.refill_narration("How", "Compressors move heat.", "fridge", src, ask)
     assert "refrigerant" in out and "1913" not in out and len(out.split()) > 3
     assert cs.refill_narration("How", "Compressors move heat.", "fridge", src, lambda p: "nonsense") == "Compressors move heat."
+
+
+def test_ideas_are_told_from_things_for_picture_labels():
+    for idea in ("Individual liberty", "Court action", "Mechanical digestion", "Latin terms", "Heat transfer", "3 layers", "The film is placed on a crystal"):
+        assert cs.abstract_label(idea), idea
+    for thing in ("Compressor", "Hall of Mirrors", "Fermentation tank", "Law book", "Station", "Sorted array", "Government building", "Document", "Target value", "City"):
+        assert not cs.abstract_label(thing), thing
+
+
+def _one(scene, labels, narration, reply="", source=""):
+    """The one section write_script makes of these labels, and the prompts it asked; `reply` answers every ask after the first."""
+    asked = []
+
+    def ask(prompt):
+        asked.append(prompt)
+        if len(asked) == 1:
+            return json.dumps({"title": "T", "hook": "A short line to open", "sections": [{"id": "x", "narration": narration, "scene": scene, "on_screen": labels}]})
+        return reply
+    sources = [{"id": "S1", "ref": "r", "text": source}] if source else []
+    return cs.write_script("Topic", [{"id": "x", "title": "X", "question": "q", "scene": scene}], sources, ask)["sections"][0], asked
+
+
+def test_a_picture_with_idea_labels_gets_names_of_things_only_when_that_is_better():
+    said = "A judge in a court orders a prisoner out of the jail. Court action protects individual liberty."
+    sec, asked = _one("illustration", ["Court action", "Individual liberty", "Prisoner"], said, json.dumps({"names": ["Judge", "Prisoner", "Jail"]}))
+    assert sec["on_screen"] == ["Judge", "Prisoner", "Jail"] and len(asked) == 2
+    for useless in ("no json", json.dumps({"names": ["Liberty", "Action"]})):
+        sec, _ = _one("illustration", ["Court action", "Judge", "Prisoner"], said, useless)
+        assert sec["scene"] == "illustration" and sec["on_screen"] == ["Court action", "Judge", "Prisoner"]
+    assert len(_one("illustration", ["Judge", "Prisoner"], said)[1]) == 1                    # good labels cost no extra call
+
+
+def test_checklist_lines_are_short_said_and_supported_or_nothing():
+    said = "Prices rise over time. Each unit of currency buys fewer goods. Central banks raise interest rates by 2 percent."
+
+    def lines(*x):
+        return lambda prompt: json.dumps({"lines": list(x)})
+    assert cs.checklist_lines_for("Why", said, "T", lines("Prices rise", "Banks raise rates 2 percent")) == ["Prices rise", "Banks raise rates 2 percent"]
+    assert cs.checklist_lines_for("Why", said, "T", lines("Prices rose 54 percent", "Dragons breathe fire", "A very long line about prices that is really a sentence")) == []
+    assert cs.checklist_lines_for("Why", said, "T", lambda p: "no json") == []
+    assert cs.checklist_lines_for("Why", said, "T", lines("Prices rise", "The Zorblax currency"), "Prices rise over time.") == []       # a name the sources lack
+
+
+def test_counters_without_figures_become_takeaway_lines_or_a_timeline_when_every_label_is_a_date():
+    said = "Critics called it harsh. Others called it lenient. Germany signed after talks."
+    good = json.dumps({"lines": ["Critics called it harsh", "Others called it lenient"]})
+    for labels in (["1 treaty signed", "2 opposing critics"], ["1919 treaty", "1933 election"]):      # counted things, and two dates
+        sec, _ = _one("counters", labels, said, good)
+        assert sec["scene"] == "checklist" and sec["on_screen"] == ["Critics called it harsh", "Others called it lenient"]
+    sec, asked = _one("counters", ["1166 Assize", "1215 Magna Carta", "1679 Act"], said, good)
+    assert sec["scene"] == "timeline" and len(sec["on_screen"]) == 3 and len(asked) == 1
+    sec, _ = _one("counters", ["833,997 percent inflation", "150 years", "Purchasing power erodes"], said)
+    assert sec["scene"] == "counters" and sec["on_screen"] == ["833,997 percent inflation", "150 years"]
+
+
+def test_a_label_whose_figure_was_cut_from_the_narration_is_cut_too():
+    cut = [("It takes 54 hours at Zorblax.", ["Zorblax"])]
+    assert cs.cut_labels(["54 hours to settle", "2 times more gas"], "Some yeasts make twice the gas.", cut) == ["2 times more gas"]
+    assert cs.cut_labels(["54 hours to settle"], "It settles in 54 hours.", cut) == ["54 hours to settle"]
+    assert cs.cut_labels(["54 hours to settle"], "No figure here.", []) == ["54 hours to settle"]
+
+
+def test_a_thin_section_is_refilled_also_when_nothing_was_cut():
+    text = "Chewing more raises gut hormones. Slow eating lowers hunger. " * 5
+    more = json.dumps({"narration": text})
+    sec, asked = _one("checklist", ["Chew more", "Eat slowly"], "Chewing more raises gut hormones.", more, text)
+    assert len(sec["narration"].split()) >= 35 and len(asked) == 2
+    assert len(_one("checklist", ["Chew more"], "Chewing more raises gut hormones.", more)[1]) == 1          # no sources: nothing to check new sentences against
+
+
+def test_unit_names_match_their_signs_and_an_era_makes_a_date():
+    assert cs.unsupported("It takes 54 hours at 81 degrees Fahrenheit.", "about 54 hours at 81 °F") == []
+    assert cs.unsupported("It takes 54 hours at 27 degrees Celsius.", "54 hours at 27\u00a0°C (81\u00a0°F)") == []
+    assert cs.unsupported("It is 81 degrees Fahrenheit.", "81 degrees") == ["Fahrenheit"]
+    assert cs.bad_counter_label("3700 BC: oldest bread") and cs.bad_counter_label("800 AD siege")
+    assert not cs.bad_counter_label("150 years of yeast") and not cs.bad_counter_label("30 ad campaigns")
+
+
+def test_the_prompt_asks_for_layouts_by_kind_and_no_invented_causes():
+    prompt = cs.build_prompt("Topic", cs.PRESETS["explainer"], [{"id": "s1", "ref": "r", "text": "t"}], "auto")
+    assert "dated events in order" in prompt and "Never pick counters" in prompt and "ONLY when the sources state that very cause" in prompt
+    assert "then, that's why" not in prompt and "never open a section by restating its question" in prompt
