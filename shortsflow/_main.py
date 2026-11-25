@@ -26,16 +26,108 @@ from engine.media_gen import is_url
 
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Generate either FACTS, STORY, FIND_IT, WYR, REDDIT, TRIVIA, QUOTE, JWST, RIDDLE, ODD_ONE_OUT, or FILTER shorts.")
-    parser.add_argument("--mode", choices=["FACTS", "STORY", "FIND_IT", "WYR", "REDDIT", "TRIVIA", "QUOTE", "ODD_ONE_OUT", "NEWS", "NEWS_SERIOUS", "GUESS_SOUND", "RIDDLE", "TREND", "CHALLENGE", "JWST", "TRAILER_MISSED", "MUSIC", "EXPLAINER", "FILTER", "EMOJI_GUESS", "PHOTO_REEL", "FUNNY_EXPLAINER", "TEACH", "DUB", "SPLIT_SCREEN", "PODCAST", "TOP_5", "CHAT_STORY", "HORROR", "TRUE_CRIME", "BIBLE", "ARTICLE", "UGC", "AUTO", "TRIP", "CASE", "ANIMATE", "VOICEOVER"], help="Force a specific mode.")
+EPILOG = """examples:
+  Cut a long video or YouTube link into 3 vertical shorts with animated captions:
+    python main.py --source_video "https://www.youtube.com/watch?v=VIDEO_ID" --extract_mode shorts --clip_count 3 --smart_crop --tighten --use_remotion --caption_style HORMOZI
+
+  An AI facts short:
+    python main.py --mode FACTS --category "space mysteries" --vibe suspense --use_remotion --caption_style GLOW_BOX
+
+  A case explainer from a topic and a source (every option: --case help):
+    python main.py --mode CASE --prompt "The topic" --sources https://example.com/article --case theme=neon --case formats=16:9
+
+  A voice-over in your own voice (every option: --voiceover help):
+    python main.py --mode VOICEOVER --script "Text to read, or a .txt file" --voiceover sample=my_voice.wav --voiceover tone=warm
+"""
+
+# Argument groups for --help. Only the help layout: every flag is still defined once, in build_parser.
+# A flag not listed here lands in "Other options" (a test keeps that group empty).
+FLAG_GROUPS = [
+    ("Source and mode", "What to make and from what.",
+     "--mode --prompt --script --category --scene --source_video --batch_file --video_id --session_dir --use_cache "
+     "--output_json --cookies_from_browser --cookies"),
+    ("Clipping and shorts", "Cut a long video (--source_video) into shorts: which moments, how long, framing and clean-up.",
+     "--extract_mode --clip_count --target_duration --min_duration --only_between --plan_only --moments --find "
+     "--user_context --style_context --content --game_framing --game_crop --game_mix --no_signals --no_rerank "
+     "--no_diversity --no_snap --use_audio_detect --use_chapters --visual_context --cold_open --layout --filler_video "
+     "--smart_crop --aspect_ratio --tighten --tighten_mode --remove_fillers --cut --edit_transcript --language "
+     "--clip_report --add_commentary --show_banner --join_reel --mashup --mashup_mode --preview --srt --broll"),
+    ("Highlights reel and transitions", "The compiled highlight reel (--extract_mode long) and cuts between shots.",
+     "--reel_captions --transitions --subject_look --subject_max --subject_color"),
+    ("Captions", "Animated captions (most need --use_remotion) and caption language.",
+     "--use_remotion --caption_style --caption_color --caption_position --caption_size --subtitle_y_pos "
+     "--caption_emoji --caption_lang --zh_script"),
+    ("Edit style and look", "Templates, covers, branding, zooms and colour grades.",
+     "--auto_edit --edit_strength --clone_style --save_as --visual_template --template_text --template_accent "
+     "--intro_animation --outro_animation --animation_color --segment_transition --brand --logo --handle --end_card "
+     "--hook_overlay --auto_zoom --enable_zoom --stat_pops --style --video_filter --gif_dir --cartoon --persona"),
+    ("Audio, voice and music", "Narrator voice, music, sound effects and audio clean-up.",
+     "--music --vibe --voice --tts_provider --clone_voice --clean_audio --enhance_audio --auto_ducking --sfx_preset "
+     "--use_ai_audio --ckpt_name"),
+    ("Dubbing (--mode DUB)", "Translate and re-voice a video.",
+     "--target_lang --dub_captions --dub_original --dub_tone --dub_delivery --dub_caption_size "
+     "--dub_caption_position --dub_fit --dub_speakers --dub_voice"),
+    ("Case explainer, animated explainer and voice-over", "Modes with their own option schema: --case KEY=VALUE "
+     "(--mode CASE and --mode ANIMATE; `--case help` lists them) and --voiceover KEY=VALUE (--mode VOICEOVER; "
+     "`--voiceover help`). A new option goes into the schema, not into a new flag.",
+     "--sources --case --case_file --voiceover --voiceover_file"),
+    ("Recap (--mode TRIP: trips, weddings, events, step-by-step videos)", "Several videos in, one recap out.",
+     "--trip_videos --trip_album --trip_day --trip_name --trip_stops --steps_file --place_names --recap_length "
+     "--recap_hook --recap_lines --recap_ingredients_title --recap_ingredients --recap_ingredients_at "
+     "--recap_safe_text --recap_opening --recap_held_title --recap_shot_seconds --recap_pace --recap_speed "
+     "--recap_end --recap_end_text --recap_itinerary --recap_text_style --recap_plan_only --recap_moments "
+     "--recap_like --recap_counter --recap_open_result --recap_aspect --recap_versions --recap_orientation "
+     "--recap_no_geocode --recap_font --recap_kind --recap_sample --recap_keep_sound --recap_avoid "
+     "--recap_rotate --recap_style"),
+    ("Photo reel (--mode PHOTO_REEL)", "Photos and a music track in, a beat-synced reel out.",
+     "--photos_dir --reel_type --reel_text --smart_story"),
+    ("Story and kids modes", "Interactive character stories and recap titles.",
+     "--interactive --hero --hero_name --companion --quest --setting --recap_title"),
+    ("Publishing and upload", "Nothing is uploaded when --skip-upload is given.",
+     "--skip-upload --pinterest --instagram --pinterest_link --youtube_account --youtube_token_file "
+     "--youtube_secrets_file --upload_drive"),
+    ("AI providers", "Which AI text model writes scripts (keys come from .env).",
+     "--use_ollama --llm_provider --llm_model --use_comfy --bg_media"),
+    ("Performance and quality", "Output quality, enhancement and parallelism.",
+     "--quality --bitrate --preset --hq --superres --enhance --enhance_strength --max_workers"),
+]
+
+
+def group_flags(parser):
+    """Move every option into its FLAG_GROUPS group (help layout only; parsing is unchanged). Suppressed
+    flags stay out of the help. Unlisted flags go to 'Other options'."""
+    where = {}
+    for title, desc, flags in FLAG_GROUPS:
+        group = parser.add_argument_group(title, desc)
+        for flag in flags.split():
+            where[flag] = group
+    other = parser.add_argument_group("Other options")
+    for action in list(parser._optionals._group_actions):
+        if action.option_strings == ["-h", "--help"] or action.help is argparse.SUPPRESS:
+            continue
+        group = next((where[f] for f in action.option_strings if f in where), other)
+        parser._optionals._group_actions.remove(action)
+        group._group_actions.append(action)
+    if not other._group_actions:
+        parser._action_groups.remove(other)
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        usage="%(prog)s [--mode MODE] [--source_video VIDEO_OR_URL] [options]",
+        description="ShortsFlow: make shorts and explainer videos. Cut a long video into vertical shorts (--source_video), "
+                    "generate an idea-to-video short (--mode FACTS, STORY, WYR, NEWS, ...), or make a case explainer, "
+                    "an animated explainer, a dub, a recap or a photo reel. Options are grouped below by what they do; "
+                    "most only apply to one mode, and the help of each says which.",
+        epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--mode", choices=["FACTS", "STORY", "FIND_IT", "WYR", "REDDIT", "TRIVIA", "QUOTE", "ODD_ONE_OUT", "NEWS", "NEWS_SERIOUS", "GUESS_SOUND", "RIDDLE", "TREND", "CHALLENGE", "JWST", "TRAILER_MISSED", "MUSIC", "EXPLAINER", "FILTER", "EMOJI_GUESS", "PHOTO_REEL", "FUNNY_EXPLAINER", "TEACH", "DUB", "SPLIT_SCREEN", "PODCAST", "TOP_5", "CHAT_STORY", "HORROR", "TRUE_CRIME", "BIBLE", "ARTICLE", "UGC", "AUTO", "TRIP", "CASE", "ANIMATE", "VOICEOVER"], help="What to make (default: clip --source_video, else an idea-to-video short). CASE = case explainer, ANIMATE = animated explainer, TRIP = recap, DUB = translate and re-voice, VOICEOVER = read a script in your own voice, PHOTO_REEL, FILTER, MUSIC, EXPLAINER, FACTS, STORY, WYR, NEWS and the rest. AUTO picks one.")
     parser.add_argument("--scene", help="Scene or scenario prompt for FUNNY_EXPLAINER mode.")
     parser.add_argument("--photos_dir", help="Directory containing photos for PHOTO_REEL mode.")
     parser.add_argument("--music", help="Path to audio/music track for PHOTO_REEL or background music.")
     parser.add_argument("--reel_type", choices=["memories", "travel", "product", "then_now", "countdown", "tribute"], help="PHOTO_REEL: give the reel a shape (order, timing, captions, title, look). Blurry and duplicate photos are skipped.")
     parser.add_argument("--reel_text", action="append", help="PHOTO_REEL with --reel_type: your own caption for the next photo (repeat, or separate with |). --prompt is the title / name.")
     parser.add_argument("--smart_story", action="store_true", help="Use Multimodal Vision LLM to re-order photos into a narrative story arc and generate captions.")
-    parser.add_argument("--prompt", help="Prompt for AI Music/Image generation.")
+    parser.add_argument("--prompt", help="The topic or idea (CASE and ANIMATE: the topic; MUSIC, EXPLAINER and the generate modes: what to make; photo reel: the title).")
     parser.add_argument("--ckpt_name", default="stable_audio_3_medium_base.safetensors", help="Checkpoint name for ComfyUI audio model.")
     parser.add_argument("--category", help="Specify content category.")
     parser.add_argument("--script", help="Provide a manual script to skip generation.")
@@ -50,9 +142,9 @@ def parse_args():
     
     # AI Extraction Flags (Long-form to Short-form)
     parser.add_argument("--source_video", help="Path to long-form source video for AI extraction")
-    parser.add_argument("--extract_mode", choices=["shorts", "long"], default="shorts")
-    parser.add_argument("--clip_count", type=int, default=5)
-    parser.add_argument("--target_duration", type=int, default=30)
+    parser.add_argument("--extract_mode", choices=["shorts", "long"], default="shorts", help="With --source_video: shorts (default) = several vertical clips; long = one compiled highlights video.")
+    parser.add_argument("--clip_count", type=int, default=5, help="How many shorts to make (default 5).")
+    parser.add_argument("--target_duration", type=int, default=30, help="Target length of each short in seconds (default 30); with --extract_mode long, the length of the highlights video.")
     from engine import auto_edit as _auto_edit
     from engine import transitions as _transitions
     parser.add_argument("--auto_edit", choices=_auto_edit.preset_names() + ["auto"], help="auto = choose the template from the file name and --user_context (and the video length), print why and the runner-up. Edit like an editor (a template; add your own as JSON files, see docs/TEMPLATES.md): one choice turns on the right mix of pause/um cuts, captions, zooms, cutaways, teaser opening, colour and sound effects for this kind of video. Your own flags still win. Writes edit_plan.json.")
@@ -118,7 +210,7 @@ def parse_args():
     parser.add_argument("--recap_style", choices=["auto", "hype", "plain", "cinematic"], default="auto", help="--mode TRIP: auto (default) decides from your footage: widescreen -> cinematic 2.35:1, vertical phone clips -> hype 9:16; cinematic = travel-film look (warm grade, slow fades, quiet black title cards, small spaced place labels); hype (default) opens with the hook over fast glimpses of the most beautiful shots, then the trip title and the whole trip day by day; plain starts at Day 1.")
     parser.add_argument("--no_snap", action="store_true", help="Keep the clip start/end exactly as chosen instead of moving them to sentence boundaries (shorts only).")
     parser.add_argument("--min_duration", type=int, default=15, help="Target minimum clip length in seconds (default 15). Clips can be up to 5 s shorter than this when a moment ends early.")
-    parser.add_argument("--session_dir", help="Reuse session for transcription.")
+    parser.add_argument("--session_dir", help="Folder of an earlier run to reuse (its transcript and files). Without it a new folder under sessions/ is made.")
     parser.add_argument("--use_audio_detect", action="store_true", help="Use audio signals (energy/delta) for extraction.")
     parser.add_argument("--style", choices=["sarcastic", "meme", "funny", "action", "stylish"], action="append", help="Optional viral editing styles (can be used multiple times).")
     parser.add_argument("--caption_emoji", action="store_true", help="Pop an emoji next to keywords in HORMOZI/BOUNCE captions (bundled Twemoji images, no system emoji font needed; needs --use_remotion).")
@@ -237,6 +329,12 @@ def parse_args():
     parser.add_argument("--enable_zoom", action="store_true", help="Apply smooth camera push-in zoom motion keyframing.")
     parser.add_argument("--enhance_audio", action="store_true", help="Apply studio audio mastering (highpass, noise gate, compressor, EBU R128 loudnorm).")
 
+    group_flags(parser)
+    return parser
+
+
+def parse_args():
+    parser = build_parser()
     args = parser.parse_args()
     if getattr(args, "recap_like", None):
         if str(getattr(args, "mode", "") or "").upper() != "TRIP":
