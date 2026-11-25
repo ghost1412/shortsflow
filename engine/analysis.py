@@ -1374,7 +1374,7 @@ def identify_highlights(transcript_path, video_path=None, clip_count=5, mode="sh
                 # 🟢 EXPERT REFINEMENT: Soft Duration Capping for Highlight Reels
                 # trimmed pieces must survive the length floor applied below, or the reel ends up short with nothing to replace them
                 long_floor = max(15.0, min_duration - 5.0)
-                valid_highlights = fit_to_target(valid_highlights, target_duration, min_len=long_floor)
+                valid_highlights = reel_with_ai_coverage(valid_highlights, compressed_segments, target_duration, min_len=long_floor)
 
                 # 🟢 FILL-UP: Backfill from pruned segments if LLM under-delivered
                 current_total = sum(h['end'] - h['start'] for h in valid_highlights)
@@ -1579,6 +1579,29 @@ def reel_with_coverage(moments, target, min_len=15.0, typical=45.0):
     used = sum(h["end"] - h["start"] for h in first)
     rest = [m for m in moments if not any(not (m["end"] <= h["start"] or m["start"] >= h["end"]) for h in first)]
     return first + (fit_to_target(rest, target, already=used, min_len=min_len) if used < target * 0.92 else [])
+
+
+AI_FILLER_WEIGHT = 0.5      # a signal-picked filler moment counts half its signal score against a moment the model chose
+
+
+def reel_with_ai_coverage(picks, windows, target, min_len=15.0):
+    """A highlights reel from the model's moments that still covers the whole video. The model often picks every moment from the first part of a long
+    transcript (on a 35 min podcast, nothing after the half way mark). The model's moments and the best signal windows that overlap none of them
+    go in one pool, and `reel_with_coverage` takes the best of each equal time slice, so a slice the model skipped gets its best window, while a slice
+    the model covered keeps the model's moment (the filler windows count half, `AI_FILLER_WEIGHT`). The rest of the length goes to the next best."""
+    picks = [p for p in picks if p.get("end", 0) > p.get("start", 0)]
+    if not picks or not target:
+        return fit_to_target(picks, target, min_len=min_len)
+    fillers = []
+    for w in windows or []:
+        if w["end"] - w["start"] < min_len or any(w["start"] < p["end"] and w["end"] > p["start"] for p in picks):
+            continue
+        score = max(0.0, w.get("norm_score", 0) + opening_rank(w.get("text"))) * 100 * AI_FILLER_WEIGHT
+        fillers.append({"start": w["start"], "end": w["end"], "viral_score": int(score), "final_score": int(score),
+                        "reason": "Signal Peak (Coverage)"})
+    if not fillers:
+        return fit_to_target(picks, target, min_len=min_len)
+    return reel_with_coverage(picks + fillers, target, min_len=min_len)     # the filler windows make the slices span the whole video
 
 
 def fit_to_target(highlights, target, already=0.0, tolerance=0.08, min_len=15.0):

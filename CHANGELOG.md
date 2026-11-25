@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Highlights reel with an AI key: the model's moments are now also checked for coverage, and a part of the video it skipped is filled with that part's best signal window (offline, 240 s target on Gemini: podcast transcript reel ended at 48% of the video, now 88%; keynote last moment at 58%, now 90%).
+
 - Highlights reel without an AI key: the video is cut into time slices and the best moment of each goes in first, then the next best fill the rest of the length, so the reel covers the whole video (offline, slides talk transcript: moments from 12% to 89% of the video instead of 69% to 93%).
 
 - Shorts: a clip aimed at a length (for example 30 s) is no longer finished past 125% of it by a long closing sentence when the sentence before gives at least 75% (offline picker benchmark, keynote transcript: 4 of 5 clips within 25% of the target instead of 2 of 5). The offline benchmark now passes the target through, as the real run does.
