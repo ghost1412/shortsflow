@@ -67,3 +67,10 @@ def test_shortsflow_command_gives_the_same_grouped_help(monkeypatch, capsys):
     monkeypatch.setattr(runpy, "run_module", lambda name, run_name=None: seen.update(name=name))
     cli.main(["run", "--help"])
     assert seen["name"] == "shortsflow._main" and sys.argv[1:] == ["--help"]
+
+
+def test_main_runs_past_the_option_handling_for_a_real_invocation():
+    """`main.py` must get past the code that runs after the parser is built (it once died with NameError there after the parser was split into build_parser())."""
+    here = str(Path(__file__).resolve().parent.parent)
+    done = subprocess.run([sys.executable, str(Path(here) / "main.py"), "--mode", "VOICEOVER", "--voiceover", "help"], capture_output=True, text=True, timeout=120)
+    assert done.returncode == 0 and "NameError" not in done.stderr and "voice" in done.stdout.lower()

@@ -356,6 +356,7 @@ def parse_args():
         if not args.save_as:
             parser.error("--clone_style needs --save_as NAME (the name of the new template).")
         sys.exit(style_clone.main([args.clone_style, args.save_as, "--caption_style", args.caption_style or "HORMOZI"]))
+    from engine import auto_edit as _auto_edit
     for problem in _auto_edit.TEMPLATE_PROBLEMS:
         print(f"[Warning] Template skipped: {problem}")
     # Older option names that the engine never read are now aliases of the features that do the same job
