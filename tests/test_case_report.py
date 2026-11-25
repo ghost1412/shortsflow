@@ -8,21 +8,21 @@ SCRIPT = {"title": "How a Rainbow Forms", "hook": "Can a rainbow really last for
           "dropped": [{"section": "what", "sentence": "x", "unsupported": "y"}],
           "sections": [{"id": "what", "title": "What it is", "scene": "illustration", "mood": "excited", "narration": "Water drops bend sunlight into colours.",
                         "on_screen": ["Water drops", "Sunlight"], "footage": ["rain cloud"]},
-                       {"id": "how", "title": "How it works", "scene": "illustration", "mood": "calm", "narration": "One two three.", "on_screen": ["Prism", "Eye"]},
+                       {"id": "how", "title": "How it works", "scene": "illustration", "mood": "calm", "narration": "One two three.", "on_screen": ["Windmill", "Eye"]},
                        {"id": "why", "title": "Why it matters", "scene": "checklist", "narration": "Words.", "on_screen": ["Look away from the sun"]}]}
 
 
 def test_the_report_says_what_was_chosen_and_where_each_icon_came_from(tmp_path, monkeypatch):
     monkeypatch.setenv("SHORTSFLOW_ICONS", str(tmp_path))
-    (tmp_path / "prism.v2.svg").write_text("<g/>", encoding="utf-8")
-    art = {"16:9": [{"kinds": {"Water drops": "planet", "Sunlight": "sun"}}, {"kinds": {"Prism": "prism", "Eye": "eye"}}, None]}
+    (tmp_path / "windmill.v2.svg").write_text("<g/>", encoding="utf-8")
+    art = {"16:9": [{"kinds": {"Water drops": "planet", "Sunlight": "sun"}}, {"kinds": {"Windmill": "windmill", "Eye": "eye"}}, None]}
     text = cr.build(SCRIPT, {"template": "explainer", "theme": "dark", "formats": "16:9", "narrator": "voice_server", "length": "short", "avatar": "nora"}, art,
                     [{"aspect": "16:9", "file": "x/case_16x9.mp4", "draft": True}], None, ["What it is: the first word is timed 12.0 s in."])
     assert "# How a Rainbow Forms" in text and "Can a rainbow really last for nearly nine hours?" in text
     assert "1 sentence(s) were removed" in text and "voice voice_server" in text and "presenter nora" in text and "length short" in text
     assert "## 1. What it is: a picture that explains" in text and "narrator mood: excited" in text
     assert "Water drops -> planet (built in); Sunlight -> sun (built in)" in text
-    assert "Prism -> prism (drawn by the model, saved in the icon library); Eye -> eye (built in)" in text
+    assert "Windmill -> windmill (drawn by the model, saved in the icon library); Eye -> eye (built in)" in text
     assert "## 3. Why it matters: a checklist" in text and "background ideas: rain cloud" in text
     assert "## Narration timing warnings" in text and "case_16x9.mp4 (draft)" in text
 

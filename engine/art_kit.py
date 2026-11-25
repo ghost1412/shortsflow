@@ -384,13 +384,58 @@ def camera(c, mood=None):
             f'<circle cy="14" r="44" fill="#e2e8f0" {S()}/><circle cy="14" r="28" fill="{OUT}"/><circle cx="-8" cy="6" r="9" fill="#93c5fd"/><circle cx="68" cy="-24" r="8" fill="#facc15" {S(4)}/>')
 
 
+def drop(c, mood=None):
+    return (f'<path d="M0 -92 Q-64 -14 -64 30 A64 64 0 0 0 64 30 Q64 -14 0 -92 Z" fill="{c}" {S()}/>'
+            f'<path d="M-30 24 Q-30 46 -12 56" fill="none" stroke="{light(c, 0.7)}" stroke-width="9" stroke-linecap="round"/>')
+
+
+def thermometer(c, mood=None):
+    return (f'<rect x="-20" y="-92" width="40" height="132" rx="20" fill="#ffffff" {S()}/><circle cy="58" r="36" fill="{c}" {S()}/><rect x="-9" y="-40" width="18" height="96" rx="9" fill="{c}"/>'
+            + "".join(f'<path d="M26 {y} L44 {y}" {S(5)}/>' for y in (-70, -50, -30, -10)))
+
+
+def battery(c, mood=None):
+    return (f'<rect x="-92" y="-52" width="170" height="104" rx="16" fill="#ffffff" {S()}/><rect x="78" y="-22" width="20" height="44" rx="6" fill="{OUT}"/>'
+            f'<rect x="-78" y="-38" width="104" height="76" rx="8" fill="{c}"/><path d="M-20 -30 L-40 6 L-18 6 L-28 34 L8 -8 L-14 -8 Z" fill="#ffffff" {S(3)}/>')
+
+
+def tree(c, mood=None):
+    return (f'<rect x="-14" y="30" width="28" height="64" rx="6" fill="#92400e" {S(6)}/><circle cx="-34" cy="12" r="42" fill="{c}" {S()}/><circle cx="34" cy="12" r="42" fill="{c}" {S()}/>'
+            f'<circle cy="-34" r="48" fill="{c}" {S()}/><circle cx="-20" cy="-44" r="10" fill="{light(c, 0.5)}"/>')
+
+
+def heart(c, mood=None):
+    return (f'<path d="M0 84 Q-96 14 -86 -34 Q-78 -78 -38 -78 Q-10 -78 0 -50 Q10 -78 38 -78 Q78 -78 86 -34 Q96 14 0 84 Z" fill="{c}" {S()}/>'
+            f'<path d="M-52 -46 Q-64 -38 -60 -22" fill="none" stroke="{light(c, 0.7)}" stroke-width="9" stroke-linecap="round"/>')
+
+
+def virus(c, mood=None):
+    spikes = "".join(f'<path d="M{math.cos(a) * 52:.0f} {math.sin(a) * 52:.0f} L{math.cos(a) * 80:.0f} {math.sin(a) * 80:.0f}" {S(7)}/>'
+                     f'<circle cx="{math.cos(a) * 86:.0f}" cy="{math.sin(a) * 86:.0f}" r="9" fill="{c}" {S(4)}/>' for a in [i * math.pi / 5 for i in range(10)])
+    return spikes + f'<circle r="56" fill="{c}" {S()}/><circle cx="-16" cy="-14" r="9" fill="{light(c, 0.55)}"/><circle cx="20" cy="14" r="12" fill="{light(c, 0.55)}"/><circle cx="-10" cy="28" r="6" fill="{light(c, 0.55)}"/>'
+
+
+def syringe(c, mood=None):
+    return (f'<g transform="rotate(-40)"><rect x="-96" y="-8" width="44" height="16" rx="6" fill="#cbd5e1" {S(5)}/><rect x="-54" y="-24" width="108" height="48" rx="8" fill="#ffffff" {S()}/>'
+            f'<rect x="-40" y="-14" width="66" height="28" rx="4" fill="{c}"/><rect x="54" y="-32" width="14" height="64" rx="6" fill="#cbd5e1" {S(5)}/>'
+            f'<path d="M68 0 L96 0" {S(7)}/><rect x="-104" y="-14" width="14" height="28" rx="4" fill="#cbd5e1" {S(5)}/></g>')
+
+
+def prism(c, mood=None):
+    rays = ("#ef4444", "#f59e0b", "#facc15", "#22c55e", "#3b82f6", "#8b5cf6")
+    beams = "".join(f'<path d="M40 {-6 + i * 5} L96 {-26 + i * 18}" stroke="{col}" stroke-width="7" stroke-linecap="round"/>' for i, col in enumerate(rays))
+    return (f'<path d="M-96 6 L-30 -2" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/><path d="M-30 -2 L40 -2" stroke="{OUT}" stroke-width="2" opacity="0"/>'
+            f'<polygon points="-40,64 0,-70 40,64" fill="{c}" opacity="0.85" {S()}/>' + beams)
+
+
 ICONS = {"person": person, "hacker": hacker, "group": group, "laptop": laptop, "phone": phone, "server": server, "database": database, "cloud": cloud,
          "lock": lock, "unlock": unlock, "key": key, "shield": shield, "bug": bug, "document": document, "folder": folder, "mail": mail, "globe": globe,
          "building": building, "house": house, "gear": gear, "chart_up": chart_up, "chart_down": chart_down, "money": money, "clock": clock,
          "warning": warning, "check": check, "cross": cross, "magnifier": magnifier, "fire": fire, "wifi": wifi, "burst": burst, "bulb": bulb,
          "network": network, "target": target, "robot": robot, "box": box, "queue": queue, "chip": chip, "layers": layers, "plug": plug, "bell": bell,
          "black_hole": black_hole, "planet": planet, "star": star, "galaxy": galaxy, "telescope": telescope, "dish": dish, "atom": atom, "wave": wave,
-         "magnet": magnet, "rocket": rocket, "flask": flask, "microscope": microscope, "sun": sun, "moon": moon, "eye": eye, "camera": camera}
+         "magnet": magnet, "rocket": rocket, "flask": flask, "microscope": microscope, "sun": sun, "moon": moon, "eye": eye, "camera": camera,
+         "drop": drop, "thermometer": thermometer, "battery": battery, "tree": tree, "heart": heart, "virus": virus, "syringe": syringe, "prism": prism}
 CUSTOM = {}                      # icons drawn while a video was made (engine/art_icons.py): name -> markup, colours of their own
 
 
@@ -420,7 +465,10 @@ HELP = {"person": "a person (add a mood: neutral, happy, angry, worried)", "hack
         "atom": "an atom, a particle, quantum physics", "wave": "a wave, a signal, a frequency, a measurement over time", "magnet": "magnetism, attraction, a field",
         "rocket": "a launch, space travel, fast progress", "flask": "chemistry, an experiment, a lab test", "microscope": "very small things, biology, close study",
         "sun": "the sun, energy, heat, daylight", "moon": "the moon, night, a satellite", "eye": "seeing, observing, watching, surveillance",
-        "camera": "a camera, an image, taking a photo"}
+        "camera": "a camera, an image, taking a photo",
+        "drop": "water, a liquid, a droplet, rain", "thermometer": "temperature, heat, a fever", "battery": "stored energy, power, charge",
+        "tree": "a tree, a plant, nature, a forest", "heart": "the heart, health, care, love", "virus": "a virus, a germ, a pathogen",
+        "syringe": "an injection, a vaccine, a medical shot", "prism": "a prism, light splitting into colours, a rainbow"}
 
 
 # ---- scene ----------------------------------------------------------------------------------------------------------------------

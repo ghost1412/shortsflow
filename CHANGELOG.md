@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: eight more built-in picture icons (drop, thermometer, battery, tree, heart, virus, syringe, prism), so health and science topics need fewer model-drawn icons.
+
 - Case explainer: picture labels the narrator never says pop in spread over the rest of the section (1.2 to 4 s apart) and not all in a bunch right after the last spoken one.
 
 - Clips and highlights: every run now writes clip_report.md (it was only written with `--clip_report`), and the report has a "Why it was picked" column (the reason the picker gave, or a note that the clip is a fixed window because the analysis failed).

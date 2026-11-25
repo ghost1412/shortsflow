@@ -60,8 +60,8 @@ def request(section, topic, labels):
         f"The picture shows these {len(labels)} things, one icon each, so a viewer understands the idea at a glance:\n{items}\n\n"
         f"Choose the icon for each, by what the thing IS in this story (not by its words):\n{kinds}\n"
         + _library_line()
-        + "Be strict: pick a listed icon only when it really shows the thing. If it is only a rough stand-in (a flask for a syringe, a bug for a virus, a person for a "
-        "doctor), still give your closest icon as \"kind\" but ALSO set \"draw\" to the plain name of the real thing (one to three words, like \"syringe\", \"virus\" "
+        + "Be strict: pick a listed icon only when it really shows the thing. If it is only a rough stand-in (a flask for a stethoscope, a gear for a windmill, a person for a "
+        "doctor), still give your closest icon as \"kind\" but ALSO set \"draw\" to the plain name of the real thing (one to three words, like \"stethoscope\", \"windmill\" "
         "or \"stone pyramid\"), and that thing will be drawn for you instead. Leave \"draw\" out when the icon is exact.\n\n"
         "Make the picture tell the story: use a person's mood (angry, worried, happy) or a status mark (warning, check, cross, fire, lock, burst) on an icon to show what "
         "happened to it; use different icons for different things; set many=true when a thing is a large number of something (hundreds of servers, many users). "
@@ -161,7 +161,7 @@ def usable_labels(section):
 
 
 def _key(section, labels, aspect):
-    raw = "|".join([str(section.get("title", "")), str(section.get("narration", "")), *labels, art_aspect(aspect), "kit-v6"])
+    raw = "|".join([str(section.get("title", "")), str(section.get("narration", "")), *labels, art_aspect(aspect), "kit-v7"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 

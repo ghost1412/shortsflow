@@ -168,8 +168,8 @@ def test_icon_check_keeps_rectangle_sizes_and_rejects_scratches_and_sizeless_rec
 
 
 def test_a_rough_stand_in_is_replaced_by_the_thing_to_draw():
-    spec, _ = art.check_spec(json.dumps({"items": [{"kind": "flask", "draw": "Syringe"}, {"kind": "bug", "draw": "bug"}, {"kind": "shield"}]}), 3)
-    assert spec["items"][0]["kind"] == "syringe" and spec["items"][0]["custom"]          # drawn instead of the flask
+    spec, _ = art.check_spec(json.dumps({"items": [{"kind": "flask", "draw": "Stethoscope"}, {"kind": "bug", "draw": "bug"}, {"kind": "shield"}]}), 3)
+    assert spec["items"][0]["kind"] == "stethoscope" and spec["items"][0]["custom"]          # drawn instead of the flask
     assert spec["items"][1]["kind"] == "bug" and not spec["items"][1].get("custom")      # the thing IS a kit icon: no drawing needed
     assert spec["items"][2]["kind"] == "shield"
     spec, _ = art.check_spec(json.dumps({"items": [{"kind": "flask", "draw": "!!"}, {"kind": "bug"}]}), 2)
