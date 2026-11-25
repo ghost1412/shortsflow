@@ -73,7 +73,8 @@ def build_srt(segments):
     """segments: [{start, end, text}] -> SRT text."""
     blocks = []
     for i, seg in enumerate(segments, 1):
-        blocks.append(f"{i}\n{srt_time(seg['start'])} --> {srt_time(seg['end'])}\n{seg['text'].strip()}\n")
+        text = re.sub(r"\n\s*\n+", "\n", str(seg["text"]).strip())      # a blank line would end the cue early
+        blocks.append(f"{i}\n{srt_time(seg['start'])} --> {srt_time(seg['end'])}\n{text}\n")
     return "\n".join(blocks)
 
 
@@ -150,19 +151,20 @@ def merge_short_segments(segments, want=3.0, max_len=7.0, max_gap=0.6):
             ended = cur["text"].rstrip().endswith((".", "?", "!", "…", "।", "。"))
             same_voice = cur.get("speaker") == seg.get("speaker")      # never join two speakers into one line
             if same_voice and length < want and gap <= max_gap and (seg["end"] - cur["start"]) <= max_len and not (ended and length >= 2.0):
-                cur["end"] = seg["end"]
+                cur["end"] = max(cur["end"], seg["end"])       # an overlapping line must not shorten the unit
                 cur["text"] = cur["text"].rstrip() + " " + seg["text"].lstrip()
                 continue
         out.append(dict(seg))
     return out
 
 
-def flow_schedule(segments, voice_seconds, soft_lag=SOFT_LAG, max_lag=MAX_LAG, pad=0.08):
+def flow_schedule(segments, voice_seconds, soft_lag=SOFT_LAG, max_lag=MAX_LAG, pad=0.08, video_end=None):
     """Where each voice clip starts and how fast it plays, without cutting sentences short when it can be avoided.
     segments: [{start, end}], voice_seconds: length of each voice clip (0 or None = no clip).
     A clip that does not fit speeds up (to SOFT_SPEEDUP, then to HARD_SPEEDUP) so it ends no later than `soft_lag` after the next line
     would start; if that still is not enough it may run on until `max_lag` after, and the next clip then starts a little late. Only
-    beyond that is a clip cut (`trim`). Returns a list (None for lines without a clip) of {start, tempo, trim, end}."""
+    beyond that is a clip cut (`trim`). video_end: the last clip may not run past the end of the video (it is sped up or cut with a
+    short fade there instead of being chopped mid-word by the mixer). Returns a list (None for lines without a clip) of {start, tempo, trim, end}."""
     plans, cursor = [], None
     for i, seg in enumerate(segments):
         d = voice_seconds[i] if i < len(voice_seconds) else 0
@@ -171,15 +173,20 @@ def flow_schedule(segments, voice_seconds, soft_lag=SOFT_LAG, max_lag=MAX_LAG, p
             continue
         start = seg["start"] if cursor is None else max(seg["start"], cursor + pad)
         nxt = segments[i + 1]["start"] if i + 1 < len(segments) else seg["end"] + 3.0
+        at_end = False
+        if i + 1 >= len(segments) and video_end:
+            nxt = min(nxt, max(start + 0.3, video_end))
+            at_end = True
         preferred = max(0.3, seg["end"] - seg["start"])
         tempo = min(d / preferred, SOFT_SPEEDUP) if d > preferred else 1.0
-        if start + d / tempo > nxt + soft_lag:
-            tempo = min(max(tempo, d / max(0.3, nxt + soft_lag - start)), HARD_SPEEDUP)
+        lag_a, lag_b = (0.0, 0.0) if at_end else (soft_lag, max_lag)    # nothing may run on after the video's end
+        if start + d / tempo > nxt + lag_a:
+            tempo = min(max(tempo, d / max(0.3, nxt + lag_a - start)), HARD_SPEEDUP)
         trim = None
-        if start + d / tempo > nxt + max_lag + 0.05:
-            tempo = max(tempo, min(d / max(0.3, nxt + max_lag - start), HARD_SPEEDUP))
-            if start + d / tempo > nxt + max_lag + 0.05:
-                trim = max(0.3, nxt + max_lag - start)
+        if start + d / tempo > nxt + lag_b + 0.05:
+            tempo = max(tempo, min(d / max(0.3, nxt + lag_b - start), HARD_SPEEDUP))
+            if start + d / tempo > nxt + lag_b + 0.05:
+                trim = max(0.3, nxt + lag_b - start)
         final = trim if trim is not None else d / tempo
         cursor = start + final
         plans.append({"start": start, "tempo": round(tempo, 3), "trim": trim, "end": cursor})
@@ -239,9 +246,10 @@ def tone_line(tone):
     return text + "\n" if text else ""
 
 
-def translate_segments(segments, target_lang, llm=None, parse=None, about=None, tone="faithful", cps=None, tight=False):
+def translate_segments(segments, target_lang, llm=None, parse=None, about=None, tone="faithful", cps=None, tight=False, failed_ids=None):
     """Translate each segment keeping one-to-one timing. Returns (texts, failed_count).
     A segment the LLM did not return stays in the source language and counts as failed.
+    failed_ids: an optional list that receives the index of every segment left untranslated.
     cps: characters per second to allow (default CHARS_PER_SECOND); tight: also ask for shorter lines when a line cannot fit."""
     llm, parse = llm or _default_llm, parse or _parse
     cps = cps or CHARS_PER_SECOND
@@ -268,9 +276,15 @@ def translate_segments(segments, target_lang, llm=None, parse=None, about=None, 
         try:
             data = parse(llm(prompt))
             rows = data.get("translations") if isinstance(data, dict) else data
-            for row in rows or []:
-                if isinstance(row, dict) and str(row.get("text", "")).strip():
-                    got[int(row["id"])] = str(row["text"]).strip()
+            rows = rows or []
+            if isinstance(rows, list) and len(rows) == len(chunk) and all(isinstance(r, str) for r in rows):
+                rows = [{"id": lo + k, "text": r} for k, r in enumerate(rows)]      # a bare list of lines, in order
+            for row in rows if isinstance(rows, list) else []:
+                try:                                                  # one bad row must not lose the rows after it
+                    if isinstance(row, dict) and str(row.get("text", "")).strip():
+                        got[int(row["id"])] = str(row["text"]).strip()
+                except (TypeError, ValueError, KeyError):
+                    continue
         except Exception as e:
             print(f"[Warning] Translation batch failed: {e}")
         for i in range(lo, lo + len(chunk)):
@@ -278,6 +292,8 @@ def translate_segments(segments, target_lang, llm=None, parse=None, about=None, 
                 texts[i] = got[i]
             else:
                 failed += 1
+                if failed_ids is not None:
+                    failed_ids.append(i)
     return texts, failed
 
 
@@ -546,6 +562,8 @@ def saved_translation(json_path, target, segments, tone="faithful"):
         return None
     if (data.get("tone") or "faithful") != (tone or "faithful"):
         return None                                              # another tone asked for: translate again
+    if data.get("failed_lines"):
+        return None                                              # some lines were never translated: try them again
     texts = []
     for old, new in zip(saved, segments):
         if not isinstance(old, dict) or not str(old.get("text", "")).strip():
@@ -641,12 +659,14 @@ def dub_video(source_video, target_lang, session_dir, output_path=None, language
         if len(segments) != before:
             print(f"[Log] Smart fit: {before} short lines joined into {len(segments)} sentences, so each gets a natural voice and fewer hard cuts.")
     print(f"[Log] Dubbing {len(segments)} spoken segment(s) into {LANG_NAMES.get(target, target)}...")
-    note = coverage_warning(segments, media_duration(source_video))
+    video_len = media_duration(source_video)
+    note = coverage_warning(segments, video_len)
     if note:
         print(f"[Warning] {note}")
 
     base = os.path.splitext(os.path.basename(source_video))[0]
     json_path = os.path.join(session_dir, f"{base}_{target}.json")
+    failed_lines = []
     saved = saved_translation(json_path, target, segments, tone)         # an earlier run of this session already translated it
     if saved:
         texts, failed_tr = saved, 0
@@ -654,14 +674,14 @@ def dub_video(source_video, target_lang, session_dir, output_path=None, language
               f"this session: no AI text or voice service is called for them. Delete {os.path.basename(json_path)} to translate again.")
     else:
         texts, failed_tr = translate_segments(segments, target, llm=llm, about=about, tone=tone,
-                                              cps=speech_rate(target) if smart else None, tight=smart)
+                                              cps=speech_rate(target) if smart else None, tight=smart, failed_ids=failed_lines)
     if failed_tr == len(segments):
         raise RuntimeError("Translation failed for every segment (no LLM answered). Check your AI key / Ollama "
                            "(see `shortsflow doctor`); nothing was dubbed.")
     translated = [dict(s, text=t) for s, t in zip(segments, texts)]
     with open(json_path, "w", encoding="utf-8") as f:              # saved right away: a crash later (voices, mix) keeps the translation
         json.dump({"target_lang": target, "source_lang": source_lang, "tone": tone or "faithful", "delivery": delivery or "neutral",
-                   "segments": translated}, f, ensure_ascii=False, indent=2)
+                   "failed_lines": failed_lines, "segments": translated}, f, ensure_ascii=False, indent=2)
 
     def _speaker_synth(i):                               # speaker voices: the synth for line i's speaker
         p = speaker_plan[min(segments[i].get("speaker", 0), len(speaker_plan) - 1)]
@@ -709,11 +729,12 @@ def dub_video(source_video, target_lang, session_dir, output_path=None, language
         except Exception as e:
             voice_errors.append(str(e))
             print(f"[Warning] Voice for segment {i + 1} failed: {e}")
-            try:
-                if os.path.exists(path) and os.path.getsize(path) <= 200:
-                    os.remove(path)                      # an empty file must not look like a finished voice
-            except OSError:
-                pass
+            for left in (path, path + ".voice", path + ".trim.mp3"):
+                try:                                     # a half-written clip must not be reused by a resume as a finished voice
+                    if os.path.exists(left):
+                        os.remove(left)
+                except OSError:
+                    pass
             return None
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
@@ -725,7 +746,7 @@ def dub_video(source_video, target_lang, session_dir, output_path=None, language
     clips = []
     caption_times = {}                                   # smart fit: the subtitles follow the voice, not the source timing
     if smart:
-        plans = flow_schedule(segments, [media_duration(p) if p else 0.0 for p in paths])
+        plans = flow_schedule(segments, [media_duration(p) if p else 0.0 for p in paths], video_end=video_len or None)
         cut = 0
         for i, (path, plan) in enumerate(zip(paths, plans)):
             if not path or plan is None:
@@ -740,6 +761,8 @@ def dub_video(source_video, target_lang, session_dir, output_path=None, language
             if not path:
                 continue
             nxt = segments[i + 1]["start"] if i + 1 < len(segments) else seg["end"] + 3.0
+            if i + 1 >= len(segments) and video_len:
+                nxt = min(nxt, max(seg["start"] + 0.3, video_len))      # the last line may not run past the end of the video
             fit_plan = plan_fit(media_duration(path), seg["end"] - seg["start"], nxt - seg["start"])
             clips.append({"path": path, "start": seg["start"], "tempo": fit_plan["tempo"], "trim": fit_plan["trim"]})
 
@@ -757,7 +780,7 @@ def dub_video(source_video, target_lang, session_dir, output_path=None, language
     json_path = os.path.join(session_dir, f"{base}_{target}.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump({"target_lang": target, "source_lang": source_lang, "tone": tone or "faithful", "delivery": delivery or "neutral",
-                   "segments": translated}, f, ensure_ascii=False, indent=2)
+                   "failed_lines": failed_lines, "segments": translated}, f, ensure_ascii=False, indent=2)
 
     output_path = output_path or os.path.join(session_dir, f"{base}_dub_{target}.mp4")
     if mixer is None:

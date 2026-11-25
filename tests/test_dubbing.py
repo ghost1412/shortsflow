@@ -510,3 +510,63 @@ def test_a_voice_service_hiccup_is_retried_but_a_real_error_is_not(tmp_path, mon
     with pytest.raises(RuntimeError):
         dubbing.dub_video("clip.mp4", "es", str(other), transcribe=lambda: transcript, llm=llm, synth=bad_voice, mixer=mixer, workers=1)
     assert count["n"] == 2                                                   # one try per line: a real error is not repeated
+
+
+# --- audit regressions ------------------------------------------------------------------------------------------------------
+
+_FOUR = [{"start": i * 3, "end": i * 3 + 2.5, "text": f"line {i}"} for i in range(4)]
+
+
+def test_one_bad_translation_row_does_not_lose_the_rows_after_it():
+    resp = json.dumps({"translations": [{"id": 0, "text": "a"}, {"id": None, "text": "x"}, {"id": "zz", "text": "y"},
+                                        {"id": 2, "text": "c"}, {"id": 3, "text": "d"}]})
+    ids = []
+    texts, failed = dubbing.translate_segments(_FOUR, "es", llm=lambda p: resp, parse=json.loads, failed_ids=ids)
+    assert texts == ["a", "line 1", "c", "d"] and failed == 1 and ids == [1]
+
+
+def test_a_bare_list_of_lines_in_order_is_accepted():
+    texts, failed = dubbing.translate_segments(_FOUR, "es", llm=lambda p: json.dumps(["a", "b", "c", "d"]), parse=json.loads)
+    assert texts == ["a", "b", "c", "d"] and failed == 0
+
+
+def test_srt_cue_never_holds_a_blank_line():
+    srt = dubbing.build_srt([{"start": 0, "end": 1, "text": "uno\n\n  \ndos"}, {"start": 1, "end": 2, "text": "tres"}])
+    assert srt.split("\n\n")[0].endswith("uno\ndos") and len(srt.strip().split("\n\n")) == 2
+
+
+def test_merge_does_not_shorten_a_unit_for_an_overlapping_line():
+    out = dubbing.merge_short_segments([{"start": 0, "end": 2.5, "text": "a"}, {"start": 1, "end": 2, "text": "b"}])
+    assert out[0]["end"] == 2.5 and out[0]["text"] == "a b"
+
+
+def test_last_line_does_not_run_past_the_end_of_the_video():
+    segs = [{"start": 58.0, "end": 59.5, "text": "x"}]
+    assert dubbing.flow_schedule(segs, [4.0])[0]["end"] > 60.0              # without a video end it ran on
+    plan = dubbing.flow_schedule(segs, [4.0], video_end=60.0)[0]
+    assert plan["end"] <= 60.05 and plan["trim"] is not None
+    short = dubbing.flow_schedule(segs, [1.5], video_end=60.0)[0]
+    assert short["trim"] is None and short["tempo"] == 1.0
+
+
+def test_a_half_written_clip_is_removed_and_a_translation_with_failed_lines_is_translated_again(tmp_path, monkeypatch, transcript):
+    _fake_media(monkeypatch)
+    monkeypatch.setattr(dubbing, "_parse", json.loads)
+    llm = lambda prompt: json.dumps({"translations": [{"id": 0, "text": "Hola"}]})  # noqa: E731 - line 1 is never translated
+
+    def broken(text, out):
+        with open(out, "wb") as f:
+            f.write(b"x" * 900)                                  # bigger than the "empty file" limit, then the service dies
+        with open(out + ".voice", "w") as f:
+            f.write("stale")
+        raise ValueError("bad voice")
+
+    with pytest.raises(RuntimeError):
+        dubbing.dub_video("clip.mp4", "es", str(tmp_path), transcribe=lambda: transcript, llm=llm, synth=broken, workers=1)
+    assert os.listdir(os.path.join(str(tmp_path), "dub_clips")) == []
+    json_path = os.path.join(str(tmp_path), "clip_es.json")
+    with open(json_path, encoding="utf-8") as f:
+        assert json.load(f)["failed_lines"] == [1]
+    with open(transcript) as f:
+        segs = dubbing.segments_from_transcript(json.load(f))
+    assert dubbing.saved_translation(json_path, "es", segs) is None
