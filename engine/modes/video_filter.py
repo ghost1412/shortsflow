@@ -21,6 +21,12 @@ def run(args, target_bitrate, target_preset):
     if is_url(args.source_video):
         print(f"[Log] Detected Video URL: '{args.source_video}'. Downloading stream...")
         args.source_video = download_source_video_from_url(args.source_video, session_dir)
+        if not args.source_video:
+            print("[Error] The video could not be downloaded.")
+            sys.exit(1)
+    if not os.path.isfile(args.source_video):
+        print(f"[Error] Source video not found: {args.source_video}")
+        sys.exit(1)
         
     target_filter = getattr(args, "video_filter", "none")
     timeline_cuts = None
@@ -72,6 +78,6 @@ def run(args, target_bitrate, target_preset):
     output_video = os.path.join(session_dir, out_filename)
     
     print("--- Starting Standalone Filter Application ---")
-    apply_standalone_video_filter(args.source_video, output_video, filter_name=target_filter, use_hq=args.hq, timeline_cuts=timeline_cuts)
+    apply_standalone_video_filter(args.source_video, output_video, filter_name=target_filter, use_hq=getattr(args, "hq", False), timeline_cuts=timeline_cuts)
     print(f"[Success] 🎨 Filtered video ready at: {output_video}")
     sys.exit(0)

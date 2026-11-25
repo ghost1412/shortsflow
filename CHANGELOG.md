@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Small modes audit: photo reel stops with a clear error when `--photos_dir` is a file, ignores folders named like a photo, falls back to the default track (with a warning) when `--music` points at a missing file, and warns when `--reel_text` has more lines than photos. Music mode shrinks (and cuts at 58 characters) a long title so it no longer runs off the 1080 px video, turns line breaks into spaces, and creates `sessions/` when a custom `--session_dir` was used. Filter mode exits with a message for a missing or failed-download source and no longer needs an `hq` attribute. Explainer mode no longer cuts the finished video to 0.1 s when the voiceover length cannot be read (it keeps the silent animation and says so).
+
 - Review step: the plan of moments (plan.json, shown before anything is rendered) now carries each AI-picked moment's hook as its title and the model's reason (they were read from fields the picker does not fill, so every moment showed as "Moment N" with no reason).
 
 - Dubbing: one bad row in the AI's translation answer (an empty or non-number id) no longer drops the rows after it, and a plain list of lines in order is accepted; a translation that left lines untranslated is translated again on the next run instead of being reused as if finished.

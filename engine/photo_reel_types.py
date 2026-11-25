@@ -64,7 +64,8 @@ def type_labels():
 # ---- photo analysis ------------------------------------------------------------------------------------------------------------
 def list_photos(folder):
     """Photo files of a folder, in file-name order."""
-    return sorted(os.path.join(folder, f) for f in os.listdir(folder) if f.lower().endswith(PHOTO_EXTS))
+    return sorted(os.path.join(folder, f) for f in os.listdir(folder)
+                  if f.lower().endswith(PHOTO_EXTS) and os.path.isfile(os.path.join(folder, f)))
 
 
 def _gray(path, size=256):

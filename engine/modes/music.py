@@ -1,5 +1,27 @@
 """music pipeline, moved verbatim from main.py (runs when: getattr(args, "mode", None) == "MUSIC")."""
 
+def escape_ffmpeg_text(text):
+    """Escape text for an FFmpeg drawtext value inside single quotes. Line breaks and tabs become spaces (drawtext would
+    draw them as odd boxes or break the filter)."""
+    text = " ".join(str(text).split())
+    escaped = text.replace('\\', '\\\\')
+    escaped = escaped.replace("'", "'\\''")
+    escaped = escaped.replace(':', '\\:')
+    escaped = escaped.replace(',', '\\,')
+    escaped = escaped.replace('%', '\\%')
+    return escaped
+
+
+MAX_TITLE_CHARS = 58          # 960 px / (30 px * 0.55)
+
+
+def fit_fontsize(text, preferred=54, width=960, minimum=30):
+    """Font size that keeps one line of `text` inside `width` pixels (a 95-character title at 54 px is about 2800 px wide
+    and ran off both sides of the 1080 px video)."""
+    n = max(1, len(text))   # a title is cut to MAX_TITLE_CHARS first, so even the smallest size fits
+    return int(max(minimum, min(preferred, width / (n * 0.55))))
+
+
 def run(args, target_bitrate, target_preset):
     import os
     import sys
@@ -64,22 +86,17 @@ def run(args, target_bitrate, target_preset):
     # output video path
     output_filename = f"music_short_{session_id}.mp4"
     output_path = os.path.join("sessions", output_filename)
+    os.makedirs("sessions", exist_ok=True)      # a custom --session_dir elsewhere left no folder for the video
     
-    # Helper to escape special characters for FFmpeg drawtext filter
-    def escape_ffmpeg_text(text):
-        escaped = text.replace('\\', '\\\\')
-        escaped = escaped.replace("'", "'\\''")
-        escaped = escaped.replace(':', '\\:')
-        escaped = escaped.replace(',', '\\,')
-        escaped = escaped.replace('%', '\\%')
-        return escaped
-
-    title_escaped = escape_ffmpeg_text(meta.get("title", "AI Music Track"))
     import re
-    title_clean = re.sub(r'[^\x00-\x7F]+', '', title_escaped).strip()
-    if not title_clean:
-        title_clean = "AI Music Track"
-        
+    title_plain = re.sub(r'[^\x00-\x7F]+', '', " ".join(str(meta.get("title") or "").split())).strip()
+    if not title_plain:
+        title_plain = "AI Music Track"
+    if len(title_plain) > MAX_TITLE_CHARS:
+        title_plain = title_plain[:MAX_TITLE_CHARS - 3].rstrip() + "..."
+    title_clean = escape_ffmpeg_text(title_plain)
+    title_size = fit_fontsize(title_plain)
+
     prompt_clean = re.sub(r'[^\x00-\x7F]+', '', prompt).strip()
     prompt_escaped = escape_ffmpeg_text(prompt_clean[:40] + "..." if len(prompt_clean) > 40 else prompt_clean)
     if not prompt_escaped:
@@ -90,7 +107,7 @@ def run(args, target_bitrate, target_preset):
     # Build filter complex for scaling, cropping and title card drawing
     video_filter = (
         f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,"
-        f"drawtext=text='{title_clean}':{font_arg}fontcolor=white:fontsize=54:x=(w-text_w)/2:y=(h-text_h)/2-60:box=1:boxcolor=black@0.5:boxborderw=20,"
+        f"drawtext=text='{title_clean}':{font_arg}fontcolor=white:fontsize={title_size}:x=(w-text_w)/2:y=(h-text_h)/2-60:box=1:boxcolor=black@0.5:boxborderw=20,"
         f"drawtext=text='{prompt_escaped}':{font_arg}fontcolor=gray:fontsize=30:x=(w-text_w)/2:y=(h-text_h)/2+60"
     )
     

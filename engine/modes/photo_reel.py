@@ -33,8 +33,8 @@ def run(args, target_bitrate, target_preset):
     photos_dir = getattr(args, "photos_dir", None)
     music_path = getattr(args, "music", None)
 
-    if not photos_dir or not os.path.exists(photos_dir):
-        print("[Error] Standalone PHOTO_REEL mode requires valid --photos_dir parameter.")
+    if not photos_dir or not os.path.isdir(photos_dir):
+        print("[Error] Standalone PHOTO_REEL mode requires --photos_dir to be an existing folder.")
         sys.exit(1)
 
     session_dir = args.session_dir if args.session_dir else f"sessions/photoreel_{int(time.time())}"
@@ -44,6 +44,11 @@ def run(args, target_bitrate, target_preset):
     if music_path and is_url(music_path):
         print(f"[Log] 🎵 Detected URL for music: '{music_path}'. Downloading audio track...")
         music_path = download_source_video_from_url(music_path, session_dir, filename="youtube_music.mp4")
+
+    if music_path and not os.path.isfile(music_path):
+        print(f"[Warning] Music file not found: {music_path}. Making the reel with the default track instead.")
+        music_path = None
+        args.music = None
 
     # Extract audio to MP3 if music_path is a video container for HTML5/Remotion compatibility
     if music_path and os.path.exists(music_path):
@@ -63,9 +68,9 @@ def run(args, target_bitrate, target_preset):
                 print(f"[Warning] MP3 extraction failed: {e}. Using original audio file.")
 
     valid_exts = ('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff', '.heic')
-    photo_files = sorted([
+    photo_files = sorted([                      # files only: a folder called "trip.jpg" is not a photo
         os.path.join(photos_dir, f) for f in os.listdir(photos_dir)
-        if f.lower().endswith(valid_exts)
+        if f.lower().endswith(valid_exts) and os.path.isfile(os.path.join(photos_dir, f))
     ])
 
     if not photo_files:
@@ -79,6 +84,9 @@ def run(args, target_bitrate, target_preset):
         # A reel TYPE decides which photos are used (blurry / duplicate ones are dropped), their order, how long each is held,
         # the captions, the title and the look. Without a type the original behaviour below is unchanged.
         from engine.photo_reel_types import parse_texts, plan_reel
+        _lines = parse_texts(getattr(args, "reel_text", None))
+        if _lines and len(_lines) > len(photo_files):
+            print(f"[Warning] --reel_text has {len(_lines)} lines for {len(photo_files)} photos: the extra lines are ignored.")
         try:
             plan = plan_reel(photo_files, reel_type, target_duration=float(getattr(args, "target_duration", 30) or 30),
                              name=getattr(args, "prompt", None), texts=parse_texts(getattr(args, "reel_text", None)))

@@ -3,6 +3,19 @@ import os
 import sys
 
 
+def media_duration(path):
+    """Seconds of a media file by ffprobe, or None when it cannot be read (never a made-up number: a guessed 0.1 s used to
+    cut the finished video to a tenth of a second)."""
+    import subprocess
+    try:
+        res = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of",
+                              "default=noprint_wrappers=1:nokey=1", path], capture_output=True, text=True)
+        d = float(res.stdout.strip())
+        return d if d > 0 else None
+    except Exception:
+        return None
+
+
 def run(args, target_bitrate, target_preset):
     import time
     from engine.script_gen import generate_manim_script
@@ -50,19 +63,17 @@ def run(args, target_bitrate, target_preset):
             merged_path = os.path.join(session_dir, "final_explainer.mp4")
             import subprocess
             
-            # Helper to get media duration
-            def get_dur(p):
-                try:
-                    res = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", p], capture_output=True, text=True)
-                    return float(res.stdout.strip())
-                except Exception: return 0.1
-                
-            v_dur = get_dur(manim_output_path)
-            a_dur = get_dur(audio_path)
+            v_dur = media_duration(manim_output_path)
+            a_dur = media_duration(audio_path)
+            if not a_dur:
+                print("[Warning] Could not read the voiceover length: keeping the silent animation.")
+                a_dur = None
+            v_dur = v_dur or 0.0
             # Cap speed factor to prevent insane warping (0.6x to 1.5x)
-            raw_speed = a_dur / v_dur if v_dur > 0 else 1.0
+            raw_speed = a_dur / v_dur if (a_dur and v_dur > 0) else 1.0
             speed_factor = max(0.6, min(1.5, raw_speed))
-            print(f"[Log] Synchronizing Explainer Timing... Video: {v_dur:.2f}s, Audio: {a_dur:.2f}s (Raw Stretch: {raw_speed:.2f}x, Capped: {speed_factor:.2f}x)")
+            if a_dur:
+                print(f"[Log] Synchronizing Explainer Timing... Video: {v_dur:.2f}s, Audio: {a_dur:.2f}s (Raw Stretch: {raw_speed:.2f}x, Capped: {speed_factor:.2f}x)")
 
             ffmpeg_cmd = [
                 "ffmpeg", "-y",
@@ -72,10 +83,12 @@ def run(args, target_bitrate, target_preset):
                 "-vf", f"setpts={speed_factor}*PTS,tpad=stop_mode=clone:stop_duration=60",
                 "-c:v", "libx264",
                 "-c:a", "aac", "-b:a", "192k",
-                "-t", f"{a_dur:.3f}", merged_path
+                "-t", f"{(a_dur or 0):.3f}", merged_path
             ]
-            res = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
-            if res.returncode == 0 and os.path.exists(merged_path):
+            res = subprocess.run(ffmpeg_cmd, capture_output=True, text=True) if a_dur else None
+            if res is None:
+                pass
+            elif res.returncode == 0 and os.path.exists(merged_path):
                 output_path = merged_path
             else:
                 print(f"[Warning] Failed to merge audio: {res.stderr}")
