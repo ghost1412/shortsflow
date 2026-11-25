@@ -824,6 +824,7 @@ def transcribe_video(video_path, output_dir, keep_fillers=False, language="en"):
         # Fallback if stable_whisper result is weird
         result.save_as_json(transcript_path)
     print("[Log] Transcript saved successfully.")
+    warn_transcript_gaps(transcript_path, video_path)
     _tc.store(cache_key, transcript_path)
 
     print(f"[Log] Transcription completed in {time.time() - start_time:.1f}s")
@@ -1673,6 +1674,32 @@ def probe_duration(video_path):
         return frames / fps if fps and frames else None
     except Exception:
         return None
+
+
+def transcript_gaps(segments, duration=None, min_gap=90.0):
+    """[(start, end)] of the stretches of at least `min_gap` seconds in which the transcript holds no words, the start and the end of the video included when `duration`
+    is known. A long gap is often music or silence, but it is also what Whisper leaves when it skips a stretch of speech, and then no clip is ever picked from there."""
+    spans = sorted((float(s.get("start", 0)), float(s.get("end", 0))) for s in segments or [] if str(s.get("text", "")).strip())
+    gaps, at = [], 0.0
+    for start, end in spans:
+        if start - at >= min_gap:
+            gaps.append((round(at, 1), round(start, 1)))
+        at = max(at, end)
+    if duration and float(duration) - at >= min_gap:
+        gaps.append((round(at, 1), round(float(duration), 1)))
+    return gaps
+
+
+def warn_transcript_gaps(transcript_path, video_path, log=print):
+    """Say so when the transcript has long stretches without words (see `transcript_gaps`); never fails a run."""
+    try:
+        with open(transcript_path, "r", encoding="utf-8") as f:
+            segments = json.load(f).get("segments", [])
+        for a, b in transcript_gaps(segments, probe_duration(video_path))[:5]:
+            log(f"[Warning] No speech was found from {int(a // 60)}:{int(a % 60):02d} to {int(b // 60)}:{int(b % 60):02d} ({round(b - a)} s): music or silence, or the speech model skipped it. "
+                f"No clip can start there; set SHORTSFLOW_WHISPER_MODEL=medium to listen more closely.")
+    except Exception:
+        pass
 
 
 def clamp_highlights(highlights, duration, min_len=3.0):
