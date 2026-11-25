@@ -171,13 +171,15 @@ def rate_scenery(frames, key=None, timeout=120):
     except (OSError, ValueError):
         cache = {}
     keys = [SCENIC_VERSION + hashlib.sha1(f).hexdigest() for f in frames]
-    missing = [i for i, k in enumerate(keys) if k not in cache]
+    missing, fresh = [i for i, k in enumerate(keys) if k not in cache], {}
     if missing:
         got = _rate_scenery_online([frames[i] for i in missing], key, timeout)
         if got is None or len(got) != len(missing):
             return None
         for i, row in zip(missing, got):
-            cache[keys[i]] = row
+            fresh[keys[i]] = row
+            if not row.get("unrated"):                  # a frame the model left out counts as 0 now, but is asked again next time
+                cache[keys[i]] = row
         try:
             while len(cache) > SCENERY_KEEP:
                 cache.pop(next(iter(cache)))
@@ -188,7 +190,7 @@ def rate_scenery(frames, key=None, timeout=120):
             os.replace(tmp, path)
         except OSError:
             pass
-    return [dict(cache[k]) for k in keys]
+    return [dict(fresh.get(k) or cache[k]) for k in keys]
 
 
 def _rate_scenery_online(frames, key=None, timeout=120):
@@ -213,7 +215,7 @@ def _rate_scenery_online(frames, key=None, timeout=120):
                 rows = rows.get("frames") or rows.get("ratings") or []
             by_id = {int(r["id"]): r for r in rows if isinstance(r, dict) and "id" in r}
             if len(by_id) >= max(1, len(frames) // 2):
-                return [{"score": max(0.0, min(10.0, float(by_id.get(i, {}).get("score", 0)))), "overlay": bool(by_id.get(i, {}).get("overlay")),
+                return [{**({} if i in by_id else {"unrated": True}), "score": max(0.0, min(10.0, float(by_id.get(i, {}).get("score", 0)))), "overlay": bool(by_id.get(i, {}).get("overlay")),
                          "flare": bool(by_id.get(i, {}).get("flare")), "airborne": bool(by_id.get(i, {}).get("airborne"))}
                         for i in range(1, len(frames) + 1)]
         except Exception as e:
@@ -336,10 +338,11 @@ def choose_backend():
     return None, None, "none"
 
 
-def describe_candidates(video, highlights, about="", cache_path=None, model=None, grab=grab_frames, ask=None, max_clips=10):
+def describe_candidates(video, highlights, about="", cache_path=None, model=None, grab=grab_frames, ask=None, max_clips=10, name=None):
     """Copies of the highlights with `visual` set to what is on screen. Candidates it cannot describe stay as they were.
 
-    Descriptions are cached in `cache_path` (json, keyed by start-end), so a continued run does not look again."""
+    Descriptions are cached in `cache_path` (json, keyed by video and start-end), so a continued run does not look again.
+    name: what stands for the video in that key (default its file name; the recap adds the folder, as day1/a.mp4 and day2/a.mp4 differ)."""
     if not highlights:
         return highlights
     if ask is None:
@@ -357,6 +360,8 @@ def describe_candidates(video, highlights, about="", cache_path=None, model=None
         try:
             with open(cache_path, "r", encoding="utf-8") as f:
                 cache = json.load(f)
+            if not isinstance(cache, dict):
+                cache = {}
         except (OSError, ValueError):
             cache = {}
     out, done = [], 0
@@ -364,7 +369,7 @@ def describe_candidates(video, highlights, about="", cache_path=None, model=None
         h = dict(h)
         # the video's name is part of the key: the trip recap describes moments of MANY videos into one cache file, and many of them share
         # the same window (0.0-4.8 s), so a key of only the times gave one video's description to another
-        key = f"{os.path.basename(str(video))}|{float(h['start']):.1f}-{float(h['end']):.1f}"
+        key = f"{name or os.path.basename(str(video))}|{float(h['start']):.1f}-{float(h['end']):.1f}"
         text = cache.get(key, "")
         if not text and i < max_clips:
             text = ask(grab(video, h["start"], h["end"]), model, about)

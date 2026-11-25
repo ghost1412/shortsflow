@@ -17,6 +17,7 @@ import urllib.request
 
 NOMINATIM = "https://nominatim.openstreetmap.org/reverse"
 USER_AGENT = "ShortsFlow-TripRecap/1.0 (open-source video tool)"
+LOCATION_TAGS = ("location", "location-eng", "com.apple.quicktime.location.ISO6709")       # the last one is how iPhones write it
 _ISO = re.compile(r"^\s*([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)")
 
 
@@ -34,15 +35,12 @@ def parse_iso6709(text):
 def video_location(path, ffprobe="ffprobe", run=_proc.run):
     """(lat, lon) stored in the video file, None when it has none."""
     try:
-        r = run([ffprobe, "-v", "error", "-show_entries", "format_tags=location,location-eng", "-of", "json", path],
+        r = run([ffprobe, "-v", "error", "-show_entries", "format_tags=" + ",".join(LOCATION_TAGS), "-of", "json", path],
                 capture_output=True, text=True, timeout=30)
         tags = (json.loads(r.stdout or "{}").get("format") or {}).get("tags") or {}
     except Exception:
         return None
-    for k in ("location", "location-eng"):
-        if tags.get(k):
-            return parse_iso6709(tags[k])
-    return None
+    return next((loc for loc in (parse_iso6709(tags.get(k)) for k in LOCATION_TAGS) if loc), None)      # one bad tag does not hide a good one
 
 
 def distance_km(a, b):
@@ -96,18 +94,22 @@ def name_from_reply(data):
     return {"name": feature[:60], "area": area[:60], "region": region[:60], "hint": _short(data.get("display_name"))[:160]}
 
 
+def _load_cache(cache_path):
+    """The json cache as a dict, {} when it is missing, unreadable or not a dict."""
+    try:
+        with open(cache_path or "", "r", encoding="utf-8") as f:
+            cache = json.load(f)
+        return cache if isinstance(cache, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 def place_name(loc, cache_path=None, fetch=None, language="en", pause=1.1):
     """{"name", "area", "region", "hint"} for a (lat, lon), None when it cannot be had. Cached in `cache_path` (json) by 3-decimal coordinates."""
     if loc is None or (os.getenv("SHORTSFLOW_GEOCODE") or "").strip().lower() in ("off", "0", "no", "false"):
         return None
     key = f"{loc[0]:.3f},{loc[1]:.3f}"
-    cache = {}
-    if cache_path and os.path.isfile(cache_path):
-        try:
-            with open(cache_path, "r", encoding="utf-8") as f:
-                cache = json.load(f)
-        except (OSError, ValueError):
-            cache = {}
+    cache = _load_cache(cache_path)
     if key in cache:
         return cache[key] or None
     if fetch is None:
@@ -137,13 +139,7 @@ ATTRACTION_QUERIES = ("viewpoint", "waterfall", "lake", "attraction", "park")
 
 def _cached(cache_path, key, make):
     """cache[key] from the json file, else make() stored there. A failed make() (None) is not stored."""
-    cache = {}
-    if cache_path and os.path.isfile(cache_path):
-        try:
-            with open(cache_path, "r", encoding="utf-8") as f:
-                cache = json.load(f)
-        except (OSError, ValueError):
-            cache = {}
+    cache = _load_cache(cache_path)
     if key in cache:
         return cache[key]
     value = make()

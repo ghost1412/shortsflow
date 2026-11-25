@@ -32,7 +32,7 @@ FONT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 
 
 def natural_key(text):
-    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", str(text))]
+    return [int(t) if t.isdecimal() else t.lower() for t in re.split(r"(\d+)", str(text))]
 
 
 def collect_videos(paths):
@@ -51,7 +51,19 @@ def collect_videos(paths):
                 out += [(os.path.join(p, f), hint) for f in sorted(os.listdir(p), key=natural_key) if f.lower().endswith(VIDEO_EXT)]
         elif os.path.isfile(p) and p.lower().endswith(VIDEO_EXT):
             out.append((p, None))
-    return out
+    seen, unique = set(), []
+    for p, hint in out:                                  # a file given twice (its folder and the file itself) counts once
+        key = os.path.normcase(os.path.abspath(p))
+        if key not in seen:
+            seen.add(key)
+            unique.append((p, hint))
+    return unique
+
+
+def left_out(paths):
+    """[warning] for every given path that contributes nothing: missing, or a file that is not a video."""
+    return [f"{p}: " + ("not a video file this tool reads." if os.path.exists(p) else "no such file or folder.")
+            for p in paths if not os.path.isdir(p) and not (os.path.isfile(p) and p.lower().endswith(VIDEO_EXT))]
 
 
 def folder_names(videos):
@@ -61,6 +73,9 @@ def folder_names(videos):
     if len(seen) < 2:
         return []
     return [re.sub(r"\s+", " ", re.sub(r"[_]+", " ", h)).strip().capitalize() for h in seen]
+
+
+_DAY_NUMBER = re.compile(r"(?:(?<![^\W\d_])(?i:day)|(?<=[a-z])Day)[\s_\-]*0*(\d+)")      # "day2", "TripDay3"; not "Holiday 2024" or "monday_1"
 
 
 def group_days(videos, by_folder=False):
@@ -78,7 +93,7 @@ def group_days(videos, by_folder=False):
     keyed = []
     for path, hint in videos:
         text = f"{hint or ''} {os.path.splitext(os.path.basename(path))[0]}"
-        m = re.search(r"day[\s_\-]*0*(\d+)", text, re.I)
+        m = _DAY_NUMBER.search(text)
         if m:
             key = (0, f"{int(m.group(1)):08d}")
         else:
@@ -100,7 +115,9 @@ def group_days(videos, by_folder=False):
 def file_seconds(path):
     """Seconds since the start of the day from a name like '083015_ab12cd34.mp4' (the album importer's names), else None."""
     m = re.match(r"(\d{2})(\d{2})(\d{2})_", os.path.basename(path))
-    return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3)) if m else None
+    if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59 or int(m.group(3)) > 59:
+        return None                                  # "240502_..." (a date) is not a time of day
+    return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
 
 
 def split_by_gaps(files, n):
@@ -143,6 +160,11 @@ def parse_stops(text):
     return [s.strip() for s in items if s.strip()]
 
 
+def keep_names(names, kept):
+    """The names that belong to the days at indices `kept` (days whose videos could not be read are gone), in order."""
+    return [names[i] for i in kept if i < len(names)]
+
+
 def parse_lines(text):
     """One line of text per part from 'Fry the nuts in ghee | Roast the khoya' (or one per line, or a list). Empty entries are kept
     so a part can have no line; parts without an entry get none."""
@@ -165,7 +187,7 @@ def payoff_first(glimpses, days):
     tail = [g for g in glimpses if g.get("day") == last]
     if not tail and days[last].get("moments"):
         m = days[last]["moments"][0]
-        tail = [{"file": m["file"], "start": m["start"], "end": m["end"], "size": m["size"], "day": last}]
+        tail = [{"file": m["file"], "start": m["start"], "end": m["end"], "size": m["size"], "rotate": m.get("rotate", 0), "day": last}]        # the size already follows the turn, so the turn goes with it
         glimpses = glimpses[:-1] if len(glimpses) > 1 else glimpses
     return tail + [g for g in glimpses if g not in tail]
 
@@ -235,13 +257,18 @@ def shown_portrait(m):
     return h > w
 
 
+def is_shown(m, moments):
+    """True when this very shot is already among `moments` (a spare that an earlier step swapped in)."""
+    return any(m["file"] == x["file"] and m["start"] == x["start"] for x in moments)
+
+
 def swap_wrong_shape(moments, spares, orientation):
     """(moments, changed): in a landscape (or portrait) recap, a shot of the other shape (a clip stored sideways and turned upright) is
     replaced by a spare of the right shape, or dropped when there is none (a day always keeps at least one shot)."""
     if orientation not in ("landscape", "portrait"):
         return list(moments), 0
     wrong = (lambda m: shown_portrait(m)) if orientation == "landscape" else (lambda m: not shown_portrait(m))
-    pool = [s for s in spares if not wrong(s)]
+    pool = [s for s in spares if not wrong(s) and not is_shown(s, moments)]
     out, swapped = [], 0
     for k, m in enumerate(moments):
         if wrong(m) and pool:
@@ -340,7 +367,7 @@ def drop_repeats(moments, spares, describe_one, before=(), window=2, alike=None)
     also across days through `before`, the moments of the day before) and none is an empty, blurry, dark or accidental shot. Such a
     moment is swapped for the nearest spare that is neither (described on the spot by describe_one(moment)). A repeat with no spare
     stays; an empty or accidental shot with no spare is dropped when the day has other moments."""
-    out, spares = [], list(spares)
+    out, spares, dropped = [], list(spares), []
     earlier = list(before)
     alike = alike or (lambda a, b: False)
 
@@ -363,9 +390,10 @@ def drop_repeats(moments, spares, describe_one, before=(), window=2, alike=None)
             if not bad(nxt):
                 cur = nxt
         if boring(cur) and len(moments) > 1:
+            dropped.append(cur)
             continue
         out.append(cur)
-    return out
+    return out or dropped[:1]                       # a day always keeps one shot, even when every shot of it is dark or empty
 
 
 def best_closing(moments, grab=None, score=None):
@@ -438,7 +466,7 @@ def name_conflicts(places, min_km=CONFLICT_KM):
     from engine.geo import distance_km
     groups = {}
     for i, p in enumerate(places):
-        if p.get("center") and p.get("name") and not is_plain_area(p["name"]):
+        if p.get("center") and p.get("name") and not is_plain_area(p["name"]) and p["name"] != "In flight":
             groups.setdefault(p["name"].strip().lower(), []).append(i)
     out = []
     for idx in groups.values():
@@ -490,6 +518,8 @@ def name_places(places, trip_name="", note="", ask=None, geocode=True, cache_pat
         try:
             with open(names_path, "r", encoding="utf-8") as fh:
                 saved = json.load(fh)
+            if not isinstance(saved, dict):
+                saved = {}
         except (OSError, ValueError):
             saved = {}
     key_of = lambda p: f"{CACHE_PREFIX}{p['center'][0]:.3f},{p['center'][1]:.3f}" if p.get("center") else ""  # noqa: E731
@@ -531,8 +561,8 @@ def name_places(places, trip_name="", note="", ask=None, geocode=True, cache_pat
                 from engine.script_gen import robust_json_parse
                 _apply_rows(robust_json_parse(ask(prompt)), places, saved, key_of, only=set(pending))
                 clash = name_conflicts(places)
-                if clash:
-                    ids = sorted({i for grp in clash for i in grp})
+                if any(not places[i].get("manual") for grp in clash for i in grp):
+                    ids = sorted({i for grp in clash for i in grp if not places[i].get("manual")})            # names you typed are never taken away
                     print(f"[Log] Place names: the same name was given to places far apart ({len(ids)} places); asking again.")
                     prompt2 = ("These places were given the SAME name although they are different places (several km apart). Give each its own "
                                "correct name from the map's named places or a famous attraction you are sure of, or an empty string if you are not sure.\n"
@@ -542,7 +572,8 @@ def name_places(places, trip_name="", note="", ask=None, geocode=True, cache_pat
                         places[i]["name"] = ""
                     _apply_rows(robust_json_parse(ask(prompt2)), places, saved, key_of, only=set(ids))
                     for grp in name_conflicts(places):                      # still the same name: only the first keeps it
-                        for i in grp[1:]:
+                        keep = [i for i in grp if places[i].get("manual")] or grp[:1]
+                        for i in (i for i in grp if i not in keep):
                             places[i]["name"] = ""
                             saved.pop(key_of(places[i]), None)
             except Exception as e:
@@ -692,8 +723,8 @@ def loudness_per_second(video, ffmpeg=None, run=_proc.run):
     if ffmpeg is None:
         import imageio_ffmpeg
         ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
-    r = run([ffmpeg, "-hide_banner", "-nostats", "-i", video, "-vn", "-ac", "1", "-ar", "8000",
-             "-af", "astats=metadata=1:reset=8000,ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-", "-f", "null", "-"],
+    r = run([ffmpeg, "-hide_banner", "-nostats", "-i", video, "-vn", "-ac", "1",        # resampled INSIDE the filters: 8000 samples are a second only at 8 kHz
+             "-af", "aresample=8000,asetnsamples=n=8000:p=0,astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-", "-f", "null", "-"],
             capture_output=True, text=True)
     vals = []
     for m in re.finditer(r"RMS_level=(-?[\d.]+|-inf)", r.stdout or ""):
@@ -867,7 +898,8 @@ def write_itinerary(trip_name, note, days, ask=None, stops=None, kind="trip"):
         out = {"title": (trip_name or str(data.get("title") or fb["title"]))[:60], "hook": str(data.get("hook") or "").strip()[:70], "days": []}
         for i, d in enumerate(days):
             row = rows[i] if i < len(rows) and isinstance(rows[i], dict) else {}
-            caps = [str(c)[:60] for c in (row.get("captions") or []) if isinstance(c, (str, int, float))]
+            caps = row.get("captions") if isinstance(row.get("captions"), list) else []
+            caps = [str(c)[:60] if isinstance(c, (str, int, float)) and not isinstance(c, bool) else "" for c in caps]      # a null keeps its place
             caps += [""] * (len(d["moments"]) - len(caps))
             title = stops[i] if stops and i < len(stops) else str(row.get("title") or f"{K['unit']} {i + 1}")
             out["days"].append({"title": title[:50], "summary": str(row.get("summary") or "")[:160],
@@ -878,12 +910,18 @@ def write_itinerary(trip_name, note, days, ask=None, stops=None, kind="trip"):
         return fb
 
 
+def own_title(title, unit, number):
+    """The title without a leading "Day 2" of its own ('' when that is all it is): the heading and the card already say it."""
+    return re.sub(rf"^\s*{re.escape(unit)}\s*{number}\b[\s:.\-\u2013\u2014]*", "", str(title or ""), flags=re.I)
+
+
 def itinerary_markdown(it, days, unit="Day"):
     lines = [f"# {it['title']}", ""]
     if it.get("hook"):
         lines += [f"*{it['hook']}*", ""]
     for i, (d, row) in enumerate(zip(days, it["days"]), 1):
-        lines.append(f"## {unit} {i}: {row['title']}")
+        own = own_title(row["title"], unit, i)
+        lines.append(f"## {unit} {i}" + (f": {own}" if own else ""))
         if row["summary"]:
             lines.append(row["summary"])
         seen = list(dict.fromkeys(m["place"] for m in d["moments"] if m.get("place")))
@@ -925,6 +963,15 @@ def _font(size, text=""):
 def _wrap(draw, text, font, width):
     words, lines, cur = str(text).split(), [], ""
     for w in words:
+        while len(w) > 1 and draw.textlength(w, font=font) > width:       # one long word (a long place name) is broken, not run off the edge
+            k = len(w) - 1
+            while k > 1 and draw.textlength(w[:k], font=font) > width:
+                k -= 1
+            if cur:
+                lines.append(cur)
+                cur = ""
+            lines.append(w[:k])
+            w = w[k:]
         trial = f"{cur} {w}".strip()
         if draw.textlength(trial, font=font) <= width or not cur:
             cur = trial
@@ -944,8 +991,12 @@ def title_card_png(path, big, title, summary=""):
         size -= 10
         f_big = _font(size, big)
     f_title, f_sum = _font(88, title), _font(48, summary)
-    y = H // 2 - 330
-    d.text((W // 2, y), big, font=f_big, fill=(255, 209, 102), anchor="mm")
+    big_lines = _wrap(d, big, f_big, W - 120) or [""]          # a long name that is still too wide at the smallest size goes over several lines
+    y = H // 2 - 330 - int(size * 1.15) * (len(big_lines) - 1)
+    for ln in big_lines[:-1]:
+        d.text((W // 2, y), ln, font=f_big, fill=(255, 209, 102), anchor="mm")
+        y += int(size * 1.15)
+    d.text((W // 2, y), big_lines[-1], font=f_big, fill=(255, 209, 102), anchor="mm")
     y += 210
     for ln in _wrap(d, title, f_title, W - 160):
         d.text((W // 2, y), ln, font=f_title, fill=(255, 255, 255), anchor="mm")
@@ -1104,7 +1155,7 @@ def headline_layers(path_base, small, big, accent, accent_colour=(248, 254, 165)
     meter = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     big = str(big).upper()
     size = 230
-    while size > 70 and meter.textlength(big, font=face("Anton-Regular.ttf", size)) > W * 0.84:
+    while size > 30 and meter.textlength(big, font=face("Anton-Regular.ttf", size)) > W * 0.84:
         size -= 10
     f_small, f_big = face("Anton-Regular.ttf", 74), face("Anton-Regular.ttf", size)
     accent_name, accent_factor = ("Caveat.ttf", 1.0) if not _NOT_CAVEAT.search(str(accent)) else ("Anton-Regular.ttf", 0.7)
@@ -1234,7 +1285,7 @@ def cinematic_layers(path_base, title, line="", small="", look=None, index=0, qu
         for sz in range(size, 23, -4):
             f = font(sz)
             lines = _wrap(meter, plain, f, max_w)
-            if len(lines) <= max(max_lines, 2) and all(meter.textlength(ln, font=f) <= max_w for ln in lines):
+            if len(lines) <= max(max_lines, 2) and all(meter.textlength(w, font=f) <= max_w for w in plain.split()):      # shrunk until no word has to be broken
                 return lines, f, int(sz * 1.15 * u)
         f = font(24)
         return _wrap(meter, plain, f, max_w), f, int(28 * u)
@@ -1413,9 +1464,10 @@ def ingredients_card_png(path, items, title="Ingredients"):
     x_amount, x_name = int(W * 0.36), int(W * 0.39)
     f = _font(size, "".join(a + b for a, b in rows))
     for amount, name in rows:
-        font = f
-        while d.textlength(name, font=font) > W - x_name - 50 and getattr(font, "size", size) > 26:
-            font = _font(font.size - 2, name)
+        font, sz = f, size
+        while d.textlength(name, font=font) > W - x_name - 50 and sz > 26:
+            sz -= 2                                        # counted here: font.size already has the face's own factor in it
+            font = _font(sz, name)
         if amount:
             d.text((x_amount, y), amount, font=font, fill=(200, 170, 120), anchor="rm")
         d.text((x_name if amount else W // 2, y), name, font=font, fill=(240, 232, 216), anchor="lm" if amount else "mm")
@@ -1432,7 +1484,7 @@ def film_title_png(path, text, dim=110):
     d = ImageDraw.Draw(img)
     word = str(text).upper()
     size = int(260 * u)
-    while size > 40:
+    while size > 16:
         f = ImageFont.truetype(os.path.join(FONT_DIR, "Anton-Regular.ttf"), size)
         if d.textlength(word, font=f) <= W * 0.8:
             break
@@ -1763,6 +1815,14 @@ def _shot_row(m):
     return {"file": m["file"], "start": round(float(m["start"]), 2), "end": round(float(m["end"]), 2), "w": int(w), "h": int(h)}
 
 
+def fit_in_file(start, seconds, duration):
+    """(start, seconds) moved earlier, and shortened when it must be, so the shot does not run past the end of its video."""
+    if not duration or start + seconds <= duration:
+        return start, seconds
+    start = max(0.0, duration - seconds)
+    return start, min(seconds, duration - start)
+
+
 def write_recap_plan(session_dir, trip_name, days, limit_alternatives=3, layout="auto"):
     """recap_plan.json: for every day the picked shots (with the place) and a few alternatives, for the review step. Returns the path."""
     import json
@@ -1771,7 +1831,7 @@ def write_recap_plan(session_dir, trip_name, days, limit_alternatives=3, layout=
         names = [p.get("name") for p in d.get("places", []) if p.get("name") and not is_plain_area(p.get("name"))]
         rows.append({"day": di, "place": " · ".join(names[:2]),
                      "moments": [dict(_shot_row(m), place=m.get("place", "")) for m in d["moments"]],
-                     "alternatives": [_shot_row(m) for m in (d.get("alts") or [])[:limit_alternatives]]})
+                     "alternatives": [_shot_row(m) for m in (d.get("alts") or []) if not is_shown(m, d["moments"])][:limit_alternatives]})
     path = os.path.join(session_dir, RECAP_PLAN_FILE)
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"title": trip_name, "layout": layout, "days": rows}, f, ensure_ascii=False, indent=1)
@@ -1801,13 +1861,20 @@ def apply_chosen_moments(days, chosen_path):
         known = {os.path.normcase(os.path.abspath(i[0])): i for i in d["infos"]}      # forward and back slashes, drive-letter case: the same file
         moments = []
         for s in row:
+            if not isinstance(s, dict):
+                raise ValueError(f"Day {di}: a chosen shot could not be read (start the review again).")
             info = known.get(os.path.normcase(os.path.abspath(str(s.get("file") or ""))))
             if not info:
                 raise ValueError(f"Day {di}: a chosen shot is not from that day's videos.")
-            start, end = float(s["start"]), float(s["end"])
+            try:
+                start, end = float(s["start"]), float(s["end"])
+            except (KeyError, TypeError):
+                raise ValueError(f"Day {di}: a chosen shot has no start or end.") from None
+            if info[1]:
+                end = min(end, info[1])                      # a shot cannot run past the end of its video
             if end - start < 0.5:
                 raise ValueError(f"Day {di}: a chosen shot is too short.")
-            moments.append({"file": info[0], "start": start, "end": min(end, info[1]) if info[1] else end, "size": (info[2], info[3]), "loc": s.get("loc")})
+            moments.append({"file": info[0], "start": start, "end": end, "size": (info[2], info[3]), "loc": s.get("loc")})
         if not moments:
             raise ValueError(f"Day {di} has no shots left: keep at least one shot for each day.")
         d["moments"] = moments
@@ -1846,7 +1913,8 @@ def pick_scenic(cands, n, grab, rate=None, score=scenic_score, shortlist=14):
         if len(chosen) < n and c not in chosen:
             chosen.append(c)
     others = [c for _s, c in final if c not in chosen] + [c for _s, c, _f in scored[shortlist:]]
-    chosen.sort(key=lambda m: (m["file"], m["start"]))
+    order = {id(c): i for i, c in enumerate(cands)}
+    chosen.sort(key=lambda m: order[id(m)])                 # `cands` are in filming order (the file names need not sort that way: 2.mp4, 10.mp4)
     return chosen, others
 
 
@@ -1892,7 +1960,7 @@ def pick_glimpses(days, k, length, grab=None, score=scenic_score, per_candidates
             continue
         chosen.append(c)
         used[c["day"]] = used.get(c["day"], 0) + 1
-    return sorted(chosen, key=lambda c: (c["day"], c["file"], c["start"]))
+    return sorted(chosen, key=lambda c: (c["day"], infos_order(days[c["day"]]["infos"], c["file"]), c["start"]))
 
 
 def decide_look(paths, probe=None, sample=12):
@@ -1959,7 +2027,11 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         raise ValueError(f"Unknown auto-edit style {edit!r}. Choose one of: {', '.join(auto_edit.PRESETS)}")
     director = auto_edit.PRESETS.get(edit) if edit else None
     strength = auto_edit.STRENGTHS.get(edit_strength) or auto_edit.STRENGTHS["medium"]
+    if music and not os.path.isfile(music):
+        raise ValueError(f"The music file was not found: {music}")        # said now, not after every shot is rendered
     videos = collect_videos(list(paths))
+    for why in left_out(paths):
+        print(f"[Warning] Left out {why}")
     by_folder = not K["geo"]                              # a wedding or party: one folder per part
     days_paths = group_days(videos, by_folder=by_folder)
     if not days_paths:
@@ -1993,18 +2065,26 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         n_glimpses, glimpse_base, open_with_result = 1, 3.0, True
     if extras.get("itinerary") or extras.get("held_title"):
         n_glimpses = 0                  # an itinerary reel opens on its headline over the first shot: no hook line, no glimpses before it
-    opening = ((n_glimpses * glimpse_base + (0.0 if result_opening else CARD_SECONDS)) if hype else 0.0) + closing_s      # glimpses + the trip title card + the closing card
-    all_infos = []
-    for files in days_paths:
+    end_s = 0.0 if str(extras.get("end") or "card").lower() == "none" else closing_s        # --recap_end none: no closing card, so no time kept for it
+    opening = ((n_glimpses * glimpse_base + (0.0 if result_opening else CARD_SECONDS)) if hype else 0.0) + end_s      # glimpses + the trip title card + the closing card
+    all_infos, kept_days = [], []
+    for day_i, files in enumerate(days_paths):
         infos = []
         for f in files:
-            dur, w, h = video_info(f)
-            if dur > 1:
+            try:
+                dur, w, h = video_info(f)
+            except ValueError:                           # ffprobe answered "N/A" or nothing readable
+                dur = w = h = 0
+            if dur > 1 and w and h:
                 infos.append((f, dur, w, h))
+            else:
+                print(f"[Warning] Left out {os.path.basename(f)}: it cannot be read, has no picture, or is not longer than a second.")
         if infos:
             all_infos.append(infos)
+            kept_days.append(day_i)
     if not all_infos:
         raise ValueError("None of the videos could be read.")
+    stops = keep_names(stops, kept_days)                 # a stop whose videos were all unreadable is gone: the names after it must not move onto other videos
     all_infos, note_o = filter_orientation(all_infos, orientation)
     if note_o:
         print(f"[Log] {orientation.capitalize()} version: {note_o}.")
@@ -2199,7 +2279,8 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
             return
         from engine.visual_context import describe_candidates
         one = describe_candidates(m["file"], [{"start": m["start"], "end": m["end"]}], about=f"{trip_name} {note}".strip(),
-                                  cache_path=os.path.join(session_dir, "visual_context.json"), ask=describe)
+                                  cache_path=os.path.join(session_dir, "visual_context.json"), ask=describe,
+                                  name="/".join(os.path.abspath(m["file"]).replace("\\", "/").split("/")[-2:]))
         if one and one[0].get("visual"):
             m["visual"] = one[0]["visual"]
     previous = []
@@ -2216,6 +2297,8 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
     for d in days:
         d["alts"] = list(d.get("spares") or [])
         d.pop("spares", None)
+
+    dur_of = {i[0]: i[1] for infos_ in all_infos for i in infos_}
 
     # where each day went: places from the videos' GPS, named from the map and the pictures
     all_places = []
@@ -2262,7 +2345,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         plan_path = write_recap_plan(session_dir, trip_name, days, layout=layout)
         raise PlanWritten(plan_path)
     # the trip title is shown over a shot of its own: the same shot must not open Day 1 again right after it
-    title_m = days[0]["moments"].pop(0) if cine and len(days[0]["moments"]) > 1 else None
+    title_m = days[0]["moments"].pop(0) if cine and not (result_opening or extras.get("held_title")) and len(days[0]["moments"]) > 1 else None
     if len(days[-1]["moments"]) >= 3:
         last_before = list(days[-1]["moments"])
         days[-1]["moments"] = best_closing(last_before, grab=grab)
@@ -2295,8 +2378,9 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
             for gi, g in enumerate(glimpses, 1):
                 out = os.path.join(parts_dir, f"glimpse_{gi}.mp4")
                 shown = None if (cine and gi > 1) else hook_png      # cinematic: the hook once, on the first shot, not stamped on every one
-                render_clip(ffmpeg, g["file"], g["start"], glimpse_s, out, shown, layout, g["size"], audio=has_audio(g["file"]) and not mute_orig,
-                            cap_from=0.0, cap_gap=0.0, grade=grade, fade_s=fade_s, rotate=g.get("rotate", 0), fix=fix_for(g["file"]), **zoom_kw(), **trans_kw(g["file"], g["start"], glimpse_s, g["size"]))
+                g_start, g_secs = fit_in_file(g["start"], glimpse_s, dur_of.get(g["file"]))
+                render_clip(ffmpeg, g["file"], g_start, g_secs, out, shown, layout, g["size"], audio=has_audio(g["file"]) and not mute_orig,
+                            cap_from=0.0, cap_gap=0.0, grade=grade, fade_s=fade_s, rotate=g.get("rotate", 0), fix=fix_for(g["file"]), **zoom_kw(), **trans_kw(g["file"], g_start, g_secs, g["size"]))
                 note_shot(out, g["size"], [shown] if shown else [])
                 parts.append(out)
             print(f"[Log] Opening: hook \"{it['hook']}\" over {len(glimpses)} glimpse(s).")
@@ -2314,7 +2398,8 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
             else:
                 lay = cinematic_layers(os.path.join(parts_dir, "trip_title"), it["title"], " · ".join(stops) if stops else (" · ".join(trip_places[:4]) or K["tagline"]),
                                        "", look=frame_look(ffmpeg, m0["file"], m0["start"] + 1.0), index=0, quick=fast, safe=bool(extras.get("safe")), style=extras.get("text_style"))
-            render_clip(ffmpeg, m0["file"], m0["start"], title_s, out, None, layout, m0["size"], audio=has_audio(m0["file"]) and not mute_orig, grade=grade, fade_s=fade_s, layers=lay, layer_fade=((0.2, 0.25) if fast else (0.7, 0.4)), rotate=m0.get("rotate", 0), fix=fix_for(m0["file"]), **zoom_kw(), **trans_kw(m0["file"], m0["start"], title_s, m0["size"]))
+            t_start, t_secs = fit_in_file(m0["start"], title_s, dur_of.get(m0["file"]))
+            render_clip(ffmpeg, m0["file"], t_start, t_secs, out, None, layout, m0["size"], audio=has_audio(m0["file"]) and not mute_orig, grade=grade, fade_s=fade_s, layers=lay, layer_fade=((0.2, 0.25) if fast else (0.7, 0.4)), rotate=m0.get("rotate", 0), fix=fix_for(m0["file"]), **zoom_kw(), **trans_kw(m0["file"], t_start, t_secs, m0["size"]))
             note_shot(out, m0["size"], [png for png, _ts in lay or []])
             parts.append(out)
         else:
@@ -2323,7 +2408,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
             render_card(ffmpeg, title, card)
             parts.append(card)
     labels = moment_labels(days, cine)
-    step_lines = parse_lines(lines)                      # --recap_lines: a line of text for each part (a recipe step, a stop)
+    step_lines = keep_names(parse_lines(lines), kept_days)                      # --recap_lines: a line of text for each part (a recipe step, a stop)
     ing_items = parse_lines(extras.get("ingredients"))       # --recap_ingredients: a card that lists everything needed
     ing_at = str(extras.get("ingredients_at") or "end").lower()
     ing_beat = locals().get("beat")                       # the music's beat length when the cuts follow a song
@@ -2342,7 +2427,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         add_ingredients_card()
     for d, row in zip(days, it["days"]):
         day_places = list(dict.fromkeys(m["place"] for m in d["moments"] if m.get("place") and not is_plain_area(m["place"]) and m["place"] != "In flight"))
-        if day_places:
+        if day_places and not stops:                       # the stop names you gave are the titles
             three = " · ".join(day_places[:3])
             row["title"] = (three if len(three) <= 40 else " · ".join(day_places[:2]))[:50]           # the real places, not a vague "Day 3 Northvale"
     for di, (d, row) in enumerate(zip(days, it["days"]), 1):
@@ -2351,7 +2436,7 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         elif stops:
             card_png = title_card_png(os.path.join(parts_dir, f"card_{di}.png"), row["title"], f"{K['stop_unit']} {di} of {len(days)}", (step_lines[di - 1] if di - 1 < len(step_lines) and step_lines[di - 1] else row["summary"]))
         else:
-            card_png = title_card_png(os.path.join(parts_dir, f"card_{di}.png"), f"{K['unit']} {di}", row["title"], row["summary"])
+            card_png = title_card_png(os.path.join(parts_dir, f"card_{di}.png"), f"{K['unit']} {di}", own_title(row["title"], K["unit"], di), row["summary"])
         if card_png:
             card = os.path.join(parts_dir, f"card_{di}.mp4")
             render_card(ffmpeg, card_png, card)
@@ -2364,12 +2449,13 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
             lay, secs = None, m["end"] - m["start"]
             if cine and mi == 1 and not extras.get("held_title"):
                 itinerary = bool(extras.get("itinerary")) and len(days) > 1      # --recap_itinerary: "DAY 2" above the place name, nothing repeated below
-                lay = cinematic_layers(os.path.join(parts_dir, f"title_{di}"), itinerary_title(row["title"], di, trip_name) if (itinerary or film_text) else row["title"], own or ("" if itinerary else (f"{unit} {di}" if len(days) > 1 else "")),
+                lay = cinematic_layers(os.path.join(parts_dir, f"title_{di}"), itinerary_title(row["title"], di, trip_name) if (itinerary or film_text) else row["title"], own or ("" if itinerary else (f"{unit} {di}" if len(days) > 1 and own_title(row["title"], unit, di) else "")),
                                        small=(f"{unit.upper()} {di}" if itinerary else f"{unit.upper()} {di} / {len(days)}" if extras.get("counter") and len(days) > 1 else ""),
                                        look=frame_look(ffmpeg, m["file"], m["start"] + 1.0), index=di, quick=fast, safe=bool(extras.get("safe")), scrim=itinerary, style=extras.get("text_style"))
                 secs = max(secs, first_min)
-            spd = timelapse_factor(extras.get("speed"), secs, (file_seconds(m["file"]) or 0.0) - m["start"]) if extras.get("speed") else 1.0        # --recap_speed: a longer stretch, played faster
-            render_clip(ffmpeg, m["file"], m["start"], secs, out, cap_png, layout, m["size"], audio=has_audio(m["file"]) and not mute_orig and spd <= 1.2, speed=spd, grade=grade, fade_s=fade_s, layers=lay, layer_fade=((0.2, 0.25) if fast else (0.7, 0.4)), rotate=m.get("rotate", 0), fix=fix_for(m["file"]), **zoom_kw(), **trans_kw(m["file"], m["start"], secs, m["size"]))
+            c_start, secs = fit_in_file(m["start"], secs, dur_of.get(m["file"]))
+            spd = timelapse_factor(extras.get("speed"), secs, dur_of.get(m["file"], 0.0) - c_start) if extras.get("speed") else 1.0        # --recap_speed: a longer stretch, played faster
+            render_clip(ffmpeg, m["file"], c_start, secs, out, cap_png, layout, m["size"], audio=has_audio(m["file"]) and not mute_orig and spd <= 1.2, speed=spd, grade=grade, fade_s=fade_s, layers=lay, layer_fade=((0.2, 0.25) if fast else (0.7, 0.4)), rotate=m.get("rotate", 0), fix=fix_for(m["file"]), **zoom_kw(), **trans_kw(m["file"], c_start, secs, m["size"]))
             note_shot(out, m["size"], [cap_png] + [png for png, _ts in lay or []])
             parts.append(out)
         print(f"[Log] {K['unit']} {di} rendered.")
@@ -2388,7 +2474,8 @@ def _make_recap(paths, session_dir, trip_name, note, total_seconds, music, visua
         else:
             end_cap = caption_png(os.path.join(parts_dir, "end_cap.png"), end_text, y_frac=0.42, size=104, lower=False) if end_text else None      # big and centred: the payoff line
         end_card = os.path.join(parts_dir, "end.mp4")
-        render_clip(ffmpeg, end_pick["file"], end_pick["start"], closing_s, end_card, end_cap, layout, end_pick["size"], audio=has_audio(end_pick["file"]) and not mute_orig,
+        e_start, e_secs = fit_in_file(end_pick["start"], closing_s, dur_of.get(end_pick["file"]))
+        render_clip(ffmpeg, end_pick["file"], e_start, e_secs, end_card, end_cap, layout, end_pick["size"], audio=has_audio(end_pick["file"]) and not mute_orig,
                     cap_from=0.2, cap_gap=0.2, grade=grade, fade_s=max(fade_s, 0.4), rotate=end_pick.get("rotate", 0), fix=fix_for(end_pick["file"]))
         note_shot(end_card, end_pick["size"], [end_cap] if end_cap else [])
         parts.append(end_card)
@@ -2578,7 +2665,7 @@ def run(args, target_bitrate=None, target_preset=None):
     except PlanWritten as e:
         print(f"[Log] Shots picked and written to {e} for review. Nothing was rendered (--recap_plan_only).")
         sys.exit(0)
-    except (ValueError, RuntimeError) as e:
+    except (ValueError, RuntimeError, OSError) as e:
         print(f"[Error] {e}")
         sys.exit(1)
     sys.exit(0)
