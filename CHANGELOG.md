@@ -4,6 +4,17 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+## 0.9.4 (2026-11-25)
+
+**Highlights:** a tighter shorts and highlights flow (clips end on a finished sentence and near the asked length, the highlights reel covers the whole video and keeps its best moment, picks carry the reason they were chosen), the case explainer's script step matches layouts to the material and its pictures pop in on time, eight more built-in icons, nine clearer MCP tools, grouped `--help`, and audits of dubbing, cut and re-render, recap, photo reel, music, filter and the idea-to-video modes.
+
+**Changed behaviour:**
+- The MCP tools and the REST API check their input before starting: a `source_video` must be an http(s) link or an existing file, a value may not start with `-`, and an unknown mode or option is refused with a message that names the allowed values.
+- A failed voice stops an idea-to-video run with an error instead of producing a short captioned "Audio Unavailable".
+- Clips and reel moments now end on a full stop more often, which can make a short a few seconds longer or shorter than the asked length.
+- `clip_report.md` is written on every clip run (it needed `--clip_report` before).
+- `--help` is grouped into sections; no flag was added, removed or renamed.
+
 - Case explainer: a full date ("28 June 1919", "March 1918") is a date, not a number for a big card: such labels are dropped from counters, and a section whose labels are all dates becomes a timeline.
 
 - Recap: videos given twice count once and a path that gives nothing is named; "Holiday 2024" is no longer day 2024; a date in a file name is not a time of day; a shot is moved earlier instead of running past its video; a day keeps one shot even when all are dark; the names after a day whose videos could not be read no longer move onto other days; an iPhone location tag is read; long place names are broken instead of running off the card; the loudness measure gives one value per second (it gave six, so the loudest moments were picked from the wrong seconds).
