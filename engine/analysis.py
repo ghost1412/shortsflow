@@ -1482,6 +1482,13 @@ def deduplicate_highlights(highlights, min_overlap_sec=5.0):
     kept.sort(key=lambda x: float(x['start']))
     return kept
 
+def finish_reel(highlights, transcript, target=None):
+    """The highlights reel's moments after the sentence snapping and polishing process_source_video applies (kept in one place so the
+    offline benchmark, scripts/reel_bench.py, measures the same thing)."""
+    from engine.highlight_quality import snap_highlights, polish_reel
+    return polish_reel(snap_highlights(highlights, transcript, min_len=8.0, max_len=180.0), transcript, target)
+
+
 def order_for_mode(highlights, mode):
     """Shorts stay best-score-first (clip 1 is the best one); long-form reels play in the order things happen."""
     if mode == "shorts" or not highlights:
@@ -1966,11 +1973,12 @@ def process_source_video(video_path, output_dir, mode="shorts", clip_count=5, ta
             with open(transcript_path, 'r', encoding='utf-8') as f:
                 highlights = snap_highlights(highlights, json.load(f), **snap_opts)
             if mode == "long":
-                from engine.highlight_quality import merge_close_moments
+                from engine.highlight_quality import polish_reel
                 before = len(highlights)
-                highlights = merge_close_moments(highlights)
-                if len(highlights) < before:
-                    print(f"[Log] Highlights reel: joined {before - len(highlights)} moment(s) that were only seconds apart.")
+                with open(transcript_path, 'r', encoding='utf-8') as f:
+                    highlights = polish_reel(highlights, json.load(f), target_duration)
+                if len(highlights) != before:
+                    print(f"[Log] Highlights reel: {before} moment(s) became {len(highlights)} (neighbours joined, housekeeping openers dropped).")
             moved = sum(1 for h in highlights if h.get('snapped') and (h['start'] != h.get('orig_start') or h['end'] != h.get('orig_end')))
             print(f"[Log] Boundary snapping: {moved} of {len(highlights)} clip(s) moved to sentence boundaries.")
         except Exception as e:

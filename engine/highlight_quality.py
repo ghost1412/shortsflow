@@ -356,3 +356,119 @@ def merge_close_moments(highlights, gap=3.0):
         else:
             out.append(dict(h))
     return out
+
+
+# ---------------------------------------------------------------- highlights reel: the quality of each moment
+
+REEL_MERGE_GAP = 12.0      # moments of a reel closer than this become one (a crossfade between neighbours looks like a stutter)
+REEL_MIN_MOMENT = 15.0     # a reel moment is never cut or skipped down below this
+
+
+def bad_opener(text):
+    """True when a sentence is a poor first line for a reel moment: housekeeping talk ("thank you very much", a voice check), a mic
+    check, a connective / filler first word, or stutter."""
+    text = str(text or "")
+    return bool(weak_opening(text) or boilerplate_hits(text) or MIC_CHECK.search(text) or disfluency(text) > 0.35)
+
+
+def clean_reel_openings(moments, spans, min_len=REEL_MIN_MOMENT, skip_shift=20.0):
+    """Reel moments start on a real first line: leading housekeeping / stutter / filler sentences are skipped (at most 3, 20 s, and never
+    below `min_len`); a moment that still opens on housekeeping is dropped when at least two others remain. Moments the user chose are kept."""
+    out = []
+    starts = [s for s, _, _ in spans]
+    for m in moments:
+        m = dict(m)
+        if m.get("user_moment") or not spans:
+            out.append(m)
+            continue
+        origin = float(m["start"])
+        i = next((k for k, (s, _, _) in enumerate(spans) if s >= origin - 0.05), None)
+        for _ in range(3):
+            if i is None or i + 1 >= len(spans) or not bad_opener(spans[i][2]):
+                break
+            cand = starts[i + 1]
+            if cand - origin > skip_shift or float(m["end"]) - cand < min_len:
+                break
+            i += 1
+            m["start"] = round(cand, 2)
+        out.append(m)
+    keep = [m for m in out if m.get("user_moment") or not boilerplate_hits(_first_sentence(m, spans))]
+    return keep if len(keep) >= 2 or len(out) < 2 else out
+
+
+def _first_sentence(m, spans):
+    s = float(m["start"])
+    return next((t for a, _, t in spans if a >= s - 0.05), "")
+
+
+def _tail_end(end, starts, tail=0.4):
+    nxt = [s for s in starts if s > end + 0.01]
+    return round(min(end + tail, nxt[0] - 0.05) if nxt else end + tail, 2)
+
+
+def fit_reel_length(moments, spans, target, tolerance=0.08, min_len=REEL_MIN_MOMENT, max_grow=25.0):
+    """Bring a reel to within `tolerance` of `target` seconds by moving moment ENDS between sentences only: too long, the longest moment
+    stops sooner (never below `min_len`); too short, the best moments run on by whole sentences (up to `max_grow` s each, never into the
+    next moment, never into housekeeping talk). Every end stays on a sentence end."""
+    ms = [dict(m) for m in sorted(moments, key=lambda x: float(x["start"]))]
+    if not ms or not target or not spans:
+        return ms
+    ends = [e for _, e, _ in spans]
+    texts = [t for _, _, t in spans]
+    starts = [s for s, _, _ in spans]
+    ceiling, floor = target * (1 + tolerance), target * (1 - tolerance)
+    total = lambda: sum(float(m["end"]) - float(m["start"]) for m in ms)      # noqa: E731
+    for _ in range(40):
+        over = total() - ceiling
+        if over <= 0:
+            break
+        movable = [m for m in ms if not m.get("user_moment")]
+        if not movable:
+            break
+        m = max(movable, key=lambda x: float(x["end"]) - float(x["start"]))
+        s, e = float(m["start"]), float(m["end"])
+        cuts = [x for x, t in zip(ends, texts) if s + min_len <= x < e - 0.5 and not trails_off_end(t)]
+        if not cuts:
+            break
+        enough = [x for x in cuts if e - x >= over]
+        new = max(enough) if enough else min(cuts)
+        m["end"] = _tail_end(new, starts)
+        m["trimmed_to_fit"] = True
+    grew = {}
+    for _ in range(60):
+        if total() >= floor:
+            break
+        progress = False
+        for idx in sorted(range(len(ms)), key=lambda k: -_score(ms[k])):
+            m = ms[idx]
+            if m.get("user_moment") or grew.get(idx, 0.0) >= max_grow:
+                continue
+            e = float(m["end"])
+            limit = float(ms[idx + 1]["start"]) - 1.0 if idx + 1 < len(ms) else float("inf")
+            k = next((j for j, (a, _, _) in enumerate(spans) if a >= e - 0.5), None)
+            if k is None or spans[k][1] > limit or boilerplate_hits(spans[k][2]) or trails_off_end(spans[k][2]):
+                continue
+            add = spans[k][1] - e
+            if total() + add > ceiling or grew.get(idx, 0.0) + add > max_grow + 5.0:
+                continue
+            m["end"] = _tail_end(spans[k][1], starts)
+            grew[idx] = grew.get(idx, 0.0) + add
+            progress = True
+            if total() >= floor:
+                break
+        if not progress:
+            break
+    return ms
+
+
+def polish_reel(moments, transcript, target=None):
+    """What a highlights reel's moments go through after the sentence snapping: neighbours a few seconds apart become one moment,
+    each moment opens on a real first line, and the length lands within the target with every end still on a sentence end."""
+    spans = sentence_spans(transcript)
+    if not spans:
+        return moments
+    ms = merge_close_moments(moments, gap=REEL_MERGE_GAP)
+    ms = clean_reel_openings(ms, spans)
+    if target:
+        ms = fit_reel_length(ms, spans, float(target))
+    return sorted(ms, key=lambda h: float(h["start"]))
