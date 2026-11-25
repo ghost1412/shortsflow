@@ -414,16 +414,25 @@ def has_power(label):
     return bool(re.search(r"\^|[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]", str(label)))
 
 
+_MONTHS = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
+_DATE_LEAD = re.compile(rf"\s*(?:\d{{1,2}}(?:st|nd|rd|th)?\s+(?:{_MONTHS})\.?,?\s+\d{{3,4}}|(?:{_MONTHS})\.?\s+(?:\d{{1,2}}(?:st|nd|rd|th)?,?\s+)?\d{{3,4}})\b", re.I)
+
+
+def is_dated(label):
+    """Whether a label starts with a date: a calendar year (`is_year`) or a full date ("28 June 1919", "June 28, 1919", "March 1918"): a point in time, not a quantity."""
+    m = _NUMBER_LEAD.match(str(label))
+    return bool(m and is_year(m)) or bool(_DATE_LEAD.match(str(label)))
+
+
 def bad_counter_label(label):
     """Whether a label cannot be a counter card: it starts with a calendar year (`is_year`) or holds an exponent (`has_power`)."""
-    m = _NUMBER_LEAD.match(str(label))
-    return has_power(label) or bool(m and is_year(m))
+    return has_power(label) or is_dated(label)
 
 
 def drop_years(labels):
     """The labels without the ones that start with a calendar year (see `is_year`): a counter card of "1672" says nothing. The labels are returned as they are
     when every one is a year (something is better than nothing)."""
-    kept = [x for x in labels if not ((m := _NUMBER_LEAD.match(str(x))) and is_year(m))]
+    kept = [x for x in labels if not is_dated(x)]
     return kept or list(labels)
 
 
@@ -629,7 +638,7 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
         scene = pick_layout(sec["scene"], row.get("scene"), previous, layouts)
         wants_picture = scene == "illustration"
         wants_counters = scene == "counters"
-        if wants_counters and layouts == "auto" and len(labels) >= 3 and previous != "timeline" and all((m := _NUMBER_LEAD.match(x)) and is_year(m) for x in labels):
+        if wants_counters and layouts == "auto" and len(labels) >= 3 and previous != "timeline" and all(is_dated(x) for x in labels):
             scene, wants_counters = "timeline", False            # every label is a dated event: a timeline, not big numbers
         if scene == "counters":
             labels = drop_unreadable(drop_years(labels))     # a year is a date, and a raw exponent is not a number to show big

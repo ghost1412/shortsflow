@@ -549,3 +549,11 @@ def test_the_prompt_asks_for_layouts_by_kind_and_no_invented_causes():
     prompt = cs.build_prompt("Topic", cs.PRESETS["explainer"], [{"id": "s1", "ref": "r", "text": "t"}], "auto")
     assert "dated events in order" in prompt and "Never pick counters" in prompt and "ONLY when the sources state that very cause" in prompt
     assert "then, that's why" not in prompt and "never open a section by restating its question" in prompt
+
+
+def test_a_full_date_is_a_date_not_a_number_to_show_big():
+    for label in ("28 June 1919 signing date", "June 28, 1919 armistice", "March 1918 offensive", "11 Nov 1918", "1919 treaty"):
+        assert cs.is_dated(label) and cs.bad_counter_label(label), label
+    for label in ("28 sites in June", "300,000 computers", "1500 servers", "5 years after the war", "May 2 million votes"[:5]):
+        assert not cs.is_dated(label), label
+    assert cs.drop_years(["28 June 1919 signing", "6 times higher prices", "150 years"]) == ["6 times higher prices", "150 years"]

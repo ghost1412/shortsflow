@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: a full date ("28 June 1919", "March 1918") is a date, not a number for a big card: such labels are dropped from counters, and a section whose labels are all dates becomes a timeline.
+
 - Recap: videos given twice count once and a path that gives nothing is named; "Holiday 2024" is no longer day 2024; a date in a file name is not a time of day; a shot is moved earlier instead of running past its video; a day keeps one shot even when all are dark; the names after a day whose videos could not be read no longer move onto other days; an iPhone location tag is read; long place names are broken instead of running off the card; the loudness measure gives one value per second (it gave six, so the loudest moments were picked from the wrong seconds).
 
 - TRIVIA: the green "CORRECT!" always marked option C (the renderer wants the letter and was given the text); it now marks the right one. An answer given as a letter, an `options` list, numbers and "A) ..." prefixes are understood; a question without three different options and an answer among them is written again.
