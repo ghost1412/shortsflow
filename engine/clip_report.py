@@ -4,7 +4,7 @@ import csv
 import os
 
 FORMATS = ("md", "csv", "both")
-COLUMNS = ("clip", "title", "start", "end", "duration_s", "score", "label", "hook", "file", "thumbnail")
+COLUMNS = ("clip", "title", "start", "end", "duration_s", "score", "label", "hook", "reason", "file", "thumbnail")
 
 
 def _label(score):
@@ -53,6 +53,7 @@ def build_rows(highlights, files, meta, session_dir):
             "start": clock(start), "end": clock(end), "duration_s": duration,
             "score": "" if score is None else score, "label": _label(score),
             "hook": (h.get("hook_text") or "").strip(),
+            "reason": "a fixed window, not a picked moment (the analysis failed)" if h.get("fallback") else " ".join(str(h.get("reason") or "").split())[:240],
             "file": _rel(clip_path, session_dir), "thumbnail": _rel(thumb, session_dir),
         })
     return rows
@@ -67,11 +68,11 @@ def to_markdown(rows, source=""):
     if source:
         lines += [f"Source: `{source}`", ""]
     lines += [f"{len(rows)} clip(s).", ""]
-    lines += ["| # | Title | Time | Score | File | Thumbnail |", "| --- | --- | --- | --- | --- | --- |"]
+    lines += ["| # | Title | Time | Score | Why it was picked | File | Thumbnail |", "| --- | --- | --- | --- | --- | --- | --- |"]
     for r in rows:
         score = f"{r['label']} ({r['score']})" if r["score"] != "" else r["label"]
         lines.append(f"| {r['clip']} | {_md_cell(r['title'])} | {r['start']}-{r['end']} ({r['duration_s']} s) | {score} | "
-                     f"{_md_cell(r['file'])} | {_md_cell(r['thumbnail'])} |")
+                     f"{_md_cell(r['reason'])} | {_md_cell(r['file'])} | {_md_cell(r['thumbnail'])} |")
     return "\n".join(lines) + "\n"
 
 

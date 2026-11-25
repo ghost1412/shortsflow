@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Clips and highlights: every run now writes clip_report.md (it was only written with `--clip_report`), and the report has a "Why it was picked" column (the reason the picker gave, or a note that the clip is a fixed window because the analysis failed).
+
 - Clips and highlights: after transcribing, a warning names any stretch of 90 seconds or more with no speech found (music, silence, or the speech model skipping it), so a clip that never comes from there is no longer a mystery.
 
 - Case explainer: when Whisper's word times for a narrated section do not look like speech (a word of eleven seconds, the rest at 0.05 s), it listens again without the hint, and as a last resort the words are spread by length, so the presenter's mouth and the captions follow the voice from the first second.

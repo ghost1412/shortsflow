@@ -73,3 +73,10 @@ def test_flags_exist_on_the_pipeline_parser():
     import re
     src = open(os.path.join(os.path.dirname(__file__), "..", "shortsflow", "_main.py"), encoding="utf-8").read()
     assert re.search(r'"--clip_report", nargs="\?", const="md"', src) and '"--zh_script"' in src
+
+
+def test_the_report_says_why_each_moment_was_picked_and_marks_a_fixed_window():
+    rows = cr.build_rows([{"start": 5, "end": 40, "viral_score": 80, "reason": "A surprising\nadmission about money"}, {"start": 0, "end": 30, "fallback": True}], [], [], "s")
+    assert rows[0]["reason"] == "A surprising admission about money" and "not a picked moment" in rows[1]["reason"]
+    md = cr.to_markdown(rows)
+    assert "Why it was picked" in md and "A surprising admission about money" in md

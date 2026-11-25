@@ -671,14 +671,14 @@ def write_outputs(args, session_dir, highlights, extracted_files, transcript_pat
     with open(os.path.join(session_dir, "metadata.json"), "w", encoding="utf-8") as f:
         json.dump(highlights_meta, f, indent=4)
         
-    if getattr(args, "clip_report", None):
-        from engine.clip_report import build_rows, write_report
-        try:
-            report_rows = build_rows(highlights, [] if reel_mode else extracted_files, highlights_meta, session_dir)
-            for path in write_report(report_rows, session_dir, args.clip_report, source=str(args.source_video)):
-                print(f"[Log] Clip report: {path}")
-        except (OSError, ValueError) as e:
-            print(f"[Warning] Could not write the clip report: {e}")
+    # every run writes clip_report.md (what was picked and why); --clip_report csv|both adds the spreadsheet
+    from engine.clip_report import build_rows, write_report
+    try:
+        report_rows = build_rows(highlights, [] if reel_mode else extracted_files, highlights_meta, session_dir)
+        for path in write_report(report_rows, session_dir, getattr(args, "clip_report", None) or "md", source=str(args.source_video)):
+            print(f"[Log] Clip report: {path}")
+    except (OSError, ValueError) as e:
+        print(f"[Warning] Could not write the clip report: {e}")
 
     if getattr(args, "output_json", None):
         output_json_data = {
