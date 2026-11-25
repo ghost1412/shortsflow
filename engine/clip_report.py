@@ -53,7 +53,7 @@ def build_rows(highlights, files, meta, session_dir):
             "start": clock(start), "end": clock(end), "duration_s": duration,
             "score": "" if score is None else score, "label": _label(score),
             "hook": (h.get("hook_text") or "").strip(),
-            "reason": "a fixed window, not a picked moment (the analysis failed)" if h.get("fallback") else " ".join(str(h.get("reason") or "").split())[:240],
+            "reason": "a fixed window, not a picked moment (the analysis failed)" if h.get("fallback") else " ".join(str(h.get("reason") or h.get("llm_reason") or "").split())[:240],
             "file": _rel(clip_path, session_dir), "thumbnail": _rel(thumb, session_dir),
         })
     return rows

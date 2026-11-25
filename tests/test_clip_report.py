@@ -80,3 +80,8 @@ def test_the_report_says_why_each_moment_was_picked_and_marks_a_fixed_window():
     assert rows[0]["reason"] == "A surprising admission about money" and "not a picked moment" in rows[1]["reason"]
     md = cr.to_markdown(rows)
     assert "Why it was picked" in md and "A surprising admission about money" in md
+
+
+def test_the_reason_from_the_model_ranking_is_used_when_the_picker_gave_none():
+    rows = cr.build_rows([{"start": 5, "end": 40, "viral_score": 80, "llm_reason": "Hilarious and relatable story"}], [], [], "s")
+    assert rows[0]["reason"] == "Hilarious and relatable story"
