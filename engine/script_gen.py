@@ -577,6 +577,15 @@ def with_best_of_n(func, validator, n=3):
 
 # --- Specific Validators ---
 
+def _text(v):
+    return v.strip() if isinstance(v, str) else ""
+
+
+def _not_json(data):
+    """True for the parser's raw-text fallback (robust_json_parse strategy 5): a refusal or chatter, not a script."""
+    return data.get("title") == "Viral Update" and data.get("story") == data.get("script")
+
+
 def validate_mixed_facts(data):
     """Exactly 3 short facts with exactly one lie - otherwise the 'spot the lie' premise breaks."""
     if not isinstance(data, dict) or not data.get("hook"):
@@ -592,16 +601,20 @@ def validate_mixed_facts(data):
     return sum(1 for f in facts if f["truth"] is False) == 1
 
 def validate_story(data):
-    if not isinstance(data, dict): return False
+    if not isinstance(data, dict) or _not_json(data): return False
     story = data.get("story", "")
     if isinstance(story, list):
-        story = " ".join(story)
+        story = " ".join(str(s) for s in story)
     elif not isinstance(story, str):
         story = str(story)
     return "title" in data and len(story.split()) > 20
 
 def validate_wyr(data):
-    return isinstance(data, dict) and "option_a" in data and "option_b" in data
+    """Two real, different options: an empty, null, list or repeated one would be read out as "None" or "X or X"."""
+    if not isinstance(data, dict):
+        return False
+    a, b = _text(data.get("option_a")), _text(data.get("option_b"))
+    return bool(a) and bool(b) and a.lower() != b.lower()
 
 def validate_reddit(data):
     if not isinstance(data, dict): return False
@@ -614,14 +627,50 @@ def validate_reddit(data):
         return False  # the parser's raw-text fallback, not a story
     return len(story.split()) >= 40 and "?" in story  # long enough to tell a story, and it asks for judgment
 
+def normalize_trivia(data):
+    """Puts a trivia reply in the shape the video needs: opt_a/opt_b/opt_c as text and `answer` as the exact text of one of them.
+    Models also reply with an `options` list, numbers, "A) ..." prefixes, or the answer as a letter ("B", "B) Mars")."""
+    if not isinstance(data, dict):
+        return data
+    keys = ("opt_a", "opt_b", "opt_c")
+    opts = data.get("options")
+    if isinstance(opts, list) and len(opts) == 3 and not any(data.get(k) for k in keys):
+        data.update(zip(keys, opts))
+    for k in keys + ("answer",):
+        if isinstance(data.get(k), (int, float)) and not isinstance(data[k], bool):
+            data[k] = str(data[k])
+    texts = [_text(data.get(k)) for k in keys]
+    if not all(texts):
+        return data
+    prefixed = [re.match(r"(?:option\s+)?([abc])\s*[).:]\s*(\S.*)$", t, re.I | re.S) for t in texts]
+    ans = _text(data.get("answer"))
+    if all(prefixed) and [m.group(1).lower() for m in prefixed] == ["a", "b", "c"]:
+        texts = [m.group(2) for m in prefixed]
+    data.update(zip(keys, texts))
+    low = [t.lower() for t in texts]
+    m = re.match(r"(?:option\s+)?([abc])\s*(?:[).:]\s*(.*))?$", ans, re.I | re.S)
+    if ans.lower() in low:
+        data["answer"] = texts[low.index(ans.lower())]
+    elif m:
+        pick = texts["abc".index(m.group(1).lower())]
+        if not m.group(2) or m.group(2).strip().lower() == pick.lower():    # "B) Mars" must agree with option B
+            data["answer"] = pick
+    return data
+
+
 def validate_trivia(data):
-    return isinstance(data, dict) and "question" in data and "answer" in data
+    """A question, three different options and an answer that is one of them (else the video reveals nonsense)."""
+    if not isinstance(data, dict) or not _text(data.get("question")):
+        return False
+    opts = [_text(data.get(k)) for k in ("opt_a", "opt_b", "opt_c")]
+    return all(opts) and len({o.lower() for o in opts}) == 3 and data.get("answer") in opts
 
 def validate_jwst_script(data):
-    return isinstance(data, dict) and "hook" in data and "story" in data
+    return isinstance(data, dict) and not _not_json(data) and bool(_text(data.get("hook"))) and bool(_text(data.get("story")))
 
 def validate_news(data):
-    return isinstance(data, dict) and "story" in data and len(data.get("story", "").split()) > 10
+    return (isinstance(data, dict) and not _not_json(data) and bool(_text(data.get("hook")))      # the video script reads the hook
+            and len(_text(data.get("story")).split()) > 10)
 
 def validate_sound_challenge(data):
     return isinstance(data, dict) and "hook" in data and "sound_query" in data
@@ -630,7 +679,7 @@ def validate_odd_one_out(data):
     return isinstance(data, dict) and "hook" in data and "theme" in data
 
 def validate_riddle(data):
-    return isinstance(data, dict) and "question" in data and ("answer" in data or "hint" in data)
+    return isinstance(data, dict) and bool(_text(data.get("question"))) and bool(_text(data.get("answer")) or _text(data.get("hint")))
 
 
 def validate_funny_explainer(data):
@@ -875,7 +924,10 @@ def generate_story(category="general", hero=None, hero_name=None, companion=None
     
     def llm_call(attempt):
         response_text = get_llm_response(prompt, temperature=0.7, max_tokens=600)
-        return robust_json_parse(response_text)
+        data = robust_json_parse(response_text)
+        if isinstance(data, dict) and isinstance(data.get("story"), list):
+            data["story"] = " ".join(str(s) for s in data["story"])      # paragraphs as a list were read out as "['...', '...']"
+        return data
     
     return with_best_of_n(llm_call, validate_story, n=3)
 
@@ -889,7 +941,7 @@ def _clean_json_string(s):
         return m.group(0).replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
     s = re.sub(r'"(?:[^"\\]|\\.)*?"', fix_whitespace, s, flags=re.DOTALL)
     # 3. Strip comments
-    s = re.sub(r'//.*?\n', '', s)
+    s = re.sub(r'(?<!:)//.*?\n', '', s)      # not the // of https://
     s = re.sub(r'/\*.*?\*/', '', s, flags=re.DOTALL)
     # 4. Fix trailing commas (e.g. [1, 2, ])
     s = re.sub(r',\s*([\]\}])', r'\1', s)
@@ -902,6 +954,8 @@ def robust_json_parse(output):
 
     # Strip reasoning <think>...</think> blocks from models like Qwen3 / DeepSeek-R1
     output = re.sub(r'<think>.*?</think>', '', output, flags=re.DOTALL).strip()
+    if not output.startswith(("{", "[")):                             # some servers drop the opening tag
+        output = re.sub(r'^.*</think>', '', output, flags=re.DOTALL).strip()
     if not output: return None
 
     def try_parse(candidate):
@@ -1214,7 +1268,7 @@ Format as JSON ONLY:
 
     def llm_call(attempt):
         response_text = get_llm_response(prompt, temperature=0.2, max_tokens=400)
-        return robust_json_parse(response_text)
+        return normalize_trivia(robust_json_parse(response_text))
 
     from engine import fact_check
     ask = lambda q: get_llm_response(q, temperature=0.0, max_tokens=200)
@@ -1291,6 +1345,8 @@ def normalize_emoji_guess(data):
             break
 
     emojis = data.get("emojis") or data.get("emoji") or data.get("icon") or data.get("icons")
+    if isinstance(emojis, list):
+        emojis = " ".join(str(e) for e in emojis)         # str(list) put its brackets and quotes on screen
     answer = data.get("answer") or data.get("movie") or data.get("character") or data.get("title") or data.get("name")
     script = data.get("script") or data.get("voiceover") or data.get("text") or data.get("speech")
     hint = data.get("hint") or data.get("category") or data.get("clue") or "Guess the item!"
@@ -1708,7 +1764,10 @@ Format:
 """
     def llm_call(attempt):
         response_text = get_llm_response(prompt, temperature=0.7, max_tokens=256)
-        return robust_json_parse(response_text)
+        data = robust_json_parse(response_text)
+        if isinstance(data, dict) and not _text(data.get("hook")):
+            data["hook"] = "GENIUS TEST! 🧠"     # the video script reads riddle_data["hook"]
+        return data
 
     try:
         return with_best_of_n(llm_call, validate_riddle, n=3)

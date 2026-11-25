@@ -22,16 +22,29 @@ def clean_for_tts(text):
     text = re.sub(r'\(\s*\)', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
     
-    # 4. Strip emojis but keep useful symbols (%, $)
+    # 3b. Typographic marks the filter below would delete ("don’t" -> "dont", "Q&A" -> "QA", "100°C" -> "100C")
+    text = re.sub("[\u2018\u2019`]", "'", text)
+    text = re.sub("[\u201c\u201d]", '"', text).replace("\u2026", "...")
+    text = re.sub("(?<=\\d)\\s*\u2013\\s*(?=\\d)", "-", text)               # a range: 1990-1995
+    text = re.sub("(?<=\\w)\\s*[\u2013\u2014]\\s*(?=\\w)", ", ", text)       # a dash between words
+    text = re.sub("(?<=\\w)\\s*&\\s*(?=\\w)", " and ", text)
+    text = re.sub("(?<=\\w)\\s*\\+\\s*(?=\\w)", " plus ", text)
+    text = re.sub("(?<=\\d)\\s*\u00b0\\s*([CF]\\b)?\\s*", lambda m: " degrees " + {"C": "Celsius ", "F": "Fahrenheit "}.get(m.group(1), ""), text)
+    text = text.replace("\ufe0e", "").replace("\ufe0f", "")                  # emoji variation marks, left behind as a word of their own
+
+    # 4. Strip emojis but keep useful symbols (%, $ and other currencies)
     result = []
     allowed_chars = set(".,!?;:()-'\" %$")
-    for c in text:
+    for i, c in enumerate(text):
         if ord(c) < 127:
-            if c.isalnum() or c.isspace() or c in allowed_chars:
-                result.append(c)
-        elif unicodedata.category(c)[0] in "LMN" or c in "।॥。":
-            result.append(c)                   # letters of any language (Hindi, accents...), never emoji
-    return "".join(result)
+            keep = c.isalnum() or c.isspace() or c in allowed_chars
+        else:
+            keep = unicodedata.category(c)[0] in "LMN" or unicodedata.category(c) == "Sc" or c in "।॥。"   # letters of any language, never emoji
+        if keep:
+            result.append(c)
+        elif unicodedata.category(c) != "Cf" and text[i - 1:i].isalnum() and text[i + 1:i + 2].isalnum():
+            result.append(" ")                 # "24/7" is two words, not 247
+    return re.sub(r"\s+", " ", "".join(result)).strip()
 
 def add_dramatic_pauses(text):
     """Injects punctuation-based breaks that edge-tts naturally interprets."""
@@ -54,7 +67,7 @@ def split_hook(text):
         return parts[0].strip(), parts[1].strip()
 
     # fallback: first sentence as hook
-    sentences = re.split(r'[.!?]', text, maxsplit=1)
+    sentences = re.split(r'[.!?](?=\s|$)', text, maxsplit=1)        # not the dot of 3.14
     if len(sentences) > 1:
         return sentences[0].strip(), sentences[1].strip()
 
@@ -87,6 +100,22 @@ def group_subtitles(subtitles):
         })
 
     return grouped
+
+
+def _audio_seconds(path):
+    """Length of an audio file, or None when it cannot be read."""
+    try:
+        try:
+            from moviepy.audio.io.AudioFileClip import AudioFileClip
+        except ImportError:
+            from moviepy.editor import AudioFileClip
+        ac = AudioFileClip(path)
+        try:
+            return ac.duration or None
+        finally:
+            ac.close()
+    except Exception:
+        return None
 
 
 def generate_voice_elevenlabs(text, output_audio="assets/voice.mp3", output_subs="assets/subs.json", voice_id=None, api_key=None):
@@ -206,9 +235,10 @@ def generate_voice_voicestudio(text, output_audio="assets/voice.mp3", output_sub
     if "json" in content_type:
         data = res.json()
         audio_b64 = data.get("audio") or data.get("audio_base64")
-        if audio_b64:
-            with open(output_audio, "wb") as f:
-                f.write(base64.b64decode(audio_b64))
+        if not audio_b64:
+            raise RuntimeError("the voice server answered without audio")
+        with open(output_audio, "wb") as f:
+            f.write(base64.b64decode(audio_b64))
         if data.get("subtitles"):
             subtitles = data["subtitles"]
     else:
@@ -408,21 +438,21 @@ def generate_voice(text, output_audio="assets/voice.mp3", output_subs="assets/su
             tts.save(output_audio)
             
             words = clean_for_tts(text).split()
-            duration = max(2.0, len(words) * 0.35)
+            duration = _audio_seconds(output_audio) or max(2.0, len(words) * 0.35)
             avg_w = duration / max(1, len(words))
             subtitles = [{"word": w, "start": round(i*avg_w, 3), "end": round((i+1)*avg_w, 3), "duration": round(avg_w, 3)} for i, w in enumerate(words)]
             with open(output_subs, "w", encoding="utf-8") as f:
                 json.dump(subtitles, f, indent=2)
             return output_audio, output_subs
         except Exception as ge:
-            print(f"[Warning] gTTS fallback failed ({ge}). Creating silent audio fallback.")
-            # Generate minimal silent MP3 audio via FFmpeg fallback
-            import subprocess
-            subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", "5", output_audio], capture_output=True)
-            subtitles = [{"word": "Audio", "start": 0.0, "end": 2.5, "duration": 2.5}, {"word": "Unavailable", "start": 2.5, "end": 5.0, "duration": 2.5}]
-            with open(output_subs, "w", encoding="utf-8") as f:
-                json.dump(subtitles, f, indent=2)
-            return output_audio, output_subs
+            # No silent stand-in: it went out as a finished 5 s video captioned "Audio Unavailable". Callers stop on (None, None);
+            # the half-written file is removed because some of them only look whether it exists.
+            print(f"[Error] No voice could be made: edge-tts, Kokoro and gTTS all failed (gTTS: {ge}).")
+            try:
+                os.remove(output_audio)
+            except OSError:
+                pass
+            return None, None
         
     return result["audio"], result["subs"]
 

@@ -13,7 +13,7 @@ LONG = " ".join(["word"] * 40)
 
 GOOD = {
     "generate_wyr": ({"option_a": "Eat soup with a fork forever", "option_b": "Wear wet socks forever"}, ()),
-    "generate_trivia": ({"question": "Which planet has the most moons?", "answer": "Saturn", "options": ["Saturn", "Mars"]}, ()),
+    "generate_trivia": ({"question": "Which planet has the most moons?", "answer": "Saturn", "opt_a": "Saturn", "opt_b": "Mars", "opt_c": "Venus"}, ()),
     "generate_quote": ({"quote": "The obstacle is the way forward for anyone", "author": "Marcus"}, ()),
     "generate_reddit_story": ({"title": "AITA for eating lunch", "story": LONG + " AITA?"}, ()),
     "generate_story": ({"title": "The last lighthouse", "story": LONG}, ()),
@@ -30,6 +30,7 @@ BAD = {
 @pytest.fixture(autouse=True)
 def no_hf_key(monkeypatch):
     monkeypatch.setattr(sg, "HF_API_KEY", None)
+    monkeypatch.setattr("engine.fact_check.enabled", lambda: False)       # counts replies; the fact check is one more call
 
 
 @pytest.mark.parametrize("name", sorted(GOOD))

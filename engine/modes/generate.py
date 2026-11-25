@@ -15,6 +15,36 @@ from engine.media_gen import download_image, download_sfx, fetch_jwst_images, is
 from engine.video_gen import create_shorts_video
 
 
+def probe_duration(path):
+    """Seconds of a media file from ffprobe, or None when it cannot be read (no ffprobe, bad file, empty or odd output)."""
+    try:
+        cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        d = float(result.stdout.strip())
+    except Exception:
+        return None
+    return d if 0 < d < float("inf") else None
+
+
+def narration_duration(audio_path, subs_path):
+    """Length of the narration, which sizes the whole video. When ffprobe cannot read it, the end of the last spoken word is used;
+    with neither, the run stops (a 10 s guess used to size the backgrounds wrongly)."""
+    d = probe_duration(audio_path)
+    if d is not None:
+        return d
+    try:
+        with open(subs_path, "r", encoding="utf-8") as f:
+            words = json.load(f)
+        end = max(float(w["end"]) for w in words)
+        if end > 0:
+            print(f"[Warning] Could not read the narration length with ffprobe; using the last word's end ({end:.1f} s).")
+            return end
+    except Exception:
+        pass
+    print(f"[Error] Could not measure the narration audio {audio_path} (is ffprobe installed, and is the file valid?).")
+    sys.exit(1)
+
+
 def ensure_dict(data):
     if isinstance(data, list) and len(data) > 0:
         data = data[0]
@@ -558,6 +588,10 @@ def run(args, target_bitrate, target_preset):
             print("[Log] Skipping this video - exiting non-zero so the scheduled run is flagged.")
             sys.exit(1)
 
+    if not isinstance(full_script, str) or not full_script.strip():
+        print(f"[Error] The {mode} script has no narration text; nothing to make a video from.", flush=True)
+        sys.exit(1)
+
     print(f"[Log] Full Script: \"{full_script}\"", flush=True)
 
     # 2. Generate Voice & Timings
@@ -629,14 +663,12 @@ def run(args, target_bitrate, target_preset):
             is_local_experiment = False
 
     def get_video_duration(path):
-        """Gets duration of a video using ffprobe."""
-        try:
-            cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path]
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            return float(result.stdout.strip())
-        except Exception as e:
-            print(f"[Warning] Failed to get duration for {path}: {e}")
-            return 10.0 # Fallback
+        """Duration of a background clip; a guess of 10 s is fine there (the clip loops), never for the narration."""
+        d = probe_duration(path)
+        if d is None:
+            print(f"[Warning] Failed to get duration for {path}: assuming 10 s")
+            return 10.0
+        return d
 
     def get_bg_path(query, out_path, target_duration=15.0, force_literal=False):
         if getattr(args, "bg_media", None) and os.path.exists(args.bg_media):
@@ -667,7 +699,7 @@ def run(args, target_bitrate, target_preset):
         return [path] if path else []
 
     # Calculate segments for staggered backgrounds
-    audio_duration = get_video_duration(audio_path)
+    audio_duration = narration_duration(audio_path, subs_path)
     total_bg_duration = audio_duration + 1.5
 
     fact_beat_timestamps = None
@@ -775,9 +807,8 @@ def run(args, target_bitrate, target_preset):
         # Download sound effect
         sfx_filename = os.path.join(session_dir, "challenge_sfx.mp3")
         download_sfx(sound_data["sound_query"], output_path=sfx_filename)
-        bg_filename = os.path.join(session_dir, "bg_gen.mp4")
-        path = get_bg_path(category + " satisfying", bg_filename)
-        if path: bg_video_paths.append(path)
+        if not bg_video_paths:
+            bg_video_paths.extend(get_bg_path(category + " satisfying", os.path.join(session_dir, "bg_gen.mp4")))
     elif mode == "RIDDLE":
         bg_filename = os.path.join(session_dir, "bg_riddle.mp4")
         paths = get_bg_path(category + " background", bg_filename, target_duration=total_bg_duration)
@@ -1111,9 +1142,11 @@ def run(args, target_bitrate, target_preset):
             )
         elif mode == "TRIVIA":
             from engine.video_gen import create_trivia_video
+            # the renderer marks the right option from its letter; given the text it always marked C
+            letter = "ABC"[[trivia_data[k] for k in ("opt_a", "opt_b", "opt_c")].index(trivia_data["answer"])]
             final_video = create_trivia_video(
                 audio_path,
-                trivia_data,
+                {**trivia_data, "answer": letter},
                 bg_video_paths,
                 output_filename,
                 music_path=bg_music,
@@ -1242,8 +1275,8 @@ def run(args, target_bitrate, target_preset):
             "tags": ["shorts", "funny", "scenebreakdown", category]
         })
     else:
-        # For STORY or other modes
-        story_content = story_data['story'] if 'story_data' in locals() and story_data else "Viral Story"
+        # STORY has its story; the other modes (RIDDLE, HORROR, TOP_5, ...) are described from what is spoken
+        story_content = story_data['story'] if 'story_data' in locals() and story_data else full_script
         metadata = ensure_dict(generate_viral_metadata(story_content, mode=mode, category=category))
 
     # Ensure metadata fields are always populated defensively

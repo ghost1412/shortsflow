@@ -6,6 +6,7 @@ import json
 import requests
 import random
 import re
+from urllib.parse import quote
 import numpy as np
 from dotenv import load_dotenv
 from engine.comfy_bridge import generate_cinematic_backgrounds
@@ -65,7 +66,23 @@ def _close_browser(exe):
               "FILE, or set SHORTSFLOW_CLOSE_BROWSER=1 to let ShortsFlow close it.")
 
 
-def download_background_video(fact_text, fallback_query="nature", output_path="assets/bg.mp4", orientation="portrait", custom_bg=None, force_literal=False):
+def _cache_name(query):
+    """File-name form of a search; a query in another script gets a hash, or every one of the same length shared "______"."""
+    name = re.sub(r'[^a-zA-Z0-9]', '_', query).lower()
+    if not query.isascii():
+        import hashlib
+        name += "_" + hashlib.md5(query.encode("utf-8")).hexdigest()[:8]
+    return name
+
+
+def _download(link):
+    """The bytes behind a media link; an error page raises instead of being saved (and cached) as the picture or video."""
+    r = requests.get(link, timeout=30)
+    r.raise_for_status()
+    return r.content
+
+
+def download_background_video(fact_text, fallback_query="nature", output_path="assets/bg.mp4", orientation="portrait", custom_bg=None, force_literal=False, _tries=4):
     """
     downloads a background video based on keywords from the fact or custom background media.
     """
@@ -97,7 +114,7 @@ def download_background_video(fact_text, fallback_query="nature", output_path="a
         print(f"[Log] Searching Pexels for: '{query}'")
     
     # Check if we already have this query in assets (caching)
-    safe_query = re.sub(r'[^a-zA-Z0-9]', '_', query).lower()
+    safe_query = _cache_name(query)
     cached_path = f"assets/bg_{safe_query}.mp4"
     if os.path.exists(cached_path):
         print(f"[Log] Cache Hit: Using existing video for '{query}'")
@@ -105,7 +122,7 @@ def download_background_video(fact_text, fallback_query="nature", output_path="a
         shutil.copy(cached_path, output_path)
         return output_path
 
-    url = f"https://api.pexels.com/videos/search?query={query}&per_page=15&orientation={orientation}"
+    url = f"https://api.pexels.com/videos/search?query={quote(query)}&per_page=15&orientation={orientation}"
 
     headers = {"Authorization": PEXELS_API_KEY}
     
@@ -115,8 +132,13 @@ def download_background_video(fact_text, fallback_query="nature", output_path="a
         videos = r.json().get("videos", [])
         
         if not videos:
+            if _tries <= 1:            # used to call itself until Python's recursion limit (about a thousand requests)
+                print(f"No videos found for query '{query}'.")
+                return None
+            if query == fallback_query:                              # the same search again finds nothing again
+                fallback_query = random.choice(HIGH_RETENTION_QUERIES)
             print(f"No videos found for query '{query}', falling back to '{fallback_query}'")
-            return download_background_video("", fallback_query, output_path)
+            return download_background_video("", fallback_query, output_path, orientation=orientation, force_literal=True, _tries=_tries - 1)
             
         video_data = random.choice(videos)
         video_files = video_data.get("video_files", [])
@@ -125,7 +147,7 @@ def download_background_video(fact_text, fallback_query="nature", output_path="a
             
         if best_link:
             print(f"Downloading video: {best_link}")
-            video_content = requests.get(best_link, timeout=30).content
+            video_content = _download(best_link)
             
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             with open(output_path, "wb") as f:
@@ -158,7 +180,7 @@ def download_image(query, output_path="assets/obj.png"):
     print(f"[Log] Searching Pexels Image for: '{query}'")
     
     # Cache Check
-    safe_query = re.sub(r'[^a-zA-Z0-9]', '_', query).lower()
+    safe_query = _cache_name(query)
     cached_path = f"assets/img_{safe_query}.png"
     if os.path.exists(cached_path):
         print(f"[Log] Cache Hit: Using existing image for '{query}'")
@@ -166,7 +188,7 @@ def download_image(query, output_path="assets/obj.png"):
         shutil.copy(cached_path, output_path)
         return output_path
 
-    url = f"https://api.pexels.com/v1/search?query={query}&per_page=1"
+    url = f"https://api.pexels.com/v1/search?query={quote(query)}&per_page=1"
 
     headers = {"Authorization": PEXELS_API_KEY}
     
@@ -179,7 +201,7 @@ def download_image(query, output_path="assets/obj.png"):
             img_url = photos[0].get("src", {}).get("large")
             if img_url:
                 print(f"Downloading image: {img_url}")
-                img_content = requests.get(img_url, timeout=30).content
+                img_content = _download(img_url)
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 with open(output_path, "wb") as f:
                     f.write(img_content)
