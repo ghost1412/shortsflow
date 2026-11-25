@@ -1731,7 +1731,7 @@ def write_candidates(path, ranked):
         print(f"[Warning] Could not save the candidate list: {e}")
 
 
-def choose_from_pool(highlights, transcript_path, clip_count, min_duration, snap=True, duration=None, candidates_path=None):
+def choose_from_pool(highlights, transcript_path, clip_count, min_duration, snap=True, duration=None, candidates_path=None, target=None):
     """The final picks from a pool of candidate shorts. Final geometry BEFORE choosing: snap to sentences, clamp to the video, and
     drop clips below the length floor (ranking and snapping can shorten a clip, and a goodbye at the very end of a video can be left
     with a few seconds); then the best `clip_count` by score. The whole ranked pool is saved to `candidates_path` when given."""
@@ -1740,7 +1740,7 @@ def choose_from_pool(highlights, transcript_path, clip_count, min_duration, snap
         if snap:
             from engine.highlight_quality import snap_highlights
             with open(transcript_path, 'r', encoding='utf-8') as f:
-                highlights = snap_highlights(highlights, json.load(f), min_len=floor)
+                highlights = snap_highlights(highlights, json.load(f), min_len=floor, **({"target": float(target)} if target else {}))
     except Exception as e:
         print(f"[Warning] Boundary snapping skipped: {e}")
     if duration:
@@ -1902,7 +1902,7 @@ def process_source_video(video_path, output_dir, mode="shorts", clip_count=5, ta
             highlights = apply_preferences(highlights)         # a small nudge toward the clip length the user tends to like
         if mode == "shorts":
             highlights = choose_from_pool(highlights, transcript_path, clip_count, min_duration, snap=snap,
-                                          duration=probe_duration(video_path), candidates_path=os.path.join(output_dir, "candidates.json"))
+                                          duration=probe_duration(video_path), candidates_path=os.path.join(output_dir, "candidates.json"), target=target_duration)
 
         try:
             with open(highlights_cache_path, "w", encoding="utf-8") as f:
@@ -1917,7 +1917,7 @@ def process_source_video(video_path, output_dir, mode="shorts", clip_count=5, ta
         # ended wherever the time ran out. Its moments may be longer than a short.
         try:
             from engine.highlight_quality import snap_highlights
-            snap_opts = {"min_len": max(8.0, min_duration - 5.0)} if mode == "shorts" else {"min_len": 8.0, "max_len": 180.0}
+            snap_opts = {"min_len": max(8.0, min_duration - 5.0), **({"target": float(target_duration)} if target_duration else {})} if mode == "shorts" else {"min_len": 8.0, "max_len": 180.0}
             with open(transcript_path, 'r', encoding='utf-8') as f:
                 highlights = snap_highlights(highlights, json.load(f), **snap_opts)
             if mode == "long":

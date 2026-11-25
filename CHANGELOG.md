@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Shorts: a clip aimed at a length (for example 30 s) is no longer finished past 125% of it by a long closing sentence when the sentence before gives at least 75% (offline picker benchmark, keynote transcript: 4 of 5 clips within 25% of the target instead of 2 of 5). The offline benchmark now passes the target through, as the real run does.
+
 - Case explainer: eight more built-in picture icons (drop, thermometer, battery, tree, heart, virus, syringe, prism), so health and science topics need fewer model-drawn icons.
 
 - Case explainer: picture labels the narrator never says pop in spread over the rest of the section (1.2 to 4 s apart) and not all in a bunch right after the last spoken one.

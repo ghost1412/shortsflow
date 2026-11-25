@@ -24,6 +24,7 @@ DEFAULTS = {
     "min_len": 8.0,        # a snapped clip shorter than this is dropped back to the original
     "max_len": 59.9,       # shorts stay under a minute
     "leadin_max_words": 5,
+    "target": None,        # the length the clip was asked for, in seconds: finishing a sentence may not run past 25% over it when the sentence before fits
     "skip_shift": 20.0,    # skip a weak opening sentence (mic check, "And ...") when the next sentence starts within this many seconds
 }
 
@@ -230,6 +231,9 @@ def snap_clip(clip, spans, **opts):
                    and c - new_start <= o["max_len"]]
             if far:
                 new_end = forward if forward in far else back
+        if (o["target"] and back is not None and new_end == forward and forward - new_start > 1.25 * o["target"]
+                and back - new_start >= 0.75 * o["target"] and back > new_start + o["min_len"]):
+            new_end = back                            # a long sentence would put the clip over its asked length: stop on the last sentence that fits
     elif inside_e is None:
         # the end sits in a pause: snap back to the sentence that just finished
         prev = [e for e in ends if e <= end + 0.05]

@@ -327,3 +327,16 @@ def test_opening_rank_ignores_text_that_is_mostly_another_script():
     hindi_with_english = "यह बहुत ही अच्छा तरीका है और हम कभी नहीं रुकते why how never"
     assert opening_rank(hindi_with_english) == 0.0
     assert opening_rank("Why does this work? Nobody ever explains the real reason.") > 0
+
+
+def test_a_long_closing_sentence_does_not_push_a_clip_far_past_its_asked_length():
+    w = lambda n, end: " ".join(["word"] * (n - 1) + [end])        # a sentence of n words
+    tr, spans = _t(w(25, "a."), w(25, "b."), w(20, "c."), w(50, "d."))
+    clip = {"start": spans[0][0], "end": spans[0][0] + 30.0}      # asked for 30 s, stops inside the long last sentence, more than 6 s after the one before
+    without = snap_clip(clip, sentence_spans(tr), min_len=8.0)
+    with_target = snap_clip(clip, sentence_spans(tr), min_len=8.0, target=30.0)
+    assert without["end"] - without["start"] > 40               # it finished the long sentence (the old behaviour)
+    assert 22.5 <= with_target["end"] - with_target["start"] <= 30 and with_target["end"] <= spans[2][1] + 0.5
+    tr2, spans2 = _t(w(25, "a."), w(25, "b."), w(15, "c."), w(50, "d."))      # the sentence before would leave only 22.0 s (under 75% of 30)
+    fits = snap_clip({"start": 0.0, "end": 30.0}, sentence_spans(tr2), min_len=8.0, target=30.0)
+    assert fits["end"] >= spans2[3][1] - 0.1                  # a clip that short is worse than a long one, so the sentence is still finished

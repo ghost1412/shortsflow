@@ -65,7 +65,7 @@ def pick(transcript_path, clips=5, target=30.0, min_duration=15.0, quiet=True, o
                 from engine import highlight_rank
                 ranked_pool = highlight_rank.rank_with_context(pool, transcript, ask=rerank, max_candidates=len(pool))
             pool = ranked_pool if ranked_pool is not None else analysis.llm_score_highlights(pool, transcript)
-            ranked = analysis.choose_from_pool(pool, transcript_path, len(pool), min_duration, snap="snap" not in off)   # snapped, too-short ones dropped
+            ranked = analysis.choose_from_pool(pool, transcript_path, len(pool), min_duration, snap="snap" not in off, target=target)   # snapped, too-short ones dropped
     finally:
         for module, attr, original in reversed(swapped):
             setattr(module, attr, original)
