@@ -158,8 +158,14 @@ def spoken_order(labels, words, duration=None, first_by=1.5, gap=0.8):
     spoken = sorted([f for f in found if f[0] is not None], key=lambda f: (f[0], f[1]))
     silent = [f for f in found if f[0] is None]
     cues, ordered, prev = [], [], None
+    left = len(silent)
     for index, _, label in spoken + silent:
-        at = words[index]["start"] - 0.15 if index is not None else (prev if prev is not None else 0.0) + gap + 0.4
+        if index is None:
+            # a label the narrator never says: share the time left (until a little before the section ends) with the other silent ones, 1.2 to 4 s apart, not all in a bunch
+            room = ((duration - 2.5 - (prev if prev is not None else 0.0)) / left) if duration else 0.0
+            step = min(4.0, max(gap + 0.4, room))
+            left -= 1
+        at = words[index]["start"] - 0.15 if index is not None else (prev if prev is not None else 0.0) + step
         if prev is None:
             at = min(max(at, 0.2), first_by)
         else:

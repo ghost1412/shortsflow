@@ -193,3 +193,11 @@ def test_transitions_travel_to_the_props_and_the_narration_is_told_naturally(tmp
     finally:
         vg.edge_tts.Communicate = old
     assert seen["text"] == "First point. Second point." and seen["rate"] == "+0%"          # no "..." pauses, no hook split, normal pace
+
+
+def test_labels_the_narrator_never_says_share_the_time_left_instead_of_bunching_up():
+    words = [{"word": w, "start": 1 + i * 0.5, "end": 1.4 + i * 0.5} for i, w in enumerate("Sunlight enters the air".split())]
+    labels, cues = cr.spoken_order(["Sunlight", "Dragon", "Castle", "Wizard"], words, duration=30)
+    assert labels[0] == "Sunlight" and cues == sorted(cues)
+    assert cues[-1] - cues[1] >= 6 and cues[-1] <= 30 - 0.5                  # spread over the section, not 1.2 s apart
+    assert cr.spoken_order(["Dragon", "Castle"], words, duration=None)[1][1] - cr.spoken_order(["Dragon", "Castle"], words, duration=None)[1][0] >= 1.2
