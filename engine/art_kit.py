@@ -423,9 +423,9 @@ def syringe(c, mood=None):
 
 def prism(c, mood=None):
     rays = ("#ef4444", "#f59e0b", "#facc15", "#22c55e", "#3b82f6", "#8b5cf6")
-    beams = "".join(f'<path d="M40 {-6 + i * 5} L96 {-26 + i * 18}" stroke="{col}" stroke-width="7" stroke-linecap="round"/>' for i, col in enumerate(rays))
-    return (f'<path d="M-96 6 L-30 -2" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/><path d="M-30 -2 L40 -2" stroke="{OUT}" stroke-width="2" opacity="0"/>'
-            f'<polygon points="-40,64 0,-70 40,64" fill="{c}" opacity="0.85" {S()}/>' + beams)
+    beams = "".join(f'<path d="M20 {8 + i * 3} L96 {-14 + i * 17}" stroke="{col}" stroke-width="8" stroke-linecap="round"/>' for i, col in enumerate(rays))
+    return (f'<path d="M-96 18 L-12 6" stroke="{OUT}" stroke-width="15" stroke-linecap="round"/><path d="M-96 18 L-12 6" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>'
+            f'<polygon points="-44,66 0,-72 44,66" fill="{c}" {S()}/>' + beams)
 
 
 ICONS = {"person": person, "hacker": hacker, "group": group, "laptop": laptop, "phone": phone, "server": server, "database": database, "cloud": cloud,
