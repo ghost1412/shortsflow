@@ -1396,11 +1396,17 @@ def identify_highlights(transcript_path, video_path=None, clip_count=5, mode="sh
             # floor filter then left the run one clip short)
             floor = max(8.0, min_duration - 5.0) if mode == "shorts" else max(15.0, min_duration - 5.0)
             valid_highlights = [h for h in valid_highlights if (h['end'] - h['start']) >= floor]
+            reserve = []
+            if mode == "shorts":
+                valid_highlights, reserve = split_unwatchable(valid_highlights, transcript_data)
             if mode == "shorts" and len(valid_highlights) < clip_count:
                 print(f"[Log] 🎬 Highlight count ({len(valid_highlights)}) is below requested count ({clip_count}). Backfilling top signal peaks...")
                 fallback_candidates = sorted(compressed_segments, key=lambda x: x['norm_score'] + x.get('norm_audio', 0) + x.get('norm_motion', 0) + opening_rank(x.get('text')), reverse=True)
                 valid_highlights += [trim_to_target(h, target_duration) for h in
                                      pick_backfill(fallback_candidates, valid_highlights, clip_count - len(valid_highlights))]
+
+            if reserve:      # only when the signal windows could not replace them: a poor clip is better than a missing one
+                valid_highlights += reserve[:max(0, clip_count - len(valid_highlights))]
 
             # 🟢 MANDATORY: Re-sort chronologically to ensure narrative flow and fix timing mismatch
             # This ensures that even if we picked top scores, they play back in order.
@@ -1783,6 +1789,62 @@ def write_candidates(path, ranked):
         print(f"[Warning] Could not save the candidate list: {e}")
 
 
+QUALITY_POINTS = 30.0     # score points (the scores run 0..100) per unit of opening_rank; the signal picks use opening_rank on a 0..2 scale
+
+
+UNWATCHABLE_RANK = -0.4     # opening_rank at or below this: a mic check, a window of stutter / "..." fragments, or housekeeping talk
+
+
+def split_unwatchable(highlights, transcript):
+    """(kept, set_aside): the clips the AI proposed, minus those whose own text is unwatchable by the no-AI picker's rule (opening_rank
+    <= UNWATCHABLE_RANK). The AI rates the idea it finds in a transcript of half-words ("...you can do... ...new... ...for example..."),
+    so it proposes such clips and rates them 6 to 8 out of 10. The set-aside ones go back only when nothing cleaner can replace them."""
+    try:
+        from engine.clip_quality import clip_text
+        segments = transcript.get('segments', [])
+        kept, aside = [], []
+        for h in highlights:
+            text = clip_text(segments, float(h['start']), float(h['end']))
+            (aside if text and opening_rank(text) <= UNWATCHABLE_RANK and not h.get('user_moment') else kept).append(h)
+        if aside:
+            print(f"[Log] Set aside {len(aside)} AI-proposed clip(s) whose speech is mostly fragments, filler or housekeeping; cleaner windows replace them.")
+        return kept, aside
+    except Exception as e:
+        print(f"[Warning] Clip quality check skipped: {e}")
+        return highlights, []
+
+
+def apply_clip_quality(highlights, transcript_path):
+    """Move the final score of a clip the AI proposed by what its FINAL text says, with the rule the no-AI picker already uses
+    (`opening_rank`: weak first words, mic check, stutter, intro / outro talk down; a hook cue up). The AI rates a clip on the
+    idea it finds, and an answer full of "So... ...you can do..." fragments still got a high score; the rerank blend cannot see that
+    either. Runs after snapping, so it judges the clip that will be cut. Signal-fallback clips already carry the rule and are
+    left alone; each clip is adjusted once. Never fails the run."""
+    try:
+        with open(transcript_path, 'r', encoding='utf-8') as f:
+            segments = json.load(f).get('segments', [])
+        from engine.clip_quality import clip_text
+    except Exception as e:
+        print(f"[Warning] Clip quality check skipped: {e}")
+        return highlights
+    out = []
+    for h in highlights:
+        if h.get('quality_adjusted') or any(w in str(h.get('reason', '')).lower() for w in ('heuristic', 'backfill')) or h.get('user_moment'):
+            out.append(h)
+            continue
+        text = clip_text(segments, float(h['start']), float(h['end']))
+        adj = round(QUALITY_POINTS * opening_rank(text), 1) if text else 0.0
+        h = dict(h, quality_adjusted=True, quality_adjustment=adj)
+        if adj:
+            for key in ('final_score', 'score'):
+                if key in h:
+                    h[key] = round(float(h[key] or 0) + adj, 1)
+            if 'final_score' not in h:
+                h['final_score'] = round(float(h.get('viral_score', 0) or 0) + adj, 1)
+        out.append(h)
+    return out
+
+
 def choose_from_pool(highlights, transcript_path, clip_count, min_duration, snap=True, duration=None, candidates_path=None, target=None):
     """The final picks from a pool of candidate shorts. Final geometry BEFORE choosing: snap to sentences, clamp to the video, and
     drop clips below the length floor (ranking and snapping can shorten a clip, and a goodbye at the very end of a video can be left
@@ -1801,6 +1863,7 @@ def choose_from_pool(highlights, transcript_path, clip_count, min_duration, snap
     if len(long_enough) != len(highlights):
         print(f"[Log] Dropped {len(highlights) - len(long_enough)} clip(s) shorter than {floor:.0f}s after ranking and snapping.")
     highlights = long_enough or highlights
+    highlights = apply_clip_quality(highlights, transcript_path)
     ranked_pool = sorted(highlights, key=lambda h: float(h.get('final_score', h.get('viral_score', 0)) or 0), reverse=True)
     if candidates_path:
         write_candidates(candidates_path, ranked_pool)
@@ -1939,9 +2002,9 @@ def process_source_video(video_path, output_dir, mode="shorts", clip_count=5, ta
                     if local_rerank:
                         from engine.highlight_rank import local_ask, LOCAL_POOL
                         ranked = rank_with_context(highlights, transcript_data, ask=local_ask, max_candidates=LOCAL_POOL,
-                                                   min_len=max(8.0, min_duration - 5.0), context=user_context)
+                                                   min_len=max(8.0, min_duration - 5.0), context=user_context, target=target_duration)
                     else:
-                        ranked = rank_with_context(highlights, transcript_data, min_len=max(8.0, min_duration - 5.0), context=user_context)   # one request, with context
+                        ranked = rank_with_context(highlights, transcript_data, min_len=max(8.0, min_duration - 5.0), context=user_context, target=target_duration)   # one request, with context
                 if ranked is not None:
                     highlights = ranked
                 elif not local_rerank:         # with the local rerank on, no cloud provider gets the text as a fallback

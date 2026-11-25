@@ -101,16 +101,19 @@ def parse_ranking(raw, n):
     return out
 
 
-def _adjust_edges(h, spans, info, min_len=MIN_LEN):
-    """Whole-sentence edge moves the model asked for, kept inside the short-length limits."""
+def _adjust_edges(h, spans, info, min_len=MIN_LEN, target=None):
+    """Whole-sentence edge moves the model asked for, kept inside the short-length limits (and, with a `target` length, no more than
+    25% over it: "add two sentences so the payoff is in" turned a 30 s clip into a 49 s one)."""
+    max_len = min(MAX_LEN, 1.25 * float(target)) if target else MAX_LEN
+    max_len = max(max_len, float(h["end"]) - float(h["start"]))      # a clip already longer than that is never cut here
     start, end = float(h["start"]), float(h["end"])
     new_start, new_end = start, end
     if info["extend_end"]:
         last = max((i for i, (s, e, t) in enumerate(spans) if s < end - 0.05), default=None)
         if last is not None:
-            target = spans[min(len(spans) - 1, last + info["extend_end"])][1]
-            if target > end and target - start <= MAX_LEN:
-                new_end = target
+            wanted = spans[min(len(spans) - 1, last + info["extend_end"])][1]
+            if wanted > end and wanted - start <= max_len:
+                new_end = wanted
     if info["trim_start"]:
         first = next((i for i, (s, e, t) in enumerate(spans) if s >= start - 0.3), None)
         if first is not None and first + 1 < len(spans):
@@ -156,7 +159,7 @@ def local_ask(prompt, url=None, model=None, timeout=180):
     return text
 
 
-def rank_with_context(highlights, transcript, ask=None, max_candidates=10, weight=0.6, min_len=MIN_LEN, context=None):
+def rank_with_context(highlights, transcript, ask=None, max_candidates=10, weight=0.6, min_len=MIN_LEN, context=None, target=None):
     """Re-scored copies of `highlights` (best first), or None when the LLM pass could not be used."""
     if not highlights:
         return None
@@ -188,7 +191,7 @@ def rank_with_context(highlights, transcript, ask=None, max_candidates=10, weigh
             blended = round(weight * r["score"] * 10.0 + (1.0 - weight) * base, 1)
             h.update({"llm_score": r["score"], "llm_reason": r["reason"], "final_score": blended, "score": blended,
                       "viral_score": int(round(blended)), "ranked_in_context": True})
-            new_start, new_end = _adjust_edges(h, spans, r, min_len=min_len)
+            new_start, new_end = _adjust_edges(h, spans, r, min_len=min_len, target=target)
             if (new_start, new_end) != (float(h["start"]), float(h["end"])):
                 h.update({"start": round(new_start, 2), "end": round(new_end, 2), "edges_adjusted": True})
         out.append(h)
