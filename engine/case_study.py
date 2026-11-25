@@ -585,7 +585,7 @@ def write_script(topic, template, sources, ask, layouts="auto", check_diagram=No
                 scene, labels = "illustration", names
         if scene == "illustration":
             said = [x for x in labels if label_spoken(x, narration)]
-            if len(said) * 2 < len(labels):                  # fewer than half the labels are said: the icons would pop in off the narration, so ask for names it says
+            if len(said) < len(labels):                      # a label the narrator never says would pop in off the narration, so ask for names it does say (taken only when more of them are said)
                 names = picture_names_for(sec["title"], narration, topic, ask)
                 if len([x for x in names if label_spoken(x, narration)]) > len(said):
                     labels = names

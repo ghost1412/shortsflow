@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: a picture section with any label the narrator never says is now asked for names the narration does say (it used to be only when fewer than half were said); the new names are used only when more of them are said. At the long length rainbow went from 2 of 4 labels said to 3 of 3, phishing from 2 of 3 to 3 of 3.
+
 - Highlights reel with an AI key: the model's moments are now also checked for coverage, and a part of the video it skipped is filled with that part's best signal window (offline, 240 s target on Gemini: podcast transcript reel ended at 48% of the video, now 88%; keynote last moment at 58%, now 90%).
 
 - Picking without an AI key: the score shown for a backfilled moment now includes the opening and housekeeping rank it was chosen by (it showed the raw signal score, so a penalised window could rank first in the candidate list). Offline picker benchmark: mean recall 0.145 -> 0.195, precision 0.30 -> 0.40, recall@8 0.223 -> 0.28.
