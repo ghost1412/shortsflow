@@ -193,3 +193,28 @@ def test_cli_survives_a_cp1252_console(monkeypatch):
     print("[Log] NVIDIA GPU Detected \U0001f680")
     out.flush()
     assert "\U0001f680".encode("utf-8") in raw.getvalue()
+
+
+def test_rerender_leaves_no_shortsflow_variable_behind_even_when_it_fails(tmp_path, monkeypatch):
+    from engine import auto_edit
+    session = _session(tmp_path)
+    data = json.loads((session / "results.json").read_text())
+    data["settings"].update({"auto_edit": next(iter(auto_edit.PRESETS)), "caption_color": "#ff0000"})
+    (session / "results.json").write_text(json.dumps(data))
+    calls = {}
+    _fake_engine(monkeypatch, calls)
+    monkeypatch.setattr(auto_edit, "build_sfx_events", lambda *a, **k: [])
+    monkeypatch.chdir(tmp_path)
+    for k in ("SHORTSFLOW_ZOOM_FILL", "SHORTSFLOW_ZOOM_INTENSITY", "SHORTSFLOW_CAPTION_COLOR"):
+        monkeypatch.delenv(k, raising=False)
+    before = {k for k in os.environ if k.startswith("SHORTSFLOW_")}
+
+    rerender.rerender_clip(str(session), 1, start=6.0, end=12.0)
+    assert {k for k in os.environ if k.startswith("SHORTSFLOW_")} == before   # ZOOM_FILL used to stay set for every later render
+
+    def boom(*a, **k):
+        raise RuntimeError("renderer crashed")
+    sys.modules["engine.video_gen"].extract_segments = boom
+    with pytest.raises(RuntimeError):
+        rerender.rerender_clip(str(session), 1, start=6.0, end=12.0)
+    assert {k for k in os.environ if k.startswith("SHORTSFLOW_")} == before

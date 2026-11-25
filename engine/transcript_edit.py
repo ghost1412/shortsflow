@@ -15,14 +15,17 @@ import difflib
 import json
 import math
 import re
+import unicodedata
 
 PAD_START = 0.02  # seconds trimmed before the first deleted word
 PAD_END = 0.06  # Whisper end timestamps run early, so the tail needs more
 
 
 def norm(word):
-    """Comparison form of a word: lower-case letters and digits only (so 'Hello,' == 'hello')."""
-    return re.sub(r"[^a-z0-9]", "", (word or "").lower())
+    """Comparison form of a word: lower-case letters, marks and digits of any script (so 'Hello,' == 'hello').
+    Only punctuation, symbols and spaces are dropped, so a Hindi or Spanish transcript keeps its words."""
+    text = unicodedata.normalize("NFC", word or "").casefold()
+    return "".join(c for c in text if unicodedata.category(c)[0] in "LMN")
 
 
 def flatten_words(segments):
@@ -64,29 +67,44 @@ def export_text(words, sentence_gap=0.7, width=14):
     return "\n".join(lines) + "\n"
 
 
-def spans_from_phrases(words, phrases):
-    """Spans covering every occurrence of each phrase (matched on normalised words)."""
+def _phrase_ranges(words, phrases):
+    """([(i, j)) word index ranges of every occurrence], [phrases that matched nowhere])."""
     keys = [norm(w["word"]) for w in words]
-    ranges = []
+    ranges, missing = [], []
     for phrase in phrases or []:
         target = [t for t in (norm(p) for p in phrase.split()) if t]
-        if not target:
-            continue
+        found = False
         n = len(target)
         i = 0
-        while i <= len(keys) - n:
+        while n and i <= len(keys) - n:
             if keys[i:i + n] == target:
                 ranges.append((i, i + n))
+                found = True
                 i += n
             else:
                 i += 1
-    return _spans(words, ranges)
+        if not found:
+            missing.append(phrase)
+    return ranges, missing
+
+
+def spans_from_phrases(words, phrases):
+    """Spans covering every occurrence of each phrase (matched on normalised words)."""
+    return _spans(words, _phrase_ranges(words, phrases)[0])
+
+
+def missing_phrases(words, phrases):
+    """The phrases that do not occur in the transcript (or hold no letters or digits), so the user can be told."""
+    return _phrase_ranges(words, phrases)[1]
 
 
 def spans_from_edit(words, edited_text):
     """Spans for the words present in the original but missing from `edited_text`."""
     old = [norm(w["word"]) for w in words]
     new = [t for t in (norm(p) for p in edited_text.split()) if t]
+    if old and not new:  # an empty or wrong file would otherwise cut every word of the video
+        raise ValueError("The edited transcript has no words in it, so everything would be cut. "
+                         "Edit a copy of transcript.txt and delete only the words you want removed.")
     sm = difflib.SequenceMatcher(a=old, b=new, autojunk=False)
     ranges = [(i1, i2) for tag, i1, i2, _j1, _j2 in sm.get_opcodes() if tag == "delete"]
     return _spans(words, ranges)
@@ -215,8 +233,10 @@ def prepare_edited_source(source, session_dir, phrases=None, edit_path=None, kee
 
     edited_text = None
     if edit_path:
-        with open(edit_path, "r", encoding="utf-8") as f:
+        with open(edit_path, "r", encoding="utf-8-sig", errors="replace") as f:  # Notepad adds a BOM
             edited_text = f.read()
+    for phrase in missing_phrases(words, phrases):
+        print(f"[Warning] --cut {phrase!r}: not found in the transcript (check the spelling against {editable}), nothing cut for it")
     spans = cut_spans(words, phrases=phrases, edited_text=edited_text)
     if not spans:
         print("[Log] Transcript edits: nothing to cut")
@@ -227,7 +247,13 @@ def prepare_edited_source(source, session_dir, phrases=None, edit_path=None, kee
     removed = sum(e - s for s, e in spans)
     print(f"[Log] Transcript edits: cutting {len(spans)} span(s), {removed:.1f}s, from the video")
     out_path = os.path.join(session_dir, "edited_source.mp4")
-    render_edited_video(source, keep_intervals(spans), out_path, session_dir)
+    try:
+        from engine.analysis import probe_duration
+        total = probe_duration(source)
+    except Exception:
+        total = None
+    # with the real length, a cut that reaches the end of the video leaves no empty piece behind for ffmpeg's concat
+    render_edited_video(source, keep_intervals(spans, total), out_path, session_dir)
     remapped = remap_transcript(cached, spans)
     remapped["source_video_path"] = os.path.abspath(out_path)
     with open(os.path.join(session_dir, "transcript.json"), "w", encoding="utf-8") as f:

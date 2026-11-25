@@ -62,7 +62,20 @@ def validate_caption_y(value):
     return value
 
 
-def rerender_clip(session_dir, clip_index, start=None, end=None, caption_style=None, use_brand=True, cuts=None, caption_y=None):
+def rerender_clip(*args, **kwargs):
+    """Re-render a clip in place (see `_rerender_clip`). Every SHORTSFLOW_* setting the re-render exports for the renderer is put
+    back afterwards, also when it fails half way or for a variable the body forgets: the browser app re-renders in-process, and a
+    leaked variable would change the next, unrelated render."""
+    saved = {k: v for k, v in os.environ.items() if k.startswith("SHORTSFLOW_")}
+    try:
+        return _rerender_clip(*args, **kwargs)
+    finally:
+        for k in [k for k in os.environ if k.startswith("SHORTSFLOW_") and k not in saved]:
+            os.environ.pop(k, None)
+        os.environ.update(saved)
+
+
+def _rerender_clip(session_dir, clip_index, start=None, end=None, caption_style=None, use_brand=True, cuts=None, caption_y=None):
     """Re-render a clip in place. Returns the updated clip dict (from results.json).
 
     `caption_y` = caption top edge in pixels (1080x1920); None keeps the clip's own value (else the run's setting).

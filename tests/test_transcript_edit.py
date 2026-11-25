@@ -1,3 +1,8 @@
+import json
+import os
+
+import pytest
+
 from engine.fillers import carve
 from engine.transcript_edit import (
     clip_transcript, keep_intervals, plan_keeps, remap_transcript, render_edited_video, tighten_segment,
@@ -209,3 +214,48 @@ def test_only_the_quiet_part_of_a_long_gap_is_cut_and_a_laugh_inside_it_stays(tm
     out = drop_loud_pauses([(40.0, 44.0)], {"segments": [{"words": words}]}, path)
     assert len(out) == 2 and out[0][1] <= 41.1 and out[1][0] >= 41.9           # quiet before and after, the laugh in between kept
     assert sum(b - a for a, b in out) >= 2.8
+
+
+def test_words_in_other_scripts_are_kept_and_matched():
+    segs = [{"words": [{"word": " नमस्ते", "start": 0.0, "end": 1.0}, {"word": " दोस्तों,", "start": 1.0, "end": 2.0},
+                       {"word": " café", "start": 2.0, "end": 3.0}]}]
+    words = flatten_words(segs)
+    assert [w["word"] for w in words] == ["नमस्ते", "दोस्तों,", "café"]    # they used to be dropped as "no letters"
+    assert spans_from_phrases(words, ["दोस्तों"]) == [(1.0 - PAD_START, 2.0 + PAD_END)]
+    assert norm("Café,") == norm("café") and norm("café") != norm("caf")
+    assert norm("...") == "" and norm("don't") == "dont"
+
+
+def test_an_empty_edit_file_is_refused_instead_of_cutting_everything():
+    with pytest.raises(ValueError, match="no words"):
+        spans_from_edit(WORDS, "\r\n  \r\n")
+    crlf = "So basically, you know, cats are\r\ngreat.\r\n"                 # Windows line endings: the two deleted words go
+    assert len(spans_from_edit(WORDS, crlf)) == 1
+
+
+def test_missing_phrases_are_reported():
+    from engine.transcript_edit import missing_phrases
+    assert missing_phrases(WORDS, ["you know", "dogs", "...", "  "]) == ["dogs", "...", "  "]
+
+
+def test_a_cut_to_the_end_of_the_video_leaves_no_empty_piece(tmp_path, monkeypatch, capsys):
+    import sys
+    import types
+    import engine.transcript_edit as te
+    video = tmp_path / "v.mp4"
+    video.write_bytes(b"x")
+    original = {"source_video_path": os.path.abspath(str(video)), "segments": SEGMENTS}
+    (tmp_path / "transcript_original.json").write_text(json.dumps(original), encoding="utf-8")
+    analysis = types.ModuleType("engine.analysis")
+    analysis.probe_duration = lambda p: 3.5
+    analysis.transcribe_video = lambda *a, **k: None
+    monkeypatch.setitem(sys.modules, "engine.analysis", analysis)
+    seen = {}
+
+    def fake_render(src, keeps, out, workdir):
+        seen["keeps"] = keeps
+        return out
+    monkeypatch.setattr(te, "render_edited_video", fake_render)
+    te.prepare_edited_source(str(video), str(tmp_path), phrases=["great", "dogs"])
+    assert seen["keeps"][-1][1] <= 3.5 and all(a < b for a, b in seen["keeps"])     # it ended at 1e9 before
+    assert "'dogs': not found" in capsys.readouterr().out
