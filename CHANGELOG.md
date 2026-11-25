@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Review step: the plan of moments (plan.json, shown before anything is rendered) now carries each AI-picked moment's hook as its title and the model's reason (they were read from fields the picker does not fill, so every moment showed as "Moment N" with no reason).
+
 - Case explainer: a picture section with any label the narrator never says is now asked for names the narration does say (it used to be only when fewer than half were said); the new names are used only when more of them are said. At the long length rainbow went from 2 of 4 labels said to 3 of 3, phishing from 2 of 3 to 3 of 3.
 
 - Highlights reel: each moment now opens on a real first line (leading "thank you very much", voice checks, stutter and filler sentences are skipped, a moment that is only housekeeping is dropped), moments up to 12 s apart become one instead of 3 s, and the reel length is brought within 8% of the target by moving moment ends between sentences only (trimmed or grown, never into housekeeping or a trailing-off sentence). Offline, 240 s target, no AI: the keynote reel no longer opens on "Thank you very much." (1 bad opener of 5 moments, now 0); with Gemini a reel that opened on a voice check, a stuttering sentence or ended 28 s short is fixed the same way. New `scripts/reel_bench.py` measures it.

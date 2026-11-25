@@ -212,3 +212,11 @@ def test_the_review_renders_only_ticked_moments_so_an_unticked_runner_up_is_left
     assert seen["cmd"][seen["cmd"].index("--moments") + 1] == "10.00-40.00"
     list(webui.render_plan(str(tmp_path), True, True, 10.0, 200.0, 40.0, 230.0, ""))
     assert seen["cmd"][seen["cmd"].index("--moments") + 1] == "10.00-40.00, 200.00-230.00"
+
+
+def test_a_plan_of_ai_picks_shows_their_hook_and_the_models_reason(tmp_path):
+    from engine import plan
+    path = plan.write_plan(str(tmp_path), [{"start": 5, "end": 40, "hook_text": "Why astronauts call the toilet a coffee machine", "llm_reason": "Funny and relatable", "final_score": 81}], "v.mp4")
+    import json
+    moment = json.load(open(path, encoding="utf-8"))["moments"][0]
+    assert moment["title"].startswith("Why astronauts") and moment["reason"] == "Funny and relatable"

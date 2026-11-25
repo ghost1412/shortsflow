@@ -34,9 +34,9 @@ def write_plan(session_dir, highlights, source_video, spares=()):
         spare = i > len(highlights)
         moments.append({
             "index": i, "start": round(float(h["start"]), 2), "end": round(float(h["end"]), 2),
-            "title": str(h.get("title") or h.get("hook") or (f"Runner-up {i - len(highlights)}" if spare else f"Moment {i}"))[:120],
+            "title": str(h.get("title") or h.get("hook_text") or h.get("hook") or (f"Runner-up {i - len(highlights)}" if spare else f"Moment {i}"))[:120],
             "score": h.get("final_score", h.get("viral_score")),
-            "reason": (str(h.get("warning") or "") + (" " if h.get("warning") and h.get("reason") else "") + str(h.get("reason") or ""))[:300],
+            "reason": (str(h.get("warning") or "") + (" " if h.get("warning") and (h.get("reason") or h.get("llm_reason")) else "") + str(h.get("reason") or h.get("llm_reason") or ""))[:300],
         })
         if spare:
             moments[-1]["spare"] = True
