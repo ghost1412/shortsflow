@@ -1557,9 +1557,28 @@ def signal_picks(compressed_segments, mode, clip_count, target_duration, min_dur
         heuristic = [{"start": f['start'], "end": f['end'], "viral_score": int(f.get('norm_score', 0) * 100),
                       "final_score": int(max(0.0, f.get('norm_score', 0) + opening_rank(f.get('text'))) * 100),
                       "reason": "High-Signal Moment (Heuristic Fallback)"} for f in fallback_candidates]
-        return fit_to_target(heuristic, target_duration, min_len=max(15.0, min_duration - 5.0))
+        return reel_with_coverage(heuristic, target_duration, min_len=max(15.0, min_duration - 5.0))
     return [trim_to_target(dict(h, reason="High-Signal Moment (Heuristic Fallback)"), target_duration)
             for h in pick_backfill(fallback_candidates, [], clip_count)]
+
+
+def reel_with_coverage(moments, target, min_len=15.0, typical=45.0):
+    """A highlights reel that covers the whole video: the video is cut into as many equal time slices as moments of `typical` seconds fit the target, the best moment
+    of each slice goes in first, and whatever time is left is filled with the next best ones (`fit_to_target`, which trims the last). Without this the best-scoring
+    moments could all sit in one part of the video, and the reel told only the end of the story."""
+    moments = [m for m in moments if m.get("end", 0) > m.get("start", 0)]
+    if not moments or not target:
+        return fit_to_target(moments, target, min_len=min_len)
+    lo, hi = min(m["start"] for m in moments), max(m["end"] for m in moments)
+    slices = max(2, round(float(target) / typical))
+    width = (hi - lo) / slices or 1.0
+    best = {}
+    for m in sorted(moments, key=lambda x: x.get("final_score", 0), reverse=True):
+        best.setdefault(min(int((m["start"] - lo) / width), slices - 1), m)
+    first = fit_to_target(list(best.values()), target, min_len=min_len)
+    used = sum(h["end"] - h["start"] for h in first)
+    rest = [m for m in moments if not any(not (m["end"] <= h["start"] or m["start"] >= h["end"]) for h in first)]
+    return first + (fit_to_target(rest, target, already=used, min_len=min_len) if used < target * 0.92 else [])
 
 
 def fit_to_target(highlights, target, already=0.0, tolerance=0.08, min_len=15.0):
