@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Clips and highlights: in a punctuated transcript a pause of up to 2.5 seconds inside a sentence is no longer taken as its end, so a moment does not stop on a comma just before the point. Checked on the raw words of four transcripts: 19 of 20 shorts end on a full stop (was 17) and 20 of 20 reel moments (was 19); a few shorts run further from the asked length for it (17 of 20 within 25%, was 19).
+
 - Highlights reel: neighbouring moments are joined before the choice only up to a quarter of the reel's length (at least 45 s; it was 150 s whatever the length), so a short reel no longer fuses everything into one moment and trims its best part away; a joined moment is named after its best part.
 
 - Gemini: a model that answers "429 Too Many Requests" is skipped at once for the next one and left alone for a minute, instead of being retried four times on every call (a model you chose yourself is still retried).

@@ -16,6 +16,8 @@ NOT_END = {"mr.", "mrs.", "ms.", "dr.", "prof.", "sr.", "jr.", "st.", "vs.", "et
 FILLER_WORDS = {"so", "um", "uh", "er", "erm", "hmm", "well", "okay", "ok", "like", "and", "but", "yeah", "right", "alright",
                 "now", "then", "anyway", "you", "know", "basically", "actually", "i", "mean"}
 PAUSE_SPLIT = 0.9          # a silence this long between two words also separates sentences (Whisper often omits punctuation)
+LONG_PAUSE = 2.5           # where the transcript IS punctuated, a shorter silence inside a sentence is only the speaker taking a breath
+MAX_JOINED = 20.0          # ... but a "sentence" is not carried over a pause past this many seconds
 
 DEFAULTS = {
     "max_shift": 6.0,      # move an edge by at most this many seconds when a boundary is that close
@@ -52,10 +54,15 @@ def sentence_spans(transcript):
             spans.append((current[0]["start"], current[-1]["end"], " ".join(w["word"] for w in current)))
             current.clear()
 
+    words = list(_words(transcript))
+    ends = sum(1 for w in words if SENTENCE_END.search(w["word"]) and w["word"].lower() not in NOT_END)
+    punctuated = not any(w.get("segment") for w in words) and ends >= 5 and ends * 40 >= len(words)      # about one sentence end in 40 words, and enough of them to tell
     prev_end = None
-    for w in _words(transcript):
+    for w in words:
         if current and prev_end is not None and w["start"] - prev_end >= PAUSE_SPLIT:
-            close()
+            breath = punctuated and w["start"] - prev_end < LONG_PAUSE and prev_end - current[0]["start"] < MAX_JOINED
+            if not breath:                 # "... we make a bee line for the toilet, [pause] and then ..." is one sentence
+                close()
         current.append(w)
         text = w["word"].lower()
         if w.get("segment"):               # a whole segment of text: split it on its own punctuation

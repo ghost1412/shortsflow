@@ -340,3 +340,31 @@ def test_a_long_closing_sentence_does_not_push_a_clip_far_past_its_asked_length(
     tr2, spans2 = _t(w(25, "a."), w(25, "b."), w(15, "c."), w(50, "d."))      # the sentence before would leave only 22.0 s (under 75% of 30)
     fits = snap_clip({"start": 0.0, "end": 30.0}, sentence_spans(tr2), min_len=8.0, target=30.0)
     assert fits["end"] >= spans2[3][1] - 0.1                  # a clip that short is worse than a long one, so the sentence is still finished
+
+
+def _paused(pieces):
+    """Transcript from [(text, pause after it in seconds)]."""
+    t, segs = 0.0, []
+    for text, pause in pieces:
+        words = []
+        for w in text.split():
+            words.append({"word": " " + w, "start": round(t, 2), "end": round(t + 0.3, 2)})
+            t += 0.32
+        segs.append({"start": words[0]["start"], "end": words[-1]["end"], "text": text, "words": words})
+        t += pause
+    return {"segments": segs}
+
+
+FULL_STOPS = [("This is one sentence.", 0.2)] * 5
+
+
+def test_a_breath_inside_a_sentence_is_not_its_end_in_a_punctuated_transcript():
+    spans = sentence_spans(_paused(FULL_STOPS + [("We make a bee line for the toilet,", 1.1), ("and then we get a coffee.", 0.2)]))
+    assert spans[-1][2].startswith("We make") and spans[-1][2].endswith("coffee.")
+
+
+def test_a_long_silence_or_missing_punctuation_still_separates_sentences():
+    long_gap = sentence_spans(_paused(FULL_STOPS + [("We make a bee line for the toilet,", 3.0), ("and then we get a coffee.", 0.2)]))
+    assert long_gap[-1][2].startswith("and then")
+    bare = sentence_spans(_paused([("no punctuation at all here", 1.1), ("so a pause is all there is", 1.1)] * 4))
+    assert len(bare) == 8
