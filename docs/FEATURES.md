@@ -457,7 +457,7 @@ Set `SHORTSFLOW_API_KEY` before exposing the API beyond localhost; webhook URLs 
 
 ## 📤 Publish & Schedule (TikTok, Instagram Reels, YouTube Shorts)
 
-Clip extraction writes `metadata.json` (title, description, tags) and a badge thumbnail next to every clip. Post them with
+Clip extraction writes `metadata.json` (title, description, tags) and a badge thumbnail next to every clip, plus `clip_report.md`: one line per clip with its time range, score and why it was picked (`--clip_report csv` or `both` adds a spreadsheet). When the transcript has a stretch of 90 seconds or more with no speech found, the log says so (music, silence, or the speech model skipping it). Post them with
 [Upload-Post](https://upload-post.com), which holds the platform logins (set `UPLOAD_POST_API_KEY` and `UPLOAD_POST_USER`):
 
 ```bash
