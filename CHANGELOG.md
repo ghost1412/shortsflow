@@ -6,6 +6,10 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 - Highlights reel with an AI key: the model's moments are now also checked for coverage, and a part of the video it skipped is filled with that part's best signal window (offline, 240 s target on Gemini: podcast transcript reel ended at 48% of the video, now 88%; keynote last moment at 58%, now 90%).
 
+- Picking without an AI key: the score shown for a backfilled moment now includes the opening and housekeeping rank it was chosen by (it showed the raw signal score, so a penalised window could rank first in the candidate list). Offline picker benchmark: mean recall 0.145 -> 0.195, precision 0.30 -> 0.40, recall@8 0.223 -> 0.28.
+
+- Picking without an AI key: a window full of stutter ("the, the, the") or Whisper "..." fragments is ranked lower, and "thank you very much", "feel free to contact me" and "let me start that over" count as housekeeping talk (with the rank fix above, mean recall 0.208, recall@8 0.258).
+
 - Highlights reel without an AI key: the video is cut into time slices and the best moment of each goes in first, then the next best fill the rest of the length, so the reel covers the whole video (offline, slides talk transcript: moments from 12% to 89% of the video instead of 69% to 93%).
 
 - Shorts: a clip aimed at a length (for example 30 s) is no longer finished past 125% of it by a long closing sentence when the sentence before gives at least 75% (offline picker benchmark, keynote transcript: 4 of 5 clips within 25% of the target instead of 2 of 5). The offline benchmark now passes the target through, as the real run does.

@@ -106,13 +106,29 @@ BOILERPLATE = re.compile(
     r"|thank you (so much |very much )?(all|everyone|for)|voice check|sound check|how do you hear|can you hear|that concludes"
     r"|are you ready for the event|good luck|godspeed|subscribe|follow (us|them|along)|(use|using) the hashtag|see you (next|soon)"
     r"|until next time|next episode|shameless plug|stay tuned|be right back|round of applause|please welcome|give it up"
-    r"|(my|our) guests? (today|this)|coming up (next|after)|right after this)\b", re.I)
+    r"|(my|our) guests? (today|this)|coming up (next|after)|right after this"
+    r"|thank you,? (very much|so much)(?=\W*$)|feel free to (contact|reach|email)"
+    r"|(let me|let's|can we) (start|do) (that|it|this) (over|again)|take (that|it) again)\b", re.I)
 
 
 def boilerplate_hits(text):
     """How many show-housekeeping phrases a stretch of speech holds (greetings, thanks, sign-offs, "follow us", "voice check"). A window full of them
     is the intro or outro, not a moment a viewer wants as a clip."""
     return len(BOILERPLATE.findall(str(text or "")))
+
+
+def disfluency(text):
+    """0..1: how much of a stretch of speech is stutter or halting fragments, not a thought: an immediately repeated word ("the, the, the",
+    "of a, of a") or a Whisper "..." between pieces. A viewer hears it as someone searching for words, which is a poor clip however
+    many keywords it holds. Needs at least 8 words (a short stretch says nothing)."""
+    text = str(text or "")
+    words = re.findall(r"[^\W\d_][\w']*", text.lower())
+    if len(words) < 8:
+        return 0.0
+    repeats = sum(1 for a, b in zip(words, words[1:]) if a == b)
+    repeats += sum(1 for a, b, c, d in zip(words, words[1:], words[2:], words[3:]) if (a, b) == (c, d) and a != b)      # "of a, of a"
+    fragments = len(re.findall(r"\.\.\.|…", text))
+    return min(1.0, (repeats + 0.5 * fragments) / (0.25 * len(words)))
 
 
 def has_hook_cue(text, words=25):

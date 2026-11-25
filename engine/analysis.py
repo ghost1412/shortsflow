@@ -1494,6 +1494,7 @@ _FILLER_WORDS = {"uh", "um", "er", "erm", "uhh", "umm", "hmm", "yeah", "okay", "
 
 
 BOILERPLATE_PENALTY = 0.35     # per greeting / thanks / sign-off phrase in a window (at most 0.7)
+DISFLUENCY_PENALTY = 0.5    # at most, for a window that is all stutter and half-finished fragments
 HOOK_CUE_BONUS = 0.15      # rank bonus (the signal scores run 0..2) for a window that opens with a question, number or direct address
 
 
@@ -1521,7 +1522,7 @@ def opening_penalty(text):
     """0..1 penalty for a window that would open badly when picked without an AI: a mic check, a connective or filler as the first
     word ("And ...", "Uh, ...", "So, ..."), or mostly filler words. The signal score alone liked a "testing, one two three" opening.
     Text with no Latin words (Hindi, Japanese ...) gets no penalty: the English word lists say nothing about it."""
-    from engine.highlight_quality import weak_opening
+    from engine.highlight_quality import weak_opening, disfluency
     text = str(text or "").strip()
     if not text:
         return 1.0
@@ -1534,6 +1535,7 @@ def opening_penalty(text):
     if weak_opening(text):
         penalty += 0.3
     penalty += min(0.4, 2 * sum(w.lower() in _FILLER_WORDS for w in words) / len(words))
+    penalty += DISFLUENCY_PENALTY * disfluency(text)
     return min(1.0, penalty)
 
 
@@ -1652,7 +1654,8 @@ def pick_backfill(candidates, chosen, need, min_gap=30.0, min_len=10.0):
                 break
             if seg['end'] - seg['start'] < min_len or not far_enough(seg, gap):
                 continue
-            score = int((seg['norm_score'] + seg.get('norm_audio', 0)) * 50)
+            rank = opening_rank(seg['text']) if str(seg.get('text', '')).strip() else 0.0      # the order the picks are shown in must agree with the order they were chosen in
+            score = int(max(0.0, seg['norm_score'] + seg.get('norm_audio', 0) + rank) * 50)
             out.append({'start': seg['start'], 'end': seg['end'], 'viral_score': score, 'final_score': score,
                         'reason': 'Energy Peak (Backfill)'})
             used.append((seg['start'], seg['end']))
