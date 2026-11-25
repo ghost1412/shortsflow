@@ -215,7 +215,7 @@ def detect_silence_intervals(audio_path, threshold_db=25, min_silence_len=0.5, m
     """
     Returns a list of (start, end) intervals of 'keep' (non-silent) segments.
     threshold_db: volume below this is considered silence.
-    min_silence_len: minimum duration (seconds) of silence to be cut.
+    min_silence_len: not used here (librosa splits on loudness only); the shortest pause that is cut is set by plan_tighten's min_gap (0.25 s).
     margin: breathing room added before/after cuts.
     """
     import librosa
