@@ -59,6 +59,9 @@ def _make_script(args, session_dir, opts):
             error = e
             if attempt == 1:
                 print(f"[Warning] The model's answer was not a usable script ({e}); asking once more.")
+        except RuntimeError as e:                # no text model answered at all (the cloud one is busy or out of quota, and the one on this PC is not running)
+            print(f"[Error] No text model answered, so there is no script: {' '.join(str(e).split())[:200]}. Try again in a few minutes, or start the model on this PC (Ollama).")
+            sys.exit(1)
     if script is None:
         print(f"[Error] The script could not be written: {error}")
         sys.exit(1)

@@ -9,7 +9,7 @@ import { Presenter, PresenterRoom, avatarSchema, presenterRect, usePresenterRoom
 
 export const CASE_THEMES = ["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"] as const;
 export const CASE_TRANSITIONS = ["number", "fade", "slide", "zoom", "wipe", "cut"] as const;   // how one section gives way to the next
-export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation", "diagram", "illustration"] as const;
+export const CASE_SCENES = ["timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation", "diagram", "illustration", "story"] as const;
 
 export const caseVideoSchema = z.object({
   title: z.string().default("Explainer"),
@@ -37,6 +37,9 @@ export const caseVideoSchema = z.object({
     art: z.object({ src: z.string(), points: z.array(z.object({ x: z.number(), y: z.number() })).default([]),
       items: z.array(z.object({ src: z.string(), cx: z.number(), cy: z.number() })).optional(),                // one picture per icon (centre in percent), brought in when its label is spoken
       links: z.array(z.object({ src: z.string(), from: z.number(), to: z.number() })).optional() }).optional(),   // the arrows, shown once both ends are in   // the explaining picture of an illustration section; one point (percent of the picture) per label
+    story: z.object({ backdrop: z.string(),                                              // the story look: a drawn backdrop and who speaks, beat by beat
+      beats: z.array(z.object({ from: z.number(), to: z.number(), character: z.string().optional(), emblem: z.string().optional(), name: z.string().default(""), role: z.string().default(""),
+        big: z.string().default(""), label: z.string().default("") })).default([]) }).optional(),
     clipRate: z.number().default(1),
     clipAspect: z.number().default(16 / 9),     // width / height of the clip: older clips are 16:9, the landscape panel clips are wider
     cues: z.array(z.number()).default([]),     // seconds after the section starts at which each label is spoken
@@ -797,7 +800,7 @@ const MermaidDiagram: React.FC<{ code: string; p: Pal; accent: string; frames: n
   );
 };
 
-const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation, compare: Compare, chart: Chart, animation: Quote, diagram: Quote, illustration: Checklist } as const;
+const SCENE_VIEWS = { timeline: Timeline, flow: Flow, counters: Counters, checklist: Checklist, terminal: Terminal, quote: Quote, equation: Equation, compare: Compare, chart: Chart, animation: Quote, diagram: Quote, illustration: Checklist, story: Quote } as const;
 
 // one beat of stock footage: it punches in with a flash, drifts to one side, and repeats when the clip is shorter than the beat
 const BeatFootage: React.FC<{ src: string; seconds: number; kind?: "video" | "image" | "cartoon"; index: number; frames: number; start: number; opacity: number }> = ({ src, seconds, kind, index, frames, start, opacity }) => {
@@ -834,6 +837,122 @@ const sectionMotion = (kind: string, frame: number, frames: number, fade: number
   }
 };
 
+// the story look: a drawn backdrop that slowly pushes in, and over it, beat by beat, the character who is being talked about (a bust that rises in), a gold name
+// plate, or a big figure with its label. Fonts are the system's serif (no web font), the captions are the video's own bar.
+const GOLD = "#f0c15a";
+const SERIF = 'Georgia, "Palatino Linotype", "Book Antiqua", "Times New Roman", serif';
+
+const StoryBeat: React.FC<{ beat: NonNullable<Props["sections"][number]["story"]>["beats"][number]; frames: number }> = ({ beat, frames }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const { u, h, portrait } = useUnit();
+  const rise = spring({ frame, fps, config: { damping: 16, stiffness: 90 } });
+  const fadeIn = interpolate(frame, [0, 8], [0, 1], { extrapolateRight: "clamp" });
+  const fadeOut = interpolate(frame, [frames - 6, frames], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const o = Math.min(fadeIn, fadeOut);
+  const breathe = 1 + 0.012 * Math.sin(frame / (fps * 0.9));
+  const plate = (big: boolean) => (
+    <div style={{ position: "absolute", left: 0, right: 0, top: big ? "34%" : (portrait ? "7%" : "6%"), textAlign: "center", opacity: o, transform: `translateY(${(1 - rise) * -24 * u}px)` }}>
+      <div style={{ fontFamily: SERIF, fontSize: (big ? 120 : 76) * u, color: GOLD, letterSpacing: (big ? 0.1 : 0.14) * (big ? 120 : 76) * u, textTransform: "uppercase", textShadow: `0 ${4 * u}px ${24 * u}px rgba(0,0,0,0.6)`, fontWeight: 600 }}>{beat.name}</div>
+      {beat.role ? (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 22 * u, marginTop: 10 * u }}>
+          <div style={{ height: 2 * u, width: 90 * u, background: `${GOLD}99` }} />
+          <div style={{ fontFamily: SERIF, fontSize: (big ? 38 : 28) * u, color: `${GOLD}d9`, letterSpacing: 6 * u, textTransform: "uppercase" }}>{beat.role}</div>
+          <div style={{ height: 2 * u, width: 90 * u, background: `${GOLD}99` }} />
+        </div>
+      ) : null}
+    </div>
+  );
+  if (beat.big) {
+    return (
+      <AbsoluteFill style={{ opacity: o }}>
+        <AbsoluteFill style={{ background: "radial-gradient(ellipse at center, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.78) 100%)" }} />
+        {beat.name ? plate(false) : null}
+        <div style={{ position: "absolute", left: 0, right: 0, top: portrait ? "27%" : "18%", textAlign: "center", fontFamily: SERIF, fontWeight: 700, color: GOLD, fontSize: (portrait ? 520 : 420) * u, lineHeight: 1, transform: `scale(${0.82 + 0.18 * rise})`, textShadow: `0 ${10 * u}px ${50 * u}px rgba(240,193,90,0.35)` }}>{beat.big}</div>
+        {beat.label ? <div style={{ position: "absolute", left: 0, right: 0, top: portrait ? "58%" : "70%", textAlign: "center", fontFamily: SERIF, fontSize: 52 * u, color: GOLD, letterSpacing: 8 * u, textTransform: "uppercase" }}>{beat.label}</div> : null}
+      </AbsoluteFill>
+    );
+  }
+  if (!beat.character) {
+    return (
+      <AbsoluteFill style={{ opacity: o }}>
+        <AbsoluteFill style={{ background: "radial-gradient(ellipse at center, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.82) 100%)" }} />
+        {beat.emblem ? (
+          <>
+            {plate(false)}
+            <div style={{ position: "absolute", left: "50%", top: portrait ? "46%" : "58%", width: (portrait ? 700 : 460) * u, height: (portrait ? 700 : 460) * u,
+              transform: `translate(-50%, -50%) scale(${0.78 + 0.22 * rise}) rotate(${(1 - rise) * -14}deg)` }}>
+              <Img src={asset(beat.emblem)} style={{ width: "100%", height: "100%", filter: `drop-shadow(0 0 ${44 * u}px rgba(240,193,90,0.45))` }} />
+            </div>
+          </>
+        ) : plate(true)}
+      </AbsoluteFill>
+    );
+  }
+  const heightPct = portrait ? 0.7 : 0.9;
+  return (
+    <AbsoluteFill>
+      <div style={{ position: "absolute", left: "50%", bottom: 0, height: h * heightPct, aspectRatio: "600 / 800", opacity: o,
+        transform: `translate(-50%, ${(1 - rise) * 18}%) scale(${breathe})`, transformOrigin: "50% 100%" }}>
+        <Img src={asset(beat.character)} style={{ width: "100%", height: "100%", filter: `drop-shadow(0 ${14 * u}px ${30 * u}px rgba(0,0,0,0.5))` }} />
+      </div>
+      {beat.name ? plate(false) : null}
+    </AbsoluteFill>
+  );
+};
+
+const StoryScene: React.FC<{ story: NonNullable<Props["sections"][number]["story"]>; frames: number }> = ({ story, frames }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const push = 1 + 0.08 * (frame / Math.max(1, frames));
+  return (
+    <AbsoluteFill>
+      <AbsoluteFill style={{ transform: `scale(${push})`, transformOrigin: "50% 62%" }}>
+        <Img src={asset(story.backdrop)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </AbsoluteFill>
+      {story.beats.map((b, i) => {
+        const from = Math.max(0, Math.round(b.from * fps));
+        const len = Math.max(10, Math.round((b.to - b.from) * fps));
+        return (
+          <Sequence key={i} from={from} durationInFrames={len}>
+            <StoryBeat beat={b} frames={len} />
+          </Sequence>
+        );
+      })}
+    </AbsoluteFill>
+  );
+};
+
+// the opening and closing cards of a story video: over the story's own backdrop, in the story's gold serif (the theme's card would break the look)
+const StoryCover: React.FC<{ backdrop: string; heading: string; sub?: string; lines?: string[]; frames: number }> = ({ backdrop, heading, sub, lines, frames }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const { u, portrait } = useUnit();
+  const rise = spring({ frame, fps, config: { damping: 18, stiffness: 80 } });
+  const fade = Math.min(interpolate(frame, [0, 6], [0.4, 1], { extrapolateRight: "clamp" }), interpolate(frame, [frames - 8, frames], [1, 0], { extrapolateLeft: "clamp" }));
+  const words = heading.split(" ");
+  const gold = Math.max(0, words.length - 2);              // the last two words carry the colour
+  const size = (heading.length > 60 ? 70 : heading.length > 34 ? 86 : 108) * u;
+  return (
+    <AbsoluteFill style={{ background: "#000" }}>
+      <AbsoluteFill style={{ opacity: fade }}>
+        <AbsoluteFill style={{ transform: `scale(${1.02 + 0.06 * (frame / Math.max(1, frames))})` }}>
+          <Img src={asset(backdrop)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        </AbsoluteFill>
+        <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 38%, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.72) 100%)" }} />
+        <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: `0 ${80 * u}px`, paddingBottom: portrait ? 260 * u : 0, textAlign: "center", transform: `translateY(${(1 - rise) * 30 * u}px)` }}>
+          <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: size, lineHeight: 1.18, textTransform: "uppercase", color: "#fbf5e6", textShadow: `0 ${6 * u}px ${28 * u}px rgba(0,0,0,0.75)` }}>
+            {words.map((word, i) => <span key={i} style={{ color: i >= gold ? GOLD : undefined }}>{word}{i < words.length - 1 ? " " : ""}</span>)}
+          </div>
+          <div style={{ height: 3 * u, width: 220 * u * rise, background: GOLD, margin: `${34 * u}px auto ${24 * u}px` }} />
+          {sub ? <div style={{ fontFamily: SERIF, fontSize: 30 * u, letterSpacing: 5 * u, textTransform: "uppercase", color: `${GOLD}e6` }}>{sub}</div> : null}
+          {(lines ?? []).map((line, i) => <div key={i} style={{ fontFamily: SERIF, fontSize: 32 * u, color: "#e9dfca", marginTop: 12 * u }}>{line}</div>)}
+        </AbsoluteFill>
+      </AbsoluteFill>
+    </AbsoluteFill>
+  );
+};
+
 const SectionScene: React.FC<{ index: number; total: number; section: Props["sections"][number]; p: Pal; accent: string; frames: number; transition?: Props["transition"] }> = ({ index, total, section, p, accent, frames, transition = "number" }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -849,6 +968,15 @@ const SectionScene: React.FC<{ index: number; total: number; section: Props["sec
   const push = (1 + 0.05 * (frame / frames)) * pulse;
   const wipe = interpolate(frame, [0, 18], [-30, 115], { extrapolateRight: "clamp" });
   const underline = interpolate(frame, [4, 24], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  if (section.scene === "story" && section.story) {            // the story look is full-frame: no heading row, no section number, no stock footage
+    return (
+      <AbsoluteFill style={{ background: "#000" }}>                {/* sections fade through black: the theme's own background must not flash between them */}
+        <AbsoluteFill style={{ opacity: fade }}>
+          <StoryScene story={section.story} frames={frames} />
+        </AbsoluteFill>
+      </AbsoluteFill>
+    );
+  }
   return (
     <AbsoluteFill style={sectionMotion(transition, frame, frames, fade)}>
       {footage.length > 0 && !(section.scene === "illustration" && section.art) && (
@@ -1022,6 +1150,8 @@ export const CaseVideo: React.FC<Props> = (props) => {
   const outroStart = Math.round(lastEnd * fps);
   const { u, w, h } = useUnit();
   const rect = props.avatar ? presenterRect(u, w, h, captionZone(u, h)) : null;
+  const storyBackdrops = sections.flatMap((s) => (s.scene === "story" && s.story ? [s.story.backdrop] : []));
+  const note = props.verified ? undefined : "UNVERIFIED - no sources were given";
   return (
     <PresenterRoom.Provider value={rect ? rect.room : { right: 0, bottom: 0 }}>
     <AbsoluteFill style={{ backgroundColor: p.bg1, color: p.text, ...({ "--font": p.font, "--mono": p.mono } as React.CSSProperties) }}>
@@ -1030,7 +1160,11 @@ export const CaseVideo: React.FC<Props> = (props) => {
       {props.bgMusicUrl && <Audio src={asset(props.bgMusicUrl)} volume={() => props.bgMusicVolume} loop />}
       {introF > 0 && (
         <Sequence durationInFrames={introF}>
-          <Cover title={props.title} hook={props.hook} p={p} accent={accent} frames={introF} sub={props.verified ? undefined : "UNVERIFIED - no sources were given"} />
+          {storyBackdrops.length ? (
+            <StoryCover backdrop={storyBackdrops[0]} heading={props.hook || props.title} sub={note ?? (props.hook ? props.title : undefined)} frames={introF} />
+          ) : (
+            <Cover title={props.title} hook={props.hook} p={p} accent={accent} frames={introF} sub={note} />
+          )}
         </Sequence>
       )}
       {sections.map((s, i) => {
@@ -1044,14 +1178,20 @@ export const CaseVideo: React.FC<Props> = (props) => {
       })}
       {props.outroSeconds > 0 && (
         <Sequence from={outroStart} durationInFrames={Math.round(props.outroSeconds * fps)}>
-          <Cover title={props.verified ? "Sources" : "Unverified"} p={p} accent={accent} frames={Math.round(props.outroSeconds * fps)}
-            lines={props.verified
-              ? [...props.sources.slice(0, 3), ...(props.removedClaims > 0 ? [`${props.removedClaims} sentence${props.removedClaims === 1 ? "" : "s"} left out: the sources do not hold ${props.removedClaims === 1 ? "it" : "them"}.`] : ["Every figure and name was found in the sources."])]
-              : ["No sources were given. Check the facts before you rely on them."]} />
+          {(() => {
+            const heading = props.verified ? "Sources" : "Unverified";
+            const outroLines = props.verified
+                ? [...props.sources.slice(0, 3), ...(props.removedClaims > 0 ? [`${props.removedClaims} sentence${props.removedClaims === 1 ? "" : "s"} left out: the sources do not hold ${props.removedClaims === 1 ? "it" : "them"}.`] : ["Every figure and name was found in the sources."])]
+                : ["No sources were given. Check the facts before you rely on them."];
+            const outroFrames = Math.round(props.outroSeconds * fps);
+            return storyBackdrops.length
+              ? <StoryCover backdrop={storyBackdrops[storyBackdrops.length - 1]} heading={heading} lines={outroLines} frames={outroFrames} />
+              : <Cover title={heading} p={p} accent={accent} frames={outroFrames} lines={outroLines} />;
+          })()}
         </Sequence>
       )}
       {props.avatar && rect && <Presenter avatar={props.avatar} words={props.words} rect={rect} accent={accent} card={p.card} line={p.line} font={p.font} />}
-      {!props.captionsOff && <Captions words={props.words} accent={p.cap && !props.accent ? p.cap : accent} pill={p.light ? "rgba(10,10,14,0.86)" : "rgba(0,0,0,0.62)"} />}
+      {!props.captionsOff && <Captions words={props.words} accent={storyBackdrops.length && !props.accent ? GOLD : p.cap && !props.accent ? p.cap : accent} pill={p.light ? "rgba(10,10,14,0.86)" : "rgba(0,0,0,0.62)"} />}
     </AbsoluteFill>
     </PresenterRoom.Provider>
   );

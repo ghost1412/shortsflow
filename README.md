@@ -121,7 +121,7 @@ python main.py --mode CASE --case help                                          
 
 - **Grounded.** Sources are read (web pages, including ones that need JavaScript, PDFs, arXiv, YouTube captions or local transcription, audio and video files). The script may only use what they say, and numbers, names and quotes are checked against the text.
 - **Drawn, not stock slides.** Each section picks a layout: Mermaid diagrams (flowcharts, sequence, state, mind maps, drawn large with a camera that follows long chains), Manim animation, timelines, counters, checklists, or footage. Layout is fitted by measurement, so nothing overlaps the captions.
-- **Templates.** case, postmortem, history, explainer, recipe, news and animation, with a hook for the first seconds.
+- **Templates.** case, postmortem, history, explainer, recipe, news, animation and story (drawn characters over painted skies, for a narrated tale), with a hook for the first seconds.
 - **A presenter if you want one.** A drawn host who talks with the narration: people of different looks, cats, a dog or a robot, or your own built in the app (it can suggest the look from your photo, read on your PC).
 - **Local fallbacks.** Gemini, then other providers, then local Ollama if the cloud is rate-limited. The Edge voice takes over if ElevenLabs is out of credits.
 

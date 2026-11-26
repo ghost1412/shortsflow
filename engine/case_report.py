@@ -7,7 +7,7 @@ model and saved in the icon library). Nothing here changes a video, and a proble
 import os
 import subprocess
 
-SCENE_NAMES = {"illustration": "a picture that explains", "diagram": "a diagram", "counters": "number cards", "checklist": "a checklist", "timeline": "a timeline",
+SCENE_NAMES = {"illustration": "a picture that explains", "story": "a story scene with drawn characters", "diagram": "a diagram", "counters": "number cards", "checklist": "a checklist", "timeline": "a timeline",
                "flow": "a row of steps", "quote": "a key line", "compare": "two things side by side", "chart": "a bar chart", "animation": "one animation",
                "terminal": "a terminal", "equation": "a formula"}
 

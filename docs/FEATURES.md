@@ -327,6 +327,16 @@ Gemini key can hit its rate limit during a run; the run falls back to a lighter 
 What leaves the PC: the source text and the topic go to the AI text provider; a two to four word search phrase per section goes to Pexels; the narration text goes
 to the voice service. Nothing else. Check the facts of anything you publish: the check removes what the sources do not hold, it cannot tell you the sources are right.
 
+### Story look (`--case template=story`)
+
+A narrated tale drawn as scenes: characters with gold name plates over sunset, storm, fire or night skies, title cards with a golden object (a wheel, a spear, a sun), and word captions. Everything is drawn by code from a plan the text model writes; no image model is used. A character is saved on your computer and looks the same in your next video. It works best in 9:16.
+
+```bash
+python main.py --mode CASE --prompt "The story" --sources LINK_TO_THE_STORY --case template=story --case formats=9:16 --case draft
+```
+
+The script is written only from your sources, so give a page that actually tells the episode (a page about one character may not mention the scene you want). Check the drawn characters before you publish: they are simple flat figures that all share one face shape.
+
 ## 🎞️ Animated explainer (`--mode ANIMATE`)
 
 The case explainer cuts a topic into sections. `--mode ANIMATE` is the other style: **one continuous Manim animation** that runs under the whole narration

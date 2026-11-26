@@ -6,6 +6,7 @@ CaseVideo composition draws one scene per section with captions. `plan_timing` a
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -251,13 +252,21 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
     art = art or [None] * len(script["sections"])
     for sec, (start, end), ws, clip, foot, pic in zip(script["sections"], timing, words_per_section, clips, footage, art):
         labels, cues = list(sec.get("on_screen") or []), None
+        if sec["scene"] == "story" and not (pic and pic.get("kind") == "story"):       # no story picture: the first sentence is shown as a quote
+            first = (re.split(r"(?<=[.!?])\s", str(sec.get("narration") or "").strip())[0])[:110]
+            sec = dict(sec, scene="quote")
+            labels = [first] if first else [sec["title"]]
         if sec["scene"] == "illustration" and not pic:      # its picture could not be made: the plain checklist shows the labels
             sec = dict(sec, scene="checklist")
             labels = labels[:3]
         if sec["scene"] == "illustration":
             labels = [x for x in labels if x in pic["points"]]
+        if sec["scene"] == "story":
+            labels = []
         if sec["scene"] == "timeline":                     # events in the order of time, whatever order the narrator mentions them in
             cues = even_cues(len(labels), end - start)
+        elif sec["scene"] == "story":
+            cues = []
         elif sec["scene"] in ORDERED_SCENES:               # a heading row, a ranking or a main line: the authored order is part of the meaning
             cues = label_cues(labels, ws, duration=end - start)
             if cues:
@@ -265,6 +274,8 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
         else:
             labels, cues = spoken_order(labels, ws, duration=end - start)
         sections.append({"title": sec["title"], "scene": sec["scene"], "labels": labels, "cues": cues, "start": start, "end": end})
+        if pic and sec["scene"] == "story":
+            sections[-1]["story"] = {"backdrop": pic["backdrop"], "beats": [{k: v for k, v in b.items() if not (k in ("character", "emblem") and not v)} for b in pic["beats"]]}
         if pic and sec["scene"] == "illustration":
             sections[-1]["art"] = {"src": pic["path"], "points": [{"x": pic["points"][x][0], "y": pic["points"][x][1]} for x in labels]}   # one badge per label, in label order
             if pic.get("items"):                              # the picture in layers: one per icon (with its centre) and one per arrow, each shown when its label is spoken
@@ -286,7 +297,7 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
             sections[-1]["footage"] = [{"src": f["path"], "seconds": f.get("seconds") or 10.0, "kind": f.get("kind", "video")} for f in foot]
         words += [{"word": w["word"], "start": round(w["start"] + start, 3), "end": round(w["end"] + start, 3)} for w in ws]
     props = {"title": script["title"], "hook": str(script.get("hook") or ""), "theme": theme, "introSeconds": intro, "outroSeconds": outro, "verified": bool(script.get("verified")),
-             "sources": [source_label(s["ref"]) for s in script.get("sources", [])], "removedClaims": len(script.get("dropped") or []),
+             "sources": list(dict.fromkeys(source_label(s["ref"]) for s in script.get("sources", []))), "removedClaims": len(script.get("dropped") or []),
              "captionsOff": not captions, "sections": sections, "words": words,
              "bgMusicVolume": music_volume, "transition": transition}
     if avatar:
@@ -504,7 +515,7 @@ def attach_art(script, session_dir, aspect, source, ask, words=None, timing=None
     """[None | {"path", "points"}] per section: the explaining picture of each `illustration` section (see engine.case_art). With the words
     of each section and its (start, end), the picture is planned with the labels in the order the narrator reaches them, which is also the order
     they are numbered in, so the numbers run 1, 2, 3 across the picture."""
-    from engine import case_art
+    from engine import case_art, case_story
     if words and timing:
         sections = []
         for sec, ws, (start, end) in zip(script["sections"], words, timing):
@@ -512,7 +523,11 @@ def attach_art(script, session_dir, aspect, source, ask, words=None, timing=None
                 sec = dict(sec, on_screen=spoken_order(list(sec.get("on_screen") or []), ws, duration=end - start)[0])
             sections.append(sec)
         script = dict(script, sections=sections)
-    return case_art.attach(script, session_dir, aspect, source, ask, cache_dir=cache_dir)
+    pictures = case_art.attach(script, session_dir, aspect, source, ask, cache_dir=cache_dir)
+    if any(s.get("scene") == "story" for s in script["sections"]):
+        stories = case_story.attach(script, session_dir, aspect, ask, words, timing)
+        pictures = [st or pic for pic, st in zip(pictures, stories)]
+    return pictures
 
 
 def user_background(script, path, probe=None):
@@ -536,6 +551,8 @@ def backgrounds_for(script, session_dir, aspect, choice="footage", has_pexels=Tr
     choice = (choice or "footage").strip()
     if choice == "none":
         return None
+    if any(s.get("scene") == "story" for s in script["sections"]):       # a story scene draws its own backdrop: no stock clip or cartoon behind it
+        script = dict(script, sections=[dict(s, scene="illustration", footage=[]) if s.get("scene") == "story" else s for s in script["sections"]])
     if choice == "footage":
         return attach_footage(script, session_dir, aspect) if has_pexels else None
     if choice == "images":
@@ -619,6 +636,20 @@ def render_case(props, audio_path, output_path, music_path=None, aspect="16:9", 
                 s["clip"] = copy_to_public(s["clip"], assets) or None
                 if not s["clip"]:
                     s.pop("clip")
+            if s.get("story"):
+                back = copy_to_public(s["story"]["backdrop"], assets)
+                if back:
+                    s["story"] = dict(s["story"], backdrop=back, beats=[dict(b) for b in s["story"]["beats"]])
+                    for b in s["story"]["beats"]:
+                        for key in ("character", "emblem"):              # a drawing that cannot be staged leaves its name plate alone
+                            rel = copy_to_public(b[key], assets) if b.get(key) else None
+                            if rel:
+                                b[key] = rel
+                            else:
+                                b.pop(key, None)
+                else:                                       # the backdrop cannot be staged: the title shows as a quote
+                    s.pop("story")
+                    s["scene"], s["labels"] = "quote", [s["title"]]
             if s.get("art"):
                 rel = copy_to_public(s["art"]["src"], assets)
                 for layer in [*s["art"].get("items", []), *s["art"].get("links", [])] if rel else []:

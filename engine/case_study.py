@@ -11,7 +11,7 @@ import re
 
 MAX_COUNTERS = 4         # counter cards that fit a portrait frame above the caption
 MAX_CHECKLIST = 3        # checklist rows that fit above the caption bar
-SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation", "diagram", "illustration")
+SCENES = ("timeline", "flow", "counters", "checklist", "terminal", "quote", "equation", "compare", "chart", "animation", "diagram", "illustration", "story")
 # the layouts the model may choose from by itself (terminal and formula only when a template asks for them: they suit few topics)
 AUTO_LAYOUTS = ("timeline", "flow", "counters", "checklist", "quote", "compare", "chart", "diagram", "illustration")
 MAX_ILLUSTRATION = 4     # things in an explaining picture that stay clear of each other
@@ -49,6 +49,19 @@ PRESETS = {
         {"id": "why", "title": "Why it broke", "question": "What was the root cause, step by step?", "scene": "diagram"},
         {"id": "impact", "title": "The cost", "question": "Who was affected, for how long, and what did it cost?", "scene": "counters"},
         {"id": "fix", "title": "What changed", "question": "What was fixed, and what should others do?", "scene": "checklist"},
+    ],
+    # a story told as drawn scenes: who is named is who is on screen (the story look, engine/case_story.py); no on-screen labels, the narration carries it
+    "story": [
+        {"id": "moment", "title": "The moment", "scene": "story", "sentences": "2-3",
+         "question": "What is the most dramatic or surprising moment of this story? Say it in the first sentence, then who is involved."},
+        {"id": "who", "title": "Who they are", "scene": "story", "sentences": "3-4",
+         "question": "Who are the people, and what stands between them or drives them?"},
+        {"id": "turn", "title": "What happened", "scene": "story", "sentences": "4-5",
+         "question": "What happened, step by step, in the order it happened? Name who acts or speaks in each sentence."},
+        {"id": "answer", "title": "The answer", "scene": "story", "sentences": "3-4",
+         "question": "What was said or done in answer, and by whom?"},
+        {"id": "end", "title": "How it ended", "scene": "story", "sentences": "2-3",
+         "question": "How did it end, and what did it leave behind?"},
     ],
     "history": [
         {"id": "context", "title": "The situation", "question": "What was the situation before it began?", "scene": "timeline"},
@@ -264,6 +277,10 @@ def build_prompt(topic, template, sources, layouts="auto", length="standard"):
               "instead of stacking jargon; link the sentences (but, then, and) so it flows as a story. Never start two sentences in a row the "
               "same way, and no bullet-point phrasing. Use a cause word (that's why, because, so) ONLY when the sources state that very cause, and never add a "
               "consequence, motive or comparison the sources do not give.", "", "One section per question, in this order:"]
+    if any(s.get("scene") == "story" for s in template):
+        parts += ["", "STORY: this video tells a story with drawn characters, and the picture follows who is named. Tell it as a storyteller would, in the order things happened, in "
+                  "short vivid sentences; name the person who acts or speaks in each sentence (use their name, not only \"he\"); a line of speech is allowed only when the sources "
+                  "give it. Do not explain like a lecture, do not add feelings, motives or events the sources do not state. The set-up and the ending may be in the sources' own words."]
     for s in template:
         parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  " + (f"Default layout: {s['scene']}" if layouts == "auto" else f"Scene kind: {s['scene']}")
                      + (f"  Narration length: {s['sentences']} short sentences." if s.get("sentences") else ""))
@@ -339,7 +356,7 @@ def pick_layout(default, chosen, previous, layouts="auto"):
     it is not the same as the section before (then the default is used, and failing that the choice is kept). A section whose default is
     terminal or equation keeps it; so does a section whose default is the picture: the template means it to be one (the model once overrode "What it is" with
     a timeline of discovery dates, and the video then had no picture at all). When its labels are not things, they are asked for again (picture_names_for)."""
-    if layouts != "auto" or default in ("terminal", "equation", "animation", "illustration") or chosen not in AUTO_LAYOUTS:
+    if layouts != "auto" or default in ("terminal", "equation", "animation", "illustration", "story") or chosen not in AUTO_LAYOUTS:
         return default
     if default == "diagram" and chosen == "flow":      # a drawn diagram is the better way to show a process than a plain row of boxes
         return default

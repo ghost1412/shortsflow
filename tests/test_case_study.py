@@ -9,7 +9,7 @@ SRC = "In March 2021 the Acme payment portal was breached. Attackers used a stol
 
 def test_presets_have_known_scenes_and_the_story_presets_have_four_sections():
     for name, sections in cs.PRESETS.items():
-        assert len(sections) == (1 if name == "animation" else 4), name
+        assert len(sections) == {"animation": 1, "story": 5}.get(name, 4), name
         assert all(s["scene"] in cs.SCENES for s in sections), name
 
 

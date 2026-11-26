@@ -55,7 +55,7 @@ VIBES = ["suspense", "spooky", "cinematic", "upbeat", "sarcastic", "funny"]
 # The explainer, dub and publish tools. These mirror engine/case_options.py, the --target_lang help and engine/publish.py (a test pins them);
 # they are copied here because the minimal container (Dockerfile.mcp) has no engine/ folder.
 EXPLAINER_KINDS = ["case", "animate"]
-EXPLAINER_TEMPLATES = ["case", "postmortem", "history", "explainer", "recipe", "news", "animation"]
+EXPLAINER_TEMPLATES = ["case", "postmortem", "history", "explainer", "recipe", "news", "animation", "story"]
 EXPLAINER_THEMES = ["dark", "clean", "warm", "neon", "newsroom", "blueprint", "terminal", "editorial", "midnight"]
 DUB_LANGUAGES = ["es", "hi", "de", "fr", "ja", "pt", "zh", "it", "ru", "ko", "ar", "en", "tr", "nl", "pl", "uk", "id"]
 VIDEO_SHAPES = ["all", "tall", "wide", "square"]
@@ -247,7 +247,7 @@ TOOLS_DEFINITIONS = [
                          "description": "case = a sectioned explainer; animate = one continuous animation (equations, processes, algorithms)."},
                 "template": {"type": "string", "enum": EXPLAINER_TEMPLATES, "default": "case",
                              "description": ("The kind of story, only for kind 'case': case, postmortem (what went wrong), history, explainer, recipe, "
-                                             "news or animation. Ignored for 'animate'.")},
+                                             "news, animation, or story (drawn characters over painted skies, for a narrated tale; 9:16 works best). Ignored for 'animate'.")},
                 "theme": {"type": "string", "enum": EXPLAINER_THEMES, "default": "dark", "description": "The look (colours and type) of the whole video."},
                 "formats": {"type": "string", "default": "16:9,9:16",
                             "description": "Video shapes to render, comma separated, from 16:9, 9:16, 1:1 and 4:5. One shape renders faster."},

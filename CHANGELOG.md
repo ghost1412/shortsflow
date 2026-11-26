@@ -4,6 +4,10 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Case explainer: a **story look** (`--case template=story`): a narrated tale with drawn characters and gold name plates over painted skies (sunset, storm, fire, night and more), title cards with a golden object (chariot wheel, spear, arrow, bow, sun, crown, sword, fire), figure cards, and its own opening and closing cards. All drawn by code from a plan the text model writes; a character keeps its look across videos.
+
+- A run where no text model answers (cloud busy and no local model) now ends with a clear message instead of a traceback.
+
 ## 0.9.4 (2026-11-25)
 
 **Highlights:** a tighter shorts and highlights flow (clips end on a finished sentence and near the asked length, the highlights reel covers the whole video and keeps its best moment, picks carry the reason they were chosen), the case explainer's script step matches layouts to the material and its pictures pop in on time, eight more built-in icons, nine clearer MCP tools, grouped `--help`, and audits of dubbing, cut and re-render, recap, photo reel, music, filter and the idea-to-video modes.
