@@ -215,7 +215,7 @@ A drawn host in the corner talks with the narration: the mouth follows the words
 
 ### Story videos (new, still rough)
 
-`--case template=story` (not in 0.9.4 yet) makes a narrated tale drawn by code, with characters and gold name plates over painted skies. Before rendering, ShortsFlow reviews its own story: it tries to add people, creatures and objects the narration needs, replaces or removes pictures that do not fit, and lists what is still missing. Expect flat, still figures with one shared face shape, no action, and drawings that vary in quality; check the result before you share it. [Details](FEATURES.md).
+`--case template=story` makes a narrated tale drawn by code, with characters and gold name plates over painted skies. Before rendering, ShortsFlow reviews its own story: it tries to add people, creatures and objects the narration needs, replaces or removes pictures that do not fit, and lists what is still missing. Expect flat, still figures with one shared face shape, no action, and drawings that vary in quality. Main characters can be missing. **Animal stories do not work yet:** an animal can appear as a person or only as its name. With a small local model (we tried qwen2.5:7b) the pictures were mostly wrong or empty, even though the run reports success. Watch the result, and read the review file in the run folder, before you share it. [Details](FEATURES.md).
 
 **In the app:** **Case explainer**, story template card.
 

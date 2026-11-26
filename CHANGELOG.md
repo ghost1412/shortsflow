@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Story look: a title card must have something to show (no more single ordinary words or the section's heading on an empty screen), a section with no cards opens on the person it names first, and a creature that cannot be drawn is no longer shown as a person. Known limits: animal stories do not work yet, and a small local model plans poor pictures.
+
 - Fix: a dub line the translation model left out is asked for once more, alone, before it is left in the original language.
 
 - Fix: a chosen AI provider (`--llm_provider`, `LLM_PROVIDER`) is now the only one your text is sent to. Before, a failed or keyless choice went on to other providers you had keys for (also from Ollama to Groq or Hugging Face). Only Automatic falls back now; a chosen Ollama also gets time to load its model instead of 12 seconds.
