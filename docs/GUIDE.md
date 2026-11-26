@@ -261,7 +261,7 @@ Everything runs locally by default. What can leave is optional.
 | What leaves | Where it goes | When, and how to keep it local |
 |---|---|---|
 | Transcript text; for explainers, the topic and the text of your sources; for story videos, the narration | The AI model you choose. With Automatic: the providers you have keys for, one after another until one answers | Cloud providers need a key. `--llm_provider ollama` sends nothing to a cloud writer |
-| Small video frames | Gemini | `--visual_context` and picture descriptions, with a Gemini key. `SHORTSFLOW_VISION=ollama` uses a local vision model |
+| Small video frames | Gemini | `--visual_context`, a photo reel's `--smart_story` (the photos) and picture descriptions, with a Gemini key. `SHORTSFLOW_VISION=ollama` uses a local vision model |
 | Drawings of objects and creatures in a story video, with a list of names | Gemini | The drawing check, with a Gemini key. `SHORTSFLOW_VISION=ollama` keeps them local |
 | Prompts for generated pictures | Gemini or Hugging Face | AI images, with a key. Cartoon backgrounds: `--case cartoon=local` or `cartoon=drawn` |
 | GPS positions from your footage | OpenStreetMap, for place names | Trip recaps. `--recap_no_geocode` turns it off |

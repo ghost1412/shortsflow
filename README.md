@@ -58,13 +58,6 @@ No account or API key is needed to clip a video. If it saves you a subscription,
 Also: [explainer videos](docs/GUIDE.md#the-case-explainer-videos-written-from-your-sources) written from a web page or PDF, [talking presenters](docs/GUIDE.md#presenters-a-host-who-talks), animations, photo reels, quiz and facts shorts, and game clips.
 
 <p align="center">
-  <img src="demos/demo_facts.gif" width="200" alt="A facts short with animated captions" />
-  &nbsp;&nbsp;
-  <img src="demos/demo_spot_the_lie.gif" width="200" alt="A Spot the Lie quiz short" />
-  <br/><sub>A facts short and a "Spot the Lie" quiz, the format run on <a href="https://www.youtube.com/@spottheliee">@spottheliee</a>.</sub>
-</p>
-
-<p align="center">
   <img src="demos/presenters.png" width="640" alt="Ten ready-made presenters: six people, two cats, a dog and a robot" />
   <br/><sub>Presenters that talk through your explainers.</sub>
 </p>
@@ -92,7 +85,7 @@ ShortsFlow is free, adds no watermark, needs no account, and clips on your own m
 
 - Something wrong? [Open an issue](https://github.com/ghost1412/shortsflow/issues) with the output of `shortsflow doctor --report` (no keys or folder names in it).
 - [Guide](docs/GUIDE.md) · [All features and options](docs/FEATURES.md) · [Roadmap](ROADMAP.md)
-- Footage credits. Podcast demo: [Lila Rose Podcast E143](https://www.youtube.com/watch?v=VIq8L_ZeqkA) by Lila Rose, shared on YouTube under the [Creative Commons Attribution licence](https://creativecommons.org/licenses/by/3.0); cropped, re-framed and captioned (changes made).
+- Footage credits. Podcast demo: [Lila Rose Podcast E143](https://www.youtube.com/watch?v=VIq8L_ZeqkA) by Lila Rose, shared on YouTube under the [Creative Commons Attribution licence](https://creativecommons.org/licenses/by/3.0); cropped, re-framed and captioned (changes made). Explainer demo: made from a Wikipedia article; any stock footage in it is from [Pexels](https://www.pexels.com).
 
 ## License
 

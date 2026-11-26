@@ -2066,7 +2066,8 @@ Return JSON ONLY in this exact format:
         except Exception as e:
             print(f"[Warning] Failed to encode photo {p} for Vision LLM: {e}")
 
-    g_key = GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
+    local_only = (os.getenv("SHORTSFLOW_VISION") or "auto").strip().lower() not in ("auto", "gemini")      # the photos stay on this PC
+    g_key = None if local_only else GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
     if g_key:
         for g_model in ["gemini-3.6-flash", "gemini-flash-lite-latest", "gemini-flash-latest"]:
             try:
@@ -2087,7 +2088,8 @@ Return JSON ONLY in this exact format:
             except Exception as e:
                 print(f"[Warning] Gemini API ({g_model}) failed: {e}")
     else:
-        print("[Warning] GEMINI_API_KEY missing for Cloud Vision analysis. Checking local Ollama Vision...")
+        print("[Log] Photos are looked at on this PC (SHORTSFLOW_VISION=ollama)." if local_only
+              else "[Warning] GEMINI_API_KEY missing for Cloud Vision analysis. Checking local Ollama Vision...")
 
     # 2. Local Ollama Vision Fallback (llava / qwen2-vl / llama3.2-vision)
     try:
@@ -2112,7 +2114,9 @@ Return JSON ONLY in this exact format:
                 pass
 
         if b64_images:
-            for v_model in ["llava", "qwen2-vl", "llama3.2-vision", LOCAL_LLM_MODEL]:
+            from engine.visual_context import pick_vision_model
+            installed = pick_vision_model()
+            for v_model in ([installed] if installed else []) + ["llava", "qwen2-vl", "llama3.2-vision", LOCAL_LLM_MODEL]:
                 try:
                     print(f"[Log] Attempting local Ollama Vision API ({v_model})...")
                     payload = {

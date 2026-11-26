@@ -2,7 +2,11 @@
 
 Release notes for the `shortsflow` package and the Windows installer. Newest first.
 
-## Unreleased
+## 0.9.5 (2026-11-27)
+
+In short: **privacy fixes** (a chosen AI provider is now the only one your text goes to; local photo reels keep photos on your PC), a **story look as a preview** (still rough: animal stories do not work yet), picture and dubbing fixes, and a shorter README with a new guide.
+
+- Fix (privacy): a photo reel with `--smart_story` sent the photos to Gemini even with `SHORTSFLOW_VISION=ollama`. It now keeps them on the PC, and uses the Ollama vision model that is installed.
 
 - Story look: a title card must have something to show (no more single ordinary words or the section's heading on an empty screen), a section with no cards opens on the person it names first, and a creature that cannot be drawn is no longer shown as a person. Known limits: animal stories do not work yet, and a small local model plans poor pictures.
 
