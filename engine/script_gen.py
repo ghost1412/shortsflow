@@ -390,7 +390,8 @@ def get_llm_response(
                     response = requests.post(url, headers=headers, json=payload, timeout=timeout)
                     
                     if response.status_code == 429:
-                        _GEMINI_COOLDOWN[g_model] = time.time() + 60
+                        spent = "PerDay" in str(getattr(response, "text", ""))         # the day's free requests are used up: not worth asking again for an hour
+                        _GEMINI_COOLDOWN[g_model] = time.time() + (3600 if spent else 60)
                         if g_model != target_model and g_model != gemini_models[-1]:
                             print(f"[Warning] Gemini API ({g_model}) is rate limited (free-tier limit); using the next Gemini model.")
                             break

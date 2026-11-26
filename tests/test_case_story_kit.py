@@ -14,6 +14,7 @@ def no_real_image_model(monkeypatch):
     from engine import story_objects, visual_context
     monkeypatch.setattr(visual_context, "choose_backend", lambda: (None, None, "none"))
     monkeypatch.setattr(story_objects, "render_sheet", lambda documents, out, **k: None)
+    monkeypatch.setattr(story_objects, "BUSY_WAIT", 0)
 
 
 def page(*parts):

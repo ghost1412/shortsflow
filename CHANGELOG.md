@@ -4,6 +4,10 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Story review: a missing creature is judged as a portrait (not by what its sentence describes) and an enemy must look threatening; it is drawn as a character, not an icon. A busy model is asked again after a wait, and an answer the model wraps in a list is read (before, every verdict was lost and the check counted as failed).
+
+- Gemini: a model whose free requests for the day are used up is left alone for an hour instead of a minute.
+
 - Story look: **ShortsFlow reviews its own story before rendering.** It lists who and what the narration needs on screen and adds what is missing (a person is described, a creature is drawn whole from what it looks like, a thing is drawn); it judges every card and object against its sentence and the story's time (an image model says what the picture shows without knowing the sentence, then the text model decides), redraws a wrong one for the story's setting or removes it; what it cannot fix is listed as still missing in decisions.md.
 
 - A drawing made for a story is now checked in the same two steps (the earlier pick-from-a-list check let poor drawings pass as the nearest name).

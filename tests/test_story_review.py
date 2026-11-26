@@ -13,6 +13,7 @@ def no_real_image_model(monkeypatch):
     from engine import story_objects, visual_context
     monkeypatch.setattr(visual_context, "choose_backend", lambda: (None, None, "none"))
     monkeypatch.setattr(story_objects, "render_sheet", lambda documents, out, **k: None)
+    monkeypatch.setattr(story_objects, "BUSY_WAIT", 0)
 
 DRAWING = json.dumps({"svg": "<rect x='-60' y='-20' width='120' height='60' rx='8' fill='#b45309' stroke='#1f2937'/><circle cx='-40' cy='60' r='18' fill='#f59e0b'/>"
                              "<circle cx='40' cy='60' r='18' fill='#f59e0b'/><polygon points='20,-20 60,-80 80,-20' fill='#b45309'/><rect x='-80' y='-30' width='30' height='20' fill='#facc15'/>"})
@@ -48,6 +49,8 @@ def model(verdicts, needed=NEEDED, same=True, calls=None):
     def ask(prompt):
         if calls is not None:
             calls.append(prompt)
+        if "PORTRAIT" in prompt:
+            return json.dumps({"verdicts": [{"id": 1, "keep": True, "why": ""}]})
         if "numbered section.sentence" in prompt:
             return json.dumps(needed)
         if "decide whether to keep it" in prompt:
@@ -181,3 +184,55 @@ def test_a_person_with_two_names_is_one_person_and_gets_no_second_face(tmp_path)
     assert [o["name"] for o in sr.needed(script, lambda p: json.dumps(rows))] == ["Kaileena"]
     plan = {"characters": {"Empress of Time": {}}, "sections": [{"beats": [beat(1, "Empress of Time")]}]}
     assert sr.shown_as(plan, {"name": "Kaileena", "also": ["Empress of Time"], "kind": "person"}) == "Empress of Time"
+
+
+def test_a_creature_is_judged_as_a_portrait_not_by_what_its_sentence_describes(tmp_path):
+    calls = []
+    plan = a_plan()
+    needed = {"needed": [{"name": "Dahaka", "kind": "creature", "at": "1.1", "looks": "black horned smoke demon"}]}
+    sr.run(plan, SCRIPT, model(keep_all, needed=needed, calls=calls), str(tmp_path), {}, vision=VISION, render=render)
+    portrait = [c for c in calls if "PORTRAIT" in c]
+    assert portrait and "is hunted by" not in portrait[0] and "does not have to show what the being does" in portrait[0]
+    assert "must feel threatening" in portrait[0]                                       # a creature with no tone given is taken as an enemy
+    drawing = [c for c in calls if c.startswith("Draw ONE")][0]
+    assert "CHARACTER in a story" in drawing and "never cute or smiling" in drawing
+    assert "creature" in plan["characters"]["Dahaka"] and "figures_threatening" in "".join(os.listdir(os.environ["SHORTSFLOW_STORY_OBJECTS"]))
+
+
+def test_a_friendly_drawing_of_an_enemy_is_redrawn_with_the_reason_and_then_left_out(tmp_path):
+    calls = []
+    inner = model(keep_all, needed={"needed": [{"name": "Dahaka", "kind": "creature", "at": "1.1", "looks": "smoke demon"}]}, calls=calls)
+
+    def ask(prompt):
+        if "PORTRAIT" in prompt:
+            calls.append(prompt)
+            return json.dumps({"verdicts": [{"id": 1, "keep": False, "why": "it smiles like a mascot"}]})
+        return inner(prompt)
+    report = sr.run(a_plan(), SCRIPT, ask, str(tmp_path), {}, vision=VISION, render=render)
+    assert report["left"][0]["name"] == "Dahaka" and "mascot" in report["left"][0]["why"]
+    assert any("rejected because: it smiles like a mascot" in c for c in calls if c.startswith("Draw ONE"))
+
+
+def test_a_busy_model_is_asked_again_and_given_up_on_only_after_several_tries(monkeypatch):
+    from engine import story_objects
+    waits, left = [], [2]
+    monkeypatch.setattr(story_objects.time, "sleep", waits.append)
+
+    def flaky():
+        if left[0]:
+            left[0] -= 1
+            raise RuntimeError("503")
+        return "ok"
+    assert story_objects.patiently(flaky, "model") == "ok" and len(waits) == 2
+    calls = []
+    assert story_objects.patiently(lambda: calls.append(1), "model") is None and len(calls) == story_objects.BUSY_TRIES
+
+
+def test_a_models_answer_is_read_however_it_is_wrapped():
+    from engine.story_objects import rows_of
+    row = {"id": 1, "keep": False}
+    for data in ({"verdicts": [row]}, [row], [{"verdicts": [row]}], row):
+        assert rows_of(data, "verdicts") == [row], data
+    assert rows_of("nonsense", "verdicts") is None and rows_of({"other": 1}, "verdicts") is None and rows_of([], "verdicts") is None
+    wrapped = lambda p: json.dumps([{"verdicts": [{"id": 1, "keep": False, "why": "w", "should": "sand"}]}])
+    assert sr.judge([{"sentence": "s", "seen": "x"}], "t", wrapped) == [{"keep": False, "why": "w", "should": "sand"}]

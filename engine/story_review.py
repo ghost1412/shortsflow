@@ -33,17 +33,8 @@ def _json(reply):
 
 
 def _ask_rows(ask, prompt, key):
-    """The list under `key` in the model's JSON answer (a bare list counts), or None when there is no usable answer."""
-    try:
-        data = _json(ask(prompt))
-    except Exception as e:
-        print(f"[Warning] The review could not ask the text model ({' '.join(str(e).split())[:100]}).")
-        return None
-    if isinstance(data, list):
-        return [r for r in data if isinstance(r, dict)]
-    if isinstance(data, dict) and isinstance(data.get(key), list):
-        return [r for r in data[key] if isinstance(r, dict)]
-    return None
+    """The list under `key` in the model's JSON answer (a bare list counts), or None when there is no usable answer after a few tries."""
+    return story_objects.patiently(lambda: story_objects.rows_of(_json(ask(prompt)), key), "text model (review)")
 
 
 def _sentences(script):
@@ -63,10 +54,10 @@ def needed_question(script):
     return ("This is the narration of a short story video, each sentence numbered section.sentence:\n" + "\n".join(lines) + "\n\n"
             f"List, most important first and at most {MAX_NEEDED}, who and what a viewer MUST see to follow it: people (kind \"person\": human-shaped, including gods), "
             "creatures (kind \"creature\": a monster, beast or being that does not look like a person), and objects, vehicles or places the story turns on (kind \"thing\"). "
-            "Use the narration's own name. List each person or creature ONCE: when the narration (or the story it tells) calls one by two names or a title, put the other "
+            "Use the narration's own name. For a creature also give \"tone\": \"threatening\" (an enemy or monster), \"gentle\" or \"neutral\". List each person or creature ONCE: when the narration (or the story it tells) calls one by two names or a title, put the other "
             "names under \"also\" (a queen who is also called by her title is one person). \"at\" is the first sentence that names it, as section.sentence. \"looks\" says in at most 10 words how it looks in this story's "
             "tradition, for a creature or a thing (like \"huge black horned smoke demon\"). Never list a feeling or an idea.\n\n"
-            "Reply with raw JSON only: {\"needed\": [{\"name\": \"...\", \"also\": [], \"kind\": \"person\", \"at\": \"1.1\", \"looks\": \"\"}]}")
+            "Reply with raw JSON only: {\"needed\": [{\"name\": \"...\", \"also\": [], \"kind\": \"person\", \"at\": \"1.1\", \"looks\": \"\", \"tone\": \"\"}]}")
 
 
 def needed(script, ask):
@@ -92,7 +83,9 @@ def needed(script, ask):
             si, k = hit
         also = [" ".join(str(a).split())[:30] for a in (r.get("also") if isinstance(r.get("also"), list) else []) if str(a).strip()][:4]
         if all(not any(_same(x, y) for x in [name, *also] for y in [o["name"], *o["also"]]) for o in out):
-            out.append({"name": name, "also": also, "kind": kind, "section": si, "sentence": k, "looks": " ".join(str(r.get("looks") or "").split())[:80]})
+            tone = str(r.get("tone") or "").lower()
+            out.append({"name": name, "also": also, "kind": kind, "section": si, "sentence": k, "looks": " ".join(str(r.get("looks") or "").split())[:80],
+                        "tone": tone if tone in story_objects.TONES else ("threatening" if kind == "creature" else "")})
     return out[:MAX_NEEDED]
 
 
@@ -198,6 +191,36 @@ def _swap(item, emblem):
             if a["emblem"] == item["emblem"] and a["sentence"] == item["k"]:
                 a["emblem"] = emblem
     item["emblem"] = emblem
+
+
+def portrait_question(setting, name, looks, tone, seen):
+    wanted = {"threatening": "It is an enemy or monster, so it must feel threatening: a friendly, cute or smiling one is rejected.",
+              "gentle": "It must not feel threatening.", "neutral": ""}.get(tone, "")
+    return ("A drawing is shown as the PORTRAIT of a being in a short story video. Judge only whether it works as that being, in this story's time and world. A portrait "
+            "does not have to show what the being does. " + wanted + "\nEvery drawing is a flat modern cartoon: its drawing style never makes it wrong.\n"
+            f"1. Story: {setting}. The being: {name}" + (f", {looks}" if looks else "") + f". Someone who was not told what it is sees: {seen}\n\n"
+            "Reply with raw JSON only: {\"verdicts\": [{\"id\": 1, \"keep\": true, \"why\": \"few words\"}]}")
+
+
+def _draw_figure(name, looks, tone, setting, ask, folder, vision, render):
+    """A drawing of a being that is recognised from what it looks like AND works as its portrait with the right feel: (path, "") or (None, why not). It is judged
+    as a portrait: asked to show its sentence, a monster was once refused for not showing the fight."""
+    subject = looks or name.lower()
+    note = ""
+    for _ in range(FIX_TRIES):
+        got = story_objects.make([subject], ask, folder, vision=vision, render=render, setting=setting, feedback=note, fresh=bool(note), tone=tone or "neutral")[subject]
+        if not got["path"]:
+            return None, got["status"]
+        with open(got["path"], encoding="utf-8") as f:
+            document = f.read()
+        seen = story_objects.describe_all([document], folder, vision, render, feeling=True)
+        rows = _ask_rows(ask, portrait_question(setting, name, looks, tone, seen[0]), "verdicts") if seen else None
+        if not rows:
+            return None, "could not be judged"
+        if rows[0].get("keep") is True:
+            return got["path"], ""
+        note = str(rows[0].get("why") or "")[:120]
+    return None, f"rejected: {note}"
 
 
 def _draw_for(thing, sentence, setting, ask, folder, vision, render, why=""):
@@ -308,9 +331,11 @@ def review_coverage(plan, script, ask, folder, drawn, vision, render, report):
         else:
             looks = re.sub(r"^(a|an|the)\s+", "", re.sub(r"[^a-z' -]", " ", item["looks"].lower()).strip())
             looks = " ".join(looks.split()[:7])
-            subject = looks if item["kind"] == "creature" and looks else name.lower()
-            extra = f". The {name} looks like: {looks}" if looks and subject != looks else ""
-            path, why = _draw_for(subject, sentence if subject != looks else f"{sentence} ({name} is a {looks}.)", setting + extra, ask, folder, vision, render)
+            if item["kind"] == "creature":
+                path, why = _draw_figure(name, looks, item.get("tone") or "threatening", setting, ask, folder, vision, render)
+            else:
+                extra = f". The {name} looks like: {looks}" if looks else ""
+                path, why = _draw_for(name.lower(), sentence, setting + extra, ask, folder, vision, render)
             if path and item["kind"] == "creature":
                 existing = next((n for n in plan["characters"] if _same(n, name)), None)
                 who = existing or name

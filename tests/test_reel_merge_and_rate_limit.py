@@ -48,3 +48,31 @@ def test_a_rate_limited_gemini_model_is_skipped_at_once_and_on_the_next_call(mon
     for _ in range(2):
         assert script_gen.get_llm_response("p", "s") == "{}"
     assert asked == ["gemini-3.6-flash", "gemini-flash-lite-latest", "gemini-flash-lite-latest"]
+
+
+def test_a_model_out_of_its_daily_quota_rests_for_an_hour_and_a_busy_one_for_a_minute(monkeypatch):
+    class Reply:
+        def __init__(self, code, text=""):
+            self.status_code, self.text = code, text
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError(f"{self.status_code} error")
+
+        def json(self):
+            return {"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}
+
+    def post(url, **kw):
+        model = url.split("/models/")[1].split(":")[0]
+        if model == "gemini-3.6-flash":
+            return Reply(429, "GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+        return Reply(429, "per minute") if model == "gemini-flash-lite-latest" else Reply(200)
+    cooldown = {}
+    monkeypatch.setattr(script_gen, "_GEMINI_COOLDOWN", cooldown)
+    monkeypatch.setattr(script_gen, "GEMINI_API_KEY", "k")
+    for name in ("FORCE_OLLAMA", "LLM_PROVIDER", "LLM_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(script_gen.requests, "post", post)
+    monkeypatch.setattr(script_gen.time, "time", lambda: 1000.0)
+    assert script_gen.get_llm_response("p", "s") == "{}"
+    assert cooldown["gemini-3.6-flash"] == 4600.0 and cooldown["gemini-flash-lite-latest"] == 1060.0

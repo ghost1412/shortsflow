@@ -18,11 +18,47 @@ import json
 import os
 import re
 import subprocess
+import time
 import uuid
 
 from engine import art_icons
 
 ROUNDS = 2
+BUSY_TRIES = 3                # a model that does not answer is asked again, after a wait: free tiers are often busy for a minute
+BUSY_WAIT = 35                # two waits outlast the minute a rate-limited Gemini model is left alone (25 s ones gave up just before it came back)
+TONES = ("threatening", "gentle", "neutral")
+
+
+def rows_of(data, key):
+    """The list under `key` in a model's JSON answer, however it was wrapped: {key: [...]}, a bare list of rows, or that object inside a list ([{key: [...]}], which
+    once made every verdict of a check disappear). None when there is no such list."""
+    if isinstance(data, list):
+        inner = [row for r in data if isinstance(r, dict) and isinstance(r.get(key), list) for row in r[key]]
+        data = inner or data
+        return [r for r in data if isinstance(r, dict)] or None
+    if isinstance(data, dict):
+        if isinstance(data.get(key), list):
+            return [r for r in data[key] if isinstance(r, dict)]
+        if "id" in data:                                   # one row on its own
+            return [data]
+    return None
+
+
+def patiently(call, label):
+    """call() until it gives something usable: a model that raises or answers nothing is asked again after a wait. None when it never does."""
+    for attempt in range(BUSY_TRIES):
+        try:
+            got = call()
+            if got is not None:
+                return got
+            why = "no usable answer"
+        except Exception as e:
+            why = " ".join(str(e).split())[:90]
+        if attempt + 1 < BUSY_TRIES:
+            print(f"[Log] The {label} did not answer ({why}); trying again in {BUSY_WAIT} s.")
+            time.sleep(BUSY_WAIT)
+    print(f"[Warning] The {label} gave nothing usable after {BUSY_TRIES} tries ({why}).")
+    return None
 
 
 def library_dir():
@@ -81,8 +117,8 @@ def render_sheet(documents, out, run=None, remotion_dir=None):
 PER_SHEET = 3                 # drawings on one picture: the image model's answer is kept short enough to arrive whole
 
 
-def look_question(count):
-    return (f"The picture shows {count} numbered flat cartoon drawing(s). Ignore the drawing style and the colours. For each number, say what object or creature it "
+def look_question(count, feeling=False):
+    return (("For each drawing also say, at the end of its description, how it feels to a viewer: (feels friendly), (feels neutral) or (feels threatening).\n" if feeling else "") +f"The picture shows {count} numbered flat cartoon drawing(s). Ignore the drawing style and the colours. For each number, say what object or creature it "
             "depicts, in at most 12 words, naming the features that tell its kind or period (for a ship: sails or oars, or funnels, portholes, a motor). Say what it "
             "looks like to you, even if it is unclear.\nAnswer on one line in exactly this form and nothing else: 1=description; 2=description")
 
@@ -101,7 +137,7 @@ def read_answer(text, count):
     return found or None
 
 
-def describe_all(documents, folder, vision, render=None):
+def describe_all(documents, folder, vision, render=None, feeling=False):
     """What the image model sees in each drawing, told nothing about what it should be: a list of descriptions in order, None when nothing can look at them."""
     model, ask_image = vision[0], vision[1]
     if not documents or not ask_image:
@@ -114,7 +150,8 @@ def describe_all(documents, folder, vision, render=None):
         if not sheet:
             return None
         with open(sheet, "rb") as f:
-            answers = read_answer(ask_image([f.read()], model, prompt=look_question(len(batch))), len(batch))
+            picture = f.read()
+        answers = patiently(lambda: read_answer(ask_image([picture], model, prompt=look_question(len(batch), feeling)), len(batch)), "image model")
         if answers is None:
             return None
         out += [answers.get(n, "nothing recognisable") for n in range(1, len(batch) + 1)]
@@ -135,12 +172,10 @@ def check(drawings, folder, vision, ask, render=None):
     seen = describe_all([d for _, d in drawings], folder, vision, render)
     if seen is None or not ask:
         return None
-    try:
+    def compare():
         from engine.script_gen import robust_json_parse
-        data = robust_json_parse(ask(same_question([(n, s) for (n, _), s in zip(drawings, seen)])))
-    except Exception:
-        return None
-    rows = data if isinstance(data, list) else data.get("verdicts") if isinstance(data, dict) else None
+        return rows_of(robust_json_parse(ask(same_question([(n, s) for (n, _), s in zip(drawings, seen)]))), "verdicts") or None
+    rows = patiently(compare, "text model (comparing)")
     verdicts = {}
     for r in rows if isinstance(rows, list) else []:
         try:
@@ -152,8 +187,16 @@ def check(drawings, folder, vision, ask, render=None):
     return {name: verdicts.get(i, False) for i, (name, _) in enumerate(drawings, 1)}
 
 
-def _draw(name, ask, again=False, setting="", feedback=""):
-    prompt = art_icons.request(name)
+def figure_request(name, tone):
+    """The request for a being of the story: a character that fills the frame, not a friendly icon."""
+    mood = {"threatening": "It must look dangerous and frightening, never cute or smiling: narrowed or glaring eyes, bared fangs, claws or horns as fits, dark and muted colours.",
+            "gentle": "It should look calm and kind.", "neutral": ""}[tone if tone in TONES else "neutral"]
+    return (art_icons.request(name) + "\n\nThis one is a CHARACTER in a story, not an icon: show the whole being or its head and shoulders, large and facing the viewer, "
+            "in colours that suit it (not the bright icon colours). " + mood)
+
+
+def _draw(name, ask, again=False, setting="", feedback="", tone=""):
+    prompt = figure_request(name, tone) if tone else art_icons.request(name)
     if setting:
         prompt += f"\n\nThe story: {setting}. Draw it as it would look in that time and world (nothing modern in an old story)."
     if feedback:
@@ -167,12 +210,14 @@ def _draw(name, ask, again=False, setting="", feedback=""):
     return None
 
 
-def make(names, ask, folder, vision=None, render=None, directory=None, setting="", feedback="", fresh=False):
+def make(names, ask, folder, vision=None, render=None, directory=None, setting="", feedback="", fresh=False, tone=""):
     """{name: {"path": svg file or None, "status": "saved before" | "checked" | "unchecked" | "not recognised" | "not drawn"}} for every name asked for."""
     if vision is None:
         from engine.visual_context import choose_backend
         vision = choose_backend()
     results, todo = {}, []
+    if tone:                                       # beings are kept apart from objects: an icon saved earlier must not return as a character
+        directory = os.path.join(directory or library_dir(), "figures_" + (tone if tone in TONES else "neutral"))
     for name in dict.fromkeys(names):
         saved = None if fresh else load(name, directory)             # a rejected picture must not come back from the library
         if saved:
@@ -182,11 +227,7 @@ def make(names, ask, folder, vision=None, render=None, directory=None, setting="
     for round_ in range(ROUNDS):
         drawn = []
         for name in todo:
-            try:
-                markup = _draw(name, ask, again=round_ > 0, setting=setting, feedback=feedback) if ask else None
-            except Exception as e:
-                print(f"[Warning] The text model could not draw '{name}' ({' '.join(str(e).split())[:100]}).")
-                markup = None
+            markup = patiently(lambda: _draw(name, ask, again=round_ > 0, setting=setting, feedback=feedback, tone=tone), f"text model (drawing '{name}')") if ask else None
             if markup:
                 drawn.append((name, svg_doc(markup)))
             else:

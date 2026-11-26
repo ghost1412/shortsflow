@@ -14,6 +14,7 @@ def no_real_image_model(monkeypatch):
     from engine import story_objects, visual_context
     monkeypatch.setattr(visual_context, "choose_backend", lambda: (None, None, "none"))
     monkeypatch.setattr(story_objects, "render_sheet", lambda documents, out, **k: None)
+    monkeypatch.setattr(story_objects, "BUSY_WAIT", 0)
 
 DRAWING = json.dumps({"svg": "<rect x='-60' y='-20' width='120' height='60' rx='8' fill='#b45309' stroke='#1f2937'/><circle cx='-40' cy='60' r='18' fill='#f59e0b'/>"
                              "<circle cx='40' cy='60' r='18' fill='#f59e0b'/><polygon points='20,-20 60,-80 80,-20' fill='#b45309'/><rect x='-80' y='-30' width='30' height='20' fill='#facc15'/>"})

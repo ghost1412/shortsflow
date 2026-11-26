@@ -326,7 +326,7 @@ def check_plan(reply, script, library=None):
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v9"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v11"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
@@ -482,7 +482,7 @@ def attach(script, session_dir, aspect, ask, words, timing, vision=None, render=
             if bt.get("asides"):
                 shown_beat["asides"] = [{"src": emblems[e], "at": x, "until": y} for e, x, y in aside_times(bt["asides"], by_sentence, a, b) if emblems.get(e) and y > x]
         shown = {bt["emblem"] for bt in row["beats"] if bt.get("emblem")} | {a["emblem"] for bt in row["beats"] for a in bt.get("asides", [])}
-        report = [{"name": o["object"], "status": objects.get(o["object"], {}).get("status") or ("in the kit" if kit_emblem(o["object"]) else "not drawn (too many things asked for)"),
+        report = [{"name": o["object"], "status": objects.get(o["object"], {}).get("status") or ("in the kit" if kit_emblem(o["object"]) else "not drawn"),
                    "shown": ("custom:" + o["object"]) in shown or bool(kit_emblem(o["object"]) and kit_emblem(o["object"])[0] in shown)} for o in row.get("props", [])]
         out.append({"kind": "story", "backdrop": bd, "beats": beats, "characters": sorted({bt["character"] for bt in row["beats"] if bt["character"]}),
                     "cards": [bt["name"] for bt in row["beats"] if not bt["character"]], "objects": report, "review": review})
