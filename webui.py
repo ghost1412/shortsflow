@@ -2436,8 +2436,9 @@ def build_ui():
                         c_sources = gr.Textbox(label="Sources (up to three, one per line: a web link, a PDF or YouTube link, a document, audio or video file path, or notes)", lines=4,
                                                placeholder="https://example.com/article\nhttps://example.com/another",
                                                info="Without a source the video is marked UNVERIFIED. The text of the sources goes to your AI text provider.")
-                        c_template = gr.Dropdown(["case", "postmortem", "history", "explainer", "animation"], value="case", label="Sections",
-                                                 info="case: what happened, how, impact, what could change. postmortem: what broke, why, cost, what changed. history. explainer. animation: one continuous animated explanation instead of sections.")
+                        c_template = gr.Dropdown(web_args.CASE_TEMPLATE_CHOICES, value="case", label="Sections",
+                                                 info="The kind of video. Story: a narrated tale with drawn characters; tick only 9:16 (the other shapes are untested), and give a source "
+                                                      "that tells the episode. The Look and Background choices do not change a story.")
                         c_layouts = gr.Dropdown(["auto", "template"], value="auto", label="Layouts",
                                                 info="auto: the model picks the best layout for each section (timeline, flow, counters, checklist, compare, chart, quote). template: the sections' own.")
                         c_theme = gr.Dropdown(list(web_args.CASE_THEME_LABELS.values()), value=web_args.CASE_THEME_LABELS["dark"], label="Look")

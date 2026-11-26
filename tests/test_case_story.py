@@ -177,3 +177,13 @@ def test_two_pages_of_one_site_are_listed_once_on_the_closing_card():
     script = dict(SCRIPT, sources=[{"id": "S1", "ref": "https://en.wikipedia.org/wiki/A"}, {"id": "S2", "ref": "https://en.wikipedia.org/wiki/B"}])
     props = cr.build_props(script, [(0.0, 5.0), (5.0, 9.0)], [[], []])
     assert props["sources"] == ["en.wikipedia.org"]
+
+
+def test_the_browser_app_offers_every_template_the_pipeline_has():
+    from pathlib import Path
+
+    from engine import case_options
+    from shortsflow import web_args
+    assert [value for _, value in web_args.CASE_TEMPLATE_CHOICES] == list(case_options.TEMPLATES)       # the list was once typed by hand and missed three
+    assert "c_template = gr.Dropdown(web_args.CASE_TEMPLATE_CHOICES" in (Path(__file__).resolve().parent.parent / "webui.py").read_text(encoding="utf-8")
+    assert "template=story" in web_args.case_args("A tale", template="story", formats=("9:16",))

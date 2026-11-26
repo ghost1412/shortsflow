@@ -471,6 +471,13 @@ def parse_sources(text, limit=3):
 CASE_BACKGROUNDS = {"Stock video": "footage", "Stock photos": "images", "Cartoon pictures": "cartoon", "Style only (no pictures)": "none", "My own image or video": "file"}
 
 
+# the "Sections" list of the Case tab: every template of the pipeline, with a plain label (a template without one shows its name, so none can go missing)
+_CASE_TEMPLATE_LABELS = {"case": "Case: what happened, how, impact, what could change", "postmortem": "Postmortem: what broke, why, cost, what changed",
+                         "history": "History", "explainer": "Explainer", "recipe": "Recipe", "news": "News", "animation": "One continuous animation",
+                         "story": "Story: drawn characters over painted skies"}
+CASE_TEMPLATE_CHOICES = [(_CASE_TEMPLATE_LABELS.get(t, t), t) for t in _case_options.TEMPLATES]
+
+
 def case_args(topic, sources_text="", template="case", theme="dark", formats=("16:9", "9:16"), no_manim=False, no_footage=False, session_dir=None,
               background="footage", background_file=None, resume=None, draft=False, plan_only=False, layouts="auto", avatar="off", transition="number", narrator="standard", voice_sample=None, cartoon="auto"):
     """Command-line arguments for a case explainer (--mode CASE). The options travel as `--case KEY=VALUE` pairs built from the shared schema

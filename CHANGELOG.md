@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Browser app: the Case tab's "Sections" list is now built from the pipeline's own templates, so Story, Recipe and News can be chosen (the typed list was missing them).
+
 - Case explainer: a **story look** (`--case template=story`): a narrated tale with drawn characters and gold name plates over painted skies (sunset, storm, fire, night and more), title cards with a golden object (chariot wheel, spear, arrow, bow, sun, crown, sword, fire), figure cards, and its own opening and closing cards. All drawn by code from a plan the text model writes; a character keeps its look across videos.
 
 - A run where no text model answers (cloud busy and no local model) now ends with a clear message instead of a traceback.
