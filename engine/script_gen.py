@@ -268,6 +268,13 @@ def _call_anthropic(api_key, model, prompt, system_prompt, max_tokens=4096, temp
 _GEMINI_COOLDOWN = {}          # Gemini model -> time until which it is not asked again after "429 Too Many Requests"
 
 
+def _chosen_provider_error(provider, failure=None):
+    why = " ".join(str(failure).split())[:200] if failure else (
+        "its key is not set, it did not answer, or the name is not a known provider")
+    return RuntimeError(f"The AI provider you chose ({provider}) could not answer: {why}. Nothing was sent to any other provider. "
+                        "Fix its key or server, or choose Automatic (--llm_provider auto) to let ShortsFlow try others.")
+
+
 def get_llm_response(
     prompt,
     system_prompt="You are a viral YouTube shorts creator. ALWAYS respond with raw JSON only. No conversational text.",
@@ -283,6 +290,10 @@ def get_llm_response(
 
     target_provider = (provider or os.getenv("LLM_PROVIDER") or "auto").lower().strip()
     target_model = model or os.getenv("LLM_MODEL")
+    if os.getenv("FORCE_OLLAMA", "").lower() in ["1", "true", "yes"]:
+        target_provider = "ollama"
+    # A provider the user chose is the only one used: the prompt never goes to a service they did not pick. Only "auto" falls back.
+    failure = None
 
     # 1. Explicit Provider Execution (if specified)
     if target_provider == "openai" and (OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")):
@@ -295,7 +306,8 @@ def get_llm_response(
                 model=m, prompt=prompt, system_prompt=system_prompt, max_tokens=max_tokens, temperature=temperature, timeout=timeout
             )
         except Exception as e:
-            print(f"[Warning] OpenAI LLM failed: {e}. Proceeding to fallbacks...")
+            print(f"[Warning] OpenAI LLM failed: {e}")
+            failure = e
 
     if target_provider in ["anthropic", "claude"] and (ANTHROPIC_API_KEY or os.getenv("ANTHROPIC_API_KEY")):
         m = target_model or "claude-haiku-5-5"
@@ -306,7 +318,8 @@ def get_llm_response(
                 model=m, prompt=prompt, system_prompt=system_prompt, max_tokens=max_tokens, temperature=temperature, timeout=timeout
             )
         except Exception as e:
-            print(f"[Warning] Anthropic LLM failed: {e}. Proceeding to fallbacks...")
+            print(f"[Warning] Anthropic LLM failed: {e}")
+            failure = e
 
     if target_provider == "deepseek" and (DEEPSEEK_API_KEY or os.getenv("DEEPSEEK_API_KEY")):
         m = target_model or "deepseek-chat"
@@ -318,7 +331,8 @@ def get_llm_response(
                 model=m, prompt=prompt, system_prompt=system_prompt, max_tokens=max_tokens, temperature=temperature, timeout=timeout
             )
         except Exception as e:
-            print(f"[Warning] DeepSeek LLM failed: {e}. Proceeding to fallbacks...")
+            print(f"[Warning] DeepSeek LLM failed: {e}")
+            failure = e
 
     if target_provider == "groq" and (GROQ_API_KEY or os.getenv("GROQ_API_KEY")):
         print(f"[Log] 🤖 Executing requested Groq LLM ({target_model or 'auto-selected model'})...")
@@ -326,7 +340,8 @@ def get_llm_response(
             return call_groq(GROQ_API_KEY or os.getenv("GROQ_API_KEY"), prompt, system_prompt, preferred=target_model,
                               max_tokens=max_tokens, temperature=temperature, timeout=timeout)
         except Exception as e:
-            print(f"[Warning] Groq LLM failed: {e}. Proceeding to fallbacks...")
+            print(f"[Warning] Groq LLM failed: {e}")
+            failure = e
 
     if target_provider in ["openrouter", "custom"]:
         m = target_model or "meta-llama/llama-3.3-70b-instruct"
@@ -338,11 +353,14 @@ def get_llm_response(
                 api_key=key, base_url=b_url, model=m, prompt=prompt, system_prompt=system_prompt, max_tokens=max_tokens, temperature=temperature, timeout=timeout
             )
         except Exception as e:
-            print(f"[Warning] Custom/OpenRouter LLM failed: {e}. Proceeding to fallbacks...")
+            print(f"[Warning] Custom/OpenRouter LLM failed: {e}")
+            failure = e
+
+    if target_provider not in ("auto", "gemini", "ollama"):
+        raise _chosen_provider_error(target_provider, failure)
 
     # 2. Gemini API Fallback Chain
-    force_ollama = os.getenv("FORCE_OLLAMA", "").lower() in ["1", "true", "yes"] or target_provider == "ollama"
-    if not force_ollama and (GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")):
+    if target_provider != "ollama" and (GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")):
         g_key = GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
         if target_provider == "gemini" and target_model:
             gemini_models = [target_model, "gemini-3.6-flash", "gemini-flash-lite-latest", "gemini-flash-latest", "gemini-pro-latest"]
@@ -431,6 +449,9 @@ def get_llm_response(
                             print(f"[Warning] {_hint}")
 
 
+    if target_provider == "gemini":
+        raise _chosen_provider_error("gemini", failure)
+
     # 3. DeepSeek Fallback
     if (DEEPSEEK_API_KEY or os.getenv("DEEPSEEK_API_KEY")) and target_provider == "auto":
         try:
@@ -478,7 +499,8 @@ def get_llm_response(
                 }
             }
 
-            ollama_timeout = min(timeout, 12) if timeout else 12
+            # in the automatic chain a silent Ollama is skipped quickly; the one the user chose gets time to load its model
+            ollama_timeout = max(timeout or 0, 600) if target_provider == "ollama" else (min(timeout, 12) if timeout else 12)
             response = requests.post(LOCAL_LLM_URL, json=payload, timeout=ollama_timeout)
             response.raise_for_status()
 
@@ -518,6 +540,10 @@ def get_llm_response(
 
         except Exception as e:
             print(f"[Info] Local LLM failed: {e}")
+            failure = e
+
+    if target_provider == "ollama":
+        raise _chosen_provider_error("ollama", failure)
 
     # 5b. Groq (free tier, OpenAI-compatible) as an automatic fallback when a key is configured
     groq_key = GROQ_API_KEY or os.getenv("GROQ_API_KEY")

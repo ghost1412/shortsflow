@@ -246,19 +246,21 @@ def tone_line(tone):
     return text + "\n" if text else ""
 
 
-def translate_segments(segments, target_lang, llm=None, parse=None, about=None, tone="faithful", cps=None, tight=False, failed_ids=None):
+def translate_segments(segments, target_lang, llm=None, parse=None, about=None, tone="faithful", cps=None, tight=False, failed_ids=None, numbers=None):
     """Translate each segment keeping one-to-one timing. Returns (texts, failed_count).
     A segment the LLM did not return stays in the source language and counts as failed.
     failed_ids: an optional list that receives the index of every segment left untranslated.
+    numbers: the line number each segment is known by (default its position); a retry keeps the first numbers, so a stale answer cannot land on another line.
     cps: characters per second to allow (default CHARS_PER_SECOND); tight: also ask for shorter lines when a line cannot fit."""
     llm, parse = llm or _default_llm, parse or _parse
     cps = cps or CHARS_PER_SECOND
     lang_full = LANG_NAMES.get(normalize_lang(target_lang), target_lang)
     texts = [s["text"] for s in segments]
     failed = 0
+    numbers = list(numbers) if numbers is not None else list(range(len(segments)))
     for lo in range(0, len(segments), BATCH):
         chunk = segments[lo:lo + BATCH]
-        items = [{"id": lo + i, "text": s["text"],
+        items = [{"id": numbers[lo + i], "text": s["text"],
                   "max_chars": max(12, int((s["end"] - s["start"]) * cps))} for i, s in enumerate(chunk)]
         prompt = (
             f"Translate each spoken line of this video into natural, spoken {lang_full} for dubbing.\n"
@@ -278,7 +280,7 @@ def translate_segments(segments, target_lang, llm=None, parse=None, about=None, 
             rows = data.get("translations") if isinstance(data, dict) else data
             rows = rows or []
             if isinstance(rows, list) and len(rows) == len(chunk) and all(isinstance(r, str) for r in rows):
-                rows = [{"id": lo + k, "text": r} for k, r in enumerate(rows)]      # a bare list of lines, in order
+                rows = [{"id": numbers[lo + k], "text": r} for k, r in enumerate(rows)]      # a bare list of lines, in order
             for row in rows if isinstance(rows, list) else []:
                 try:                                                  # one bad row must not lose the rows after it
                     if isinstance(row, dict) and str(row.get("text", "")).strip():
@@ -288,13 +290,25 @@ def translate_segments(segments, target_lang, llm=None, parse=None, about=None, 
         except Exception as e:
             print(f"[Warning] Translation batch failed: {e}")
         for i in range(lo, lo + len(chunk)):
-            if i in got:
-                texts[i] = got[i]
+            if numbers[i] in got:
+                texts[i] = got[numbers[i]]
             else:
                 failed += 1
                 if failed_ids is not None:
                     failed_ids.append(i)
     return texts, failed
+
+
+def retry_untranslated(segments, texts, missed, target_lang, **options):
+    """Ask once more for only the lines in `missed`. Returns (texts, the ids still untranslated)."""
+    print(f"[Log] {len(missed)} line(s) came back without a translation; asking for them again.")
+    still = []
+    again, _ = translate_segments([segments[i] for i in missed], target_lang, failed_ids=still, numbers=missed, **options)
+    texts = list(texts)
+    for place, i in enumerate(missed):
+        if place not in still:
+            texts[i] = again[place]
+    return texts, [missed[place] for place in still]
 
 
 def plan_fit(tts_dur, preferred, hard):
@@ -675,6 +689,10 @@ def dub_video(source_video, target_lang, session_dir, output_path=None, language
     else:
         texts, failed_tr = translate_segments(segments, target, llm=llm, about=about, tone=tone,
                                               cps=speech_rate(target) if smart else None, tight=smart, failed_ids=failed_lines)
+        if 0 < failed_tr < len(segments):          # a model that skipped a line usually gives it when asked for it alone; not after a total outage
+            texts, failed_lines = retry_untranslated(segments, texts, failed_lines, target, llm=llm, about=about, tone=tone,
+                                                     cps=speech_rate(target) if smart else None, tight=smart)
+            failed_tr = len(failed_lines)
     if failed_tr == len(segments):
         raise RuntimeError("Translation failed for every segment (no LLM answered). Check your AI key / Ollama "
                            "(see `shortsflow doctor`); nothing was dubbed.")
