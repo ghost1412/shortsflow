@@ -9,13 +9,17 @@ import math
 import random
 import re
 
-SKIN = {"fair": "#f1c9a0", "tan": "#d9a066", "brown": "#b57a47", "dark": "#7d4d2e", "blue": "#3f6fd8", "grey": "#b9b3a8", "green": "#6fae6a"}
+SKIN = {"fair": "#f1c9a0", "tan": "#d9a066", "brown": "#b57a47", "dark": "#7d4d2e", "blue": "#3f6fd8", "grey": "#b9b3a8", "green": "#6fae6a", "ashen": "#d9d6cf"}
+FIGURES = ("man", "woman", "child")
+HAIR = ("short", "long", "braid", "bald")
+HAIR_COLOURS = {"black": "#1f1620", "brown": "#5a3a22", "white": "#e9e6e1", "red": "#9a3b1c", "blonde": "#d9ac52"}
+MARKINGS = ("none", "stripe", "paint", "scar")
 HEADGEAR = ("crown", "helmet", "turban", "topknot", "hood", "none")
 FACIAL_HAIR = ("none", "moustache", "beard", "long_beard")
 OUTFITS = ("armour", "robe", "shawl", "simple")
 ORNAMENTS = ("halo", "feather", "tilak", "earrings", "necklace")
 MOODS = ("neutral", "stern", "sad", "angry", "proud", "calm")
-WEAPONS = ("none", "bow", "spear", "staff", "sword")
+WEAPONS = ("none", "bow", "spear", "staff", "sword", "twin_blades", "trident")
 AGES = ("young", "adult", "old")
 COLOURS = {"gold": "#e9b949", "silver": "#c9ced6", "red": "#c0392b", "blue": "#2f5fc4", "green": "#2e8b57", "purple": "#7b3fa0", "white": "#f4efe6",
            "black": "#241a2b", "saffron": "#e8832a", "teal": "#1f8a8a", "maroon": "#7a1f2b", "brown": "#7a4a2a"}
@@ -23,7 +27,8 @@ SKIES = ("sunset", "dusk", "night", "dawn", "fire", "storm", "rays", "day")
 GROUNDS = ("battlefield", "hills", "city", "trees", "sea", "none")
 
 DEFAULT_SPEC = {"skin": "tan", "headgear": "none", "headgear_colour": "gold", "facial_hair": "none", "outfit": "robe", "outfit_colour": "maroon",
-                "trim_colour": "gold", "ornaments": [], "mood": "neutral", "weapon": "none", "age": "adult"}
+                "trim_colour": "gold", "ornaments": [], "mood": "neutral", "weapon": "none", "age": "adult", "figure": "man", "hair": "short", "hair_colour": "black",
+                "marking": "none", "marking_colour": "red"}
 
 
 def _hex(value, table, default):
@@ -45,7 +50,13 @@ def clean_spec(raw):
     out["mood"] = _hex(raw.get("mood"), MOODS, "neutral")
     out["weapon"] = _hex(raw.get("weapon"), WEAPONS, "none")
     out["age"] = _hex(raw.get("age"), AGES, "adult")
-    for key, default in (("headgear_colour", "gold"), ("outfit_colour", "maroon"), ("trim_colour", "gold")):
+    out["figure"] = _hex(raw.get("figure"), FIGURES, "man")
+    out["hair"] = _hex(raw.get("hair"), HAIR, "long" if out["figure"] == "woman" else "short")
+    out["hair_colour"] = _hex(raw.get("hair_colour"), HAIR_COLOURS, "white" if out["age"] == "old" else "black")
+    out["marking"] = _hex(raw.get("marking"), MARKINGS, "none")
+    if out["figure"] != "man":
+        out["facial_hair"] = "none"
+    for key, default in (("headgear_colour", "gold"), ("outfit_colour", "maroon"), ("trim_colour", "gold"), ("marking_colour", "red")):
         out[key] = _hex(raw.get(key), COLOURS, default)
     orn = raw.get("ornaments")
     orn = [orn] if isinstance(orn, str) else orn if isinstance(orn, list) else []
@@ -144,18 +155,52 @@ def _headgear(spec, skin):
     return ""
 
 
+def _hair_back(spec):
+    """Long hair behind the head (drawn before the body, so the shoulders cover its ends)."""
+    if spec["hair"] not in ("long", "braid") or spec["headgear"] == "hood":
+        return ""
+    colour = HAIR_COLOURS[spec["hair_colour"]]
+    return f'<path d="M300 132 C190 134 168 250 176 340 Q150 470 168 590 Q230 650 300 600 Q370 650 432 590 Q450 470 424 340 C432 250 410 134 300 132 Z" fill="{shade(colour, 0.12)}"/>'
+
+
+def _hair_front(spec):
+    """Locks that fall in front of the shoulders: two for long hair, a plait over one shoulder for a braid."""
+    if spec["headgear"] == "hood":
+        return ""
+    colour = HAIR_COLOURS[spec["hair_colour"]]
+    if spec["hair"] == "long":
+        return (f'<path d="M202 244 Q158 340 168 430 Q176 520 150 610 Q212 566 206 470 Q192 380 204 292 Z" fill="{colour}"/>'
+                f'<path d="M398 244 Q442 340 432 430 Q424 520 450 610 Q388 566 394 470 Q408 380 396 292 Z" fill="{colour}"/>')
+    if spec["hair"] == "braid":
+        links = "".join(f'<ellipse cx="{398 + i * 7}" cy="{420 + i * 42}" rx="{27 - i * 2}" ry="30" fill="{colour}" stroke="{tint(colour, 0.2)}" stroke-width="3"/>' for i in range(6))
+        return links + f'<circle cx="440" cy="668" r="14" fill="{COLOURS["gold"]}"/>'
+    return ""
+
+
 def _hair(spec):
     """Hair showing under bare or open headgear."""
-    colour = "#e9e6e1" if spec["age"] == "old" else "#1f1620"
-    if spec["headgear"] in ("none", "crown", "helmet"):
+    colour = HAIR_COLOURS[spec["hair_colour"]]
+    if spec["hair"] != "bald" and spec["headgear"] in ("none", "crown", "helmet"):
         return f'<path d="M205 255 Q196 150 300 138 Q404 150 395 255 Q372 188 300 182 Q228 188 205 255 Z" fill="{colour}"/>'
+    return ""
+
+
+def _marking(spec):
+    """War paint or a scar, drawn on the skin (under the eyes and mouth)."""
+    kind, colour = spec["marking"], COLOURS[spec["marking_colour"]]
+    if kind == "stripe":                  # a broad band from the crown of the head down over one eye to the jaw
+        return f'<path d="M236 152 Q262 144 268 150 L276 262 L268 330 L252 408 Q238 398 232 388 L246 322 L238 262 Z" fill="{colour}" opacity="0.92"/>'
+    if kind == "paint":                   # two lines across each cheek
+        return (f'<path d="M214 326 L258 338 M216 344 L254 354 M386 326 L342 338 M384 344 L346 354" stroke="{colour}" stroke-width="9" stroke-linecap="round" fill="none"/>')
+    if kind == "scar":
+        return '<path d="M352 232 L330 336" stroke="#8a4a42" stroke-width="7" stroke-linecap="round" fill="none"/><path d="M338 258 l18 6 M332 288 l18 6" stroke="#8a4a42" stroke-width="4"/>'
     return ""
 
 
 def _face(spec, skin):
     dark = shade(skin, 0.18)
     mood = spec["mood"]
-    brow_colour = "#e9e6e1" if spec["age"] == "old" else "#1f1620"
+    brow_colour = HAIR_COLOURS["white" if spec["age"] == "old" else spec["hair_colour"]]
     tilt = {"neutral": (0, 0), "stern": (6, 0), "sad": (-7, 2), "angry": (11, -2), "proud": (-2, -5), "calm": (-1, -2)}[mood]
     # brows: an inner end lower (angry/stern) or higher (sad)
     bl = f'<path d="M232 {268 + tilt[1]} Q258 {258 + tilt[1]} 282 {268 + tilt[1] + tilt[0]}" stroke="{brow_colour}" stroke-width="9" fill="none" stroke-linecap="round"/>'
@@ -172,15 +217,20 @@ def _face(spec, skin):
     face = (f'<path d="M300 140 C200 140 188 250 204 322 C220 392 262 424 300 424 C338 424 380 392 396 322 C412 250 400 140 300 140 Z" fill="{skin}"/>'
             f'<path d="M300 140 C400 140 412 250 396 322 C380 392 338 424 300 424 Z" fill="{dark}" opacity="0.28"/>')
     ears = (f'<ellipse cx="198" cy="312" rx="19" ry="34" fill="{skin}"/><ellipse cx="402" cy="312" rx="19" ry="34" fill="{dark}"/>')
+    lips = "#7a2f2f"
+    if spec["figure"] == "woman":
+        lips = "#b0344c"
+        for cx, out_ in ((258, -1), (342, 1)):
+            eyes += (f'<path d="M{cx + out_ * 27} 291 l{out_ * 13} -9 M{cx + out_ * 19} 283 l{out_ * 8} -12" stroke="#1d1218" stroke-width="4" stroke-linecap="round"/>')
     wrinkles = ""
     if spec["age"] == "old":
         wrinkles = f'<path d="M236 236 L264 232 M336 232 L364 236 M260 330 Q246 346 262 358 M340 330 Q354 346 338 358" stroke="{dark}" stroke-width="4" fill="none" opacity="0.7"/>'
-    return ears, face, bl + br + eyes + nose + f'<path d="{mouth}" stroke="#7a2f2f" stroke-width="7" fill="none" stroke-linecap="round"/>' + wrinkles
+    return ears, face + _marking(spec), bl + br + eyes + nose + f'<path d="{mouth}" stroke="{lips}" stroke-width="{10 if spec["figure"] == "woman" else 7}" fill="none" stroke-linecap="round"/>' + wrinkles
 
 
 def _beard(spec):
     kind = spec["facial_hair"]
-    colour = "#e9e6e1" if spec["age"] == "old" else "#1f1620"
+    colour = HAIR_COLOURS["white" if spec["age"] == "old" else spec["hair_colour"]]
     if kind == "none":
         return ""
     mous = (f'<path d="M300 352 Q270 336 236 352 Q262 372 300 360 Q338 372 364 352 Q330 336 300 352 Z" fill="{colour}"/>')
@@ -199,7 +249,8 @@ def _extras(spec):
         gold = COLOURS["gold"]
         out += f'<circle cx="198" cy="352" r="11" fill="{gold}"/><circle cx="402" cy="352" r="11" fill="{gold}"/>'
     if "feather" in spec["ornaments"]:
-        out += ('<g transform="translate(372 96) rotate(24)"><path d="M0 0 Q-34 -60 0 -150 Q34 -60 0 0 Z" fill="#1f8a6a"/>'
+        at = "translate(372 96) rotate(24)" if spec["headgear"] in ("crown", "helmet", "turban") else "translate(374 214) rotate(30) scale(0.7)"
+        out += (f'<g transform="{at}"><path d="M0 0 Q-34 -60 0 -150 Q34 -60 0 0 Z" fill="#1f8a6a"/>'
                 '<ellipse cx="0" cy="-96" rx="16" ry="26" fill="#2f6fd0"/><ellipse cx="0" cy="-96" rx="7" ry="12" fill="#f4d35e"/>'
                 '<path d="M0 0 L0 -150" stroke="#145c47" stroke-width="3"/></g>')
     return out
@@ -214,6 +265,13 @@ def _weapon(spec):
     if w == "spear":
         return (f'<path d="M64 760 L64 90" stroke="{COLOURS["brown"]}" stroke-width="12"/><path d="M64 30 L88 110 L40 110 Z" fill="{COLOURS["silver"]}"/>'
                 f'<rect x="52" y="112" width="24" height="16" fill="{gold}"/>')
+    if w == "twin_blades":                 # a curved blade on each side, with its chain
+        blade = lambda x, d: (f'<path d="M{x} 640 Q{x - d * 70} 430 {x - d * 6} 210 Q{x + d * 40} 330 {x + d * 30} 470 Q{x + d * 22} 560 {x + d * 22} 640 Z" fill="{COLOURS["silver"]}" stroke="{shade(COLOURS["silver"], 0.4)}" stroke-width="5"/>'
+                              f'<rect x="{x - 18}" y="640" width="58" height="16" rx="6" fill="{gold}"/>' + "".join(f'<ellipse cx="{x + 10}" cy="{672 + i * 24}" rx="9" ry="15" fill="none" stroke="{COLOURS["silver"]}" stroke-width="5"/>' for i in range(4)))
+        return blade(70, 1) + blade(520, -1)
+    if w == "trident":
+        return (f'<path d="M70 780 L70 190" stroke="{COLOURS["brown"]}" stroke-width="13"/><path d="M24 80 L24 170 Q24 196 70 196 Q116 196 116 170 L116 80 M70 190 L70 50" stroke="{gold}" stroke-width="13" fill="none"/>'
+                + "".join(f'<path d="M{x - 14} {y + 26} L{x} {y} L{x + 14} {y + 26} Z" fill="{gold}"/>' for x, y in ((24, 56), (70, 24), (116, 56))))
     if w == "staff":
         return f'<path d="M60 790 L60 60" stroke="{COLOURS["brown"]}" stroke-width="14" stroke-linecap="round"/><circle cx="60" cy="52" r="22" fill="none" stroke="{gold}" stroke-width="8"/>'
     if w == "sword":
@@ -239,8 +297,11 @@ def character_svg(spec):
     trim = COLOURS[spec["trim_colour"]]
     ears, face, features = _face(spec, skin)
     neck = f'<path d="M258 400 L258 480 Q300 520 342 480 L342 400 Z" fill="{shade(skin, 0.22)}"/>'
-    body = (_halo(spec) + _weapon(spec) + neck + _body(spec, trim) + ears + face + _hair(spec) + features + _beard(spec) + _extras(spec)
-            + _headgear(spec, skin))
+    body = (_halo(spec) + _weapon(spec) + _hair_back(spec) + neck + _body(spec, trim) + ears + face + _hair(spec) + features + _beard(spec) + _extras(spec)
+            + _headgear(spec, skin) + _hair_front(spec))
+    if spec["figure"] == "child":                      # smaller, still standing on the bottom edge
+        body = f'<g transform="translate(60 160) scale(0.8)">{body}</g>'
+
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 800" width="600" height="800">{body}</svg>'
 
 
@@ -338,9 +399,10 @@ def backdrop_svg(sky="sunset", ground="battlefield", w=1080, h=1920, seed=3):
         body += rays + f'<circle cx="{cx:.0f}" cy="{cy:.0f}" r="{w * 0.5:.0f}" fill="url(#glow)" opacity="0.4"/>'
     else:
         sun_y = horizon + 6
+        sun_x = w * (0.5 if h <= w else 0.8)             # to one side in a tall frame: in the middle it showed as a disc under the character's chin
         body += f'<ellipse cx="{w / 2:.0f}" cy="{sun_y:.0f}" rx="{w * 0.9:.0f}" ry="{h * 0.34:.0f}" fill="url(#glow)"/>'
         if sky in ("sunset", "dawn", "fire", "day"):
-            body += f'<circle cx="{w / 2:.0f}" cy="{sun_y - 20:.0f}" r="{w * 0.12:.0f}" fill="{tint(stops[4], 0.55)}" opacity="0.92"/>'
+            body += f'<circle cx="{sun_x:.0f}" cy="{sun_y - 20:.0f}" r="{w * 0.12:.0f}" fill="{tint(stops[4], 0.55)}" opacity="0.92"/>'
         if sky == "night":
             body += f'<circle cx="{w * 0.72:.0f}" cy="{h * 0.32:.0f}" r="{w * 0.065:.0f}" fill="#f1ecd8" opacity="0.92"/>'
         if sky in ("storm", "day"):
@@ -354,7 +416,7 @@ def backdrop_svg(sky="sunset", ground="battlefield", w=1080, h=1920, seed=3):
 
 # ---------------------------------------------------------------- emblems (600 x 600): the object of a title card
 
-EMBLEMS = ("wheel", "spear", "arrow", "bow", "sun", "crown", "sword", "fire")
+EMBLEMS = ("wheel", "spear", "arrow", "bow", "sun", "crown", "sword", "fire", "lightning", "box", "skull", "mountain", "wings")
 
 
 def emblem_svg(kind, colour="#f0c15a"):
@@ -396,6 +458,26 @@ def emblem_svg(kind, colour="#f0c15a"):
         body = (f'<path d="M300 30 Q420 170 400 300 Q460 260 450 200 Q560 320 500 440 Q460 560 300 570 Q140 560 100 440 Q60 330 170 220 Q170 280 220 300 Q190 170 300 30 Z" fill="#e8501c"/>'
                 f'<path d="M300 200 Q380 300 360 380 Q400 360 400 330 Q450 420 400 480 Q360 540 300 540 Q240 540 205 480 Q170 410 230 330 Q240 380 270 380 Q250 290 300 200 Z" fill="#ffa030"/>'
                 f'<path d="M300 360 Q340 420 330 470 Q316 510 300 510 Q270 500 266 460 Q266 410 300 360 Z" fill="#ffe08a"/>')
+    elif kind == "lightning":
+        body = (f'<path d="M370 20 L150 330 L275 330 L205 580 L460 230 L320 230 L420 20 Z" fill="{gold}" stroke="{dark}" stroke-width="14" stroke-linejoin="round"/>'
+                f'<path d="M366 62 L206 300 L300 300 Z" fill="{light}" opacity="0.8"/>')
+    elif kind == "box":                    # a closed chest with light escaping under its lid
+        body = (f'<path d="M90 250 Q300 110 510 250 L510 292 L90 292 Z" fill="{gold}" stroke="{dark}" stroke-width="12"/><rect x="90" y="316" width="420" height="220" rx="14" fill="{dark}"/>'
+                f'<rect x="90" y="292" width="420" height="24" fill="{light}"/><rect x="108" y="334" width="384" height="184" rx="8" fill="none" stroke="{gold}" stroke-width="10"/>'
+                f'<circle cx="300" cy="426" r="44" fill="{gold}"/><circle cx="300" cy="416" r="12" fill="{dark}"/><path d="M293 420 L286 458 L314 458 L307 420 Z" fill="{dark}"/>'
+                + "".join(f'<path d="M{x} 286 L{x + dx} 180" stroke="{light}" stroke-width="9" stroke-linecap="round" opacity="0.75"/>' for x, dx in ((130, -50), (210, -22), (390, 22), (470, 50))))
+    elif kind == "skull":
+        body = (f'<path d="M300 60 C160 60 100 160 108 270 C112 340 150 372 178 392 L186 470 Q200 500 232 490 L368 490 Q400 500 414 470 L422 392 C450 372 488 340 492 270 C500 160 440 60 300 60 Z" fill="{light}" stroke="{dark}" stroke-width="12"/>'
+                f'<ellipse cx="222" cy="288" rx="52" ry="58" fill="#241208"/><ellipse cx="378" cy="288" rx="52" ry="58" fill="#241208"/><path d="M300 336 L270 396 L330 396 Z" fill="#241208"/>'
+                + "".join(f'<path d="M{x} 438 L{x} 492" stroke="{dark}" stroke-width="10"/>' for x in (244, 281, 319, 356)))
+    elif kind == "mountain":
+        body = (f'<path d="M20 520 L230 130 L330 290 L390 200 L580 520 Z" fill="{dark}"/><path d="M230 130 L330 290 L300 520 L20 520 Z" fill="{gold}"/>'
+                f'<path d="M230 130 L182 220 L212 206 L236 236 L262 204 L282 214 Z" fill="{light}"/><path d="M390 200 L352 258 L378 250 L398 276 L424 256 Z" fill="{light}"/>')
+    elif kind == "wings":
+        def wing(d):
+            return "".join(f'<path d="M{300 + d * 18} {250 + i * 34} Q{300 + d * (150 + i * 6)} {120 + i * 58} {300 + d * (272 - i * 24)} {150 + i * 76} Q{300 + d * (160 - i * 8)} {250 + i * 56} {300 + d * 18} {300 + i * 30} Z" '
+                           f'fill="{light if i % 2 else gold}" stroke="{dark}" stroke-width="7"/>' for i in range(5))
+        body = wing(-1) + wing(1) + f'<ellipse cx="300" cy="320" rx="22" ry="96" fill="{dark}"/>'
     if not body:
         return ""
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">{body}</svg>'

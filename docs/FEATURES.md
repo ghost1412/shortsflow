@@ -335,7 +335,7 @@ A narrated tale drawn as scenes: characters with gold name plates over sunset, s
 python main.py --mode CASE --prompt "The story" --sources LINK_TO_THE_STORY --case template=story --case formats=9:16 --case draft
 ```
 
-The script is written only from your sources, so give a page that actually tells the episode (a page about one character may not mention the scene you want). Check the drawn characters before you publish: they are simple flat figures that all share one face shape.
+The script is written only from your sources, so give a page that actually tells the episode (a page about one character may not mention the scene you want). On a long page the part headed Plot, Story or Synopsis is read first. Check the drawn characters before you publish: they are simple flat figures that all share one face shape.
 
 ## 🎞️ Animated explainer (`--mode ANIMATE`)
 

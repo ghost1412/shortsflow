@@ -71,6 +71,8 @@ def request(script, known):
         + known_line +
         "Describe each PERSON (or god or creature with a human shape) who is named in the narration, at most " + str(MAX_CHARACTERS) + ", as a bust. Use the look the story's tradition gives them. "
         "For each, choose only from these values: "
+        f"figure: {', '.join(story_art.FIGURES)}; hair: {', '.join(story_art.HAIR)}; hair_colour: {', '.join(story_art.HAIR_COLOURS)}; "
+        f"marking, only when the person is known for one (stripe = a painted or tattooed band down over one eye, paint = lines on the cheeks, scar = a healed cut): {', '.join(story_art.MARKINGS)}; marking_colour: {', '.join(story_art.COLOURS)}; "
         f"skin: {', '.join(story_art.SKIN)}; headgear: {', '.join(story_art.HEADGEAR)}; headgear_colour, outfit_colour, trim_colour: {', '.join(story_art.COLOURS)}; "
         f"facial_hair: {', '.join(story_art.FACIAL_HAIR)}; outfit: {', '.join(story_art.OUTFITS)}; ornaments (a list): {', '.join(story_art.ORNAMENTS)}; "
         f"mood: {', '.join(story_art.MOODS)}; weapon: {', '.join(story_art.WEAPONS)}; age: {', '.join(story_art.AGES)}.\n"
@@ -79,7 +81,7 @@ def request(script, known):
         "Then list the beats of each section. A beat starts at a sentence number and says what is on screen from there until the next beat. It is ONE of two kinds. "
         "A CHARACTER beat: \"character\" is the person that sentence is about or who speaks in it, and their name is shown. A CARD beat: \"character\" is null, \"name\" is the "
         "card's title of at most 3 words, and \"emblem\" is the one object that shows it, from: " + ", ".join(story_art.EMBLEMS) + " (or empty when none fits). Use a card when the "
-        "sentence is about a thing, a curse, a weapon or someone you did not describe. \"role\" is a short line under the name of at most 5 words (like \"The King's Son\"; empty is fine). "
+        "sentence is about a thing, a curse, a weapon or someone you did not describe. A character beat may set \"mood\" (from the same mood list) when the person feels differently at that moment than usual: nobody smiles while falling or dying. \"role\" is a short line under the name of at most 5 words (like \"The King's Son\"; empty is fine). "
         "A sentence that holds a number worth showing big may "
         "have \"big\" (the number exactly as the narration says it) and \"label\" (at most 4 words). Use a new beat when the person on screen should change, about every "
         "one or two sentences, and always a beat at sentence 1 of every section. Never invent facts: only what the narration says.\n\n"
@@ -99,6 +101,44 @@ def _parse(reply):
 
 def _clip(text, n):
     return " ".join(str(text or "").split())[:n].strip()
+
+
+# words in a sentence that name an object the kit can draw: (pattern, emblem, the card's title)
+OBJECT_WORDS = ((r"lightning|thunderbolt", "lightning", "The Thunderbolt"), (r"box|casket", "box", "The Box"), (r"wings", "wings", "The Wings"),
+                (r"wheel", "wheel", "The Wheel"), (r"swords?|blades?", "sword", "The Blade"), (r"spears?", "spear", "The Spear"), (r"arrows?", "arrow", "The Arrow"),
+                (r"crown|throne", "crown", "The Throne"), (r"flames?|fire", "fire", "The Flame"), (r"skulls?", "skull", "Death"), (r"mount|mountains?", "mountain", "The Mountain"),
+                (r"the sun", "sun", "The Sun"))
+MAX_ADDED_CARDS = 3
+
+
+def add_object_cards(plan_, script):
+    """Adds title cards the model did not plan (it often plans none): a sentence that names a drawable object gets a card with that object, at most one in a section,
+    each object once and three in a video. Only where nothing is lost: never on the first sentence, and only on a sentence that keeps the same face as the one
+    before; the face comes back on the next sentence."""
+    used = {b["emblem"] for s in plan_["sections"] for b in s["beats"] if b.get("emblem")}
+    added = 0
+    for sec, row in zip(script["sections"], plan_["sections"]):
+        if added >= MAX_ADDED_CARDS or any(not b["character"] for b in row["beats"]):
+            continue
+        sents = sentences(sec.get("narration"))
+        for k in range(2, len(sents) + 1):
+            hit = next(((e, title) for pattern, e, title in OBJECT_WORDS if e not in used and re.search(rf"\b(?:{pattern})\b", sents[k - 1], re.I)), None)
+            if not hit:
+                continue
+            at = {b["sentence"]: b for b in row["beats"]}
+            before = at[max(n for n in at if n < k)]
+            here = at.get(k)
+            if here and here["character"] != before["character"]:
+                continue                                    # this sentence brings someone new on screen: leave it
+            card = {"sentence": k, "character": None, "name": hit[1], "role": "", "mood": "", "emblem": hit[0], "big": "", "label": ""}
+            row["beats"] = [b for b in row["beats"] if b["sentence"] != k] + [card]
+            if k < len(sents) and k + 1 not in at:
+                row["beats"].append(dict(here or before, sentence=k + 1))
+            row["beats"].sort(key=lambda b: b["sentence"])
+            used.add(hit[0])
+            added += 1
+            break
+    return plan_
 
 
 def check_plan(reply, script, library=None):
@@ -138,13 +178,14 @@ def check_plan(reply, script, library=None):
             if big and re.sub(r"\D", "", big) not in said_numbers:
                 big = ""                                       # a figure only when the narration says it
             emblem = str(b.get("emblem") or "").strip().lower()
+            mood = str(b.get("mood") or "").strip().lower()
             name = _clip(b.get("name") or who, MAX_NAME)
             if who and name.lower() != who.lower():
                 if name and not any(w in who.lower().split() for w in re.findall(r"[a-z]+", name.lower())):
                     who = ""                      # a title about someone or something else ("Abhimanyu" over Krishna's face): it is a card, not this face
                 else:
                     name = who                    # "Krishna's Counsel" over Krishna: the plate under a face is that person's own name
-            beat = {"sentence": k, "character": who or None, "name": name, "role": _clip(b.get("role"), MAX_ROLE),
+            beat = {"sentence": k, "character": who or None, "name": name, "role": _clip(b.get("role"), MAX_ROLE), "mood": mood if who and mood in story_art.MOODS else "",
                     "emblem": emblem if not who and not big and emblem in story_art.EMBLEMS else "",
                     "big": big, "label": _clip(b.get("label"), 30) if big else ""}
             if beat["character"] or beat["name"] or beat["big"]:
@@ -158,11 +199,11 @@ def check_plan(reply, script, library=None):
         out_sections.append({"sky": sky if sky in story_art.SKIES else "sunset", "ground": ground if ground in story_art.GROUNDS else "none", "beats": beats})
     if not chars and not any(b["name"] for s in out_sections for b in s["beats"]):
         return None, "no character or card was planned"
-    return {"characters": chars, "sections": out_sections}, ""
+    return add_object_cards({"characters": chars, "sections": out_sections}, script), ""
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v2"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v4"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
@@ -237,11 +278,16 @@ def attach(script, session_dir, aspect, ask, words, timing):
     folder = os.path.join(session_dir, "story_art")
     os.makedirs(folder, exist_ok=True)
     paths = {}
-    for name, spec in plan_["characters"].items():
-        p = os.path.join(folder, f"char_{_slug(name)}.svg")
-        with open(p, "w", encoding="utf-8") as f:
-            f.write(story_art.character_svg(spec))
-        paths[name] = p
+
+    def bust(name, mood):
+        """The drawing of a person in the mood of the moment (their own mood when the beat sets none), drawn once per mood."""
+        if (name, mood) not in paths:
+            spec = dict(plan_["characters"][name], **({"mood": mood} if mood else {}))
+            p = os.path.join(folder, f"char_{_slug(name)}{'_' + mood if mood else ''}.svg")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(story_art.character_svg(spec))
+            paths[(name, mood)] = p
+        return paths[(name, mood)]
     emblems = {}
     for kind in {b.get("emblem") for s in plan_["sections"] for b in s["beats"] if b.get("emblem")}:
         p = os.path.join(folder, f"emblem_{kind}.svg")
@@ -259,7 +305,7 @@ def attach(script, session_dir, aspect, ask, words, timing):
             f.write(story_art.backdrop_svg(row["sky"], row["ground"], w, h, seed=si + 3))
         ws = words[si] if words and si < len(words) else []
         times = beat_times(sec.get("narration"), ws, end - start, row["beats"])
-        beats = [{"from": a, "to": b, "character": paths.get(bt["character"]) if bt["character"] else None, "name": bt["name"], "role": bt["role"],
+        beats = [{"from": a, "to": b, "character": bust(bt["character"], bt.get("mood", "")) if bt["character"] else None, "name": bt["name"], "role": bt["role"],
                   "emblem": emblems.get(bt.get("emblem")), "big": bt["big"], "label": bt["label"]} for bt, (a, b) in zip(row["beats"], times)]
         out.append({"kind": "story", "backdrop": bd, "beats": beats, "characters": sorted({bt["character"] for bt in row["beats"] if bt["character"]})})
     return out

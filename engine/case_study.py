@@ -175,6 +175,43 @@ def _plain(html):
     return " ".join(text.split())
 
 
+# headings that hold the telling itself come before headings that only sum a thing up (a "Synopsis" often opens with the setting and the cast)
+_STORY_HEADINGS = (re.compile(r"^(plot|plot summary|story|storyline|the story|narrative|legend|the legend)\b", re.I),
+                   re.compile(r"^(synopsis|summary|mythology|myth|in mythology)\b", re.I))
+_HEADING = re.compile(r"(?is)<h([2-4])\b[^>]*>(.*?)</h\1>")
+LEAD_CHARS = 2500
+
+
+def _story_section(html):
+    """The HTML of the page's telling: what stands under its "Plot" or "Story" heading, else under "Synopsis" and the like (with the sub-headings); "" when it has
+    neither. A part too short to be a telling is passed over; of several, the longest wins."""
+    heads = list(_HEADING.finditer(html))
+    for kind in _STORY_HEADINGS:
+        best = ""
+        for i, m in enumerate(heads):
+            title = " ".join(re.sub(r"(?s)<[^>]+>", " ", m.group(2)).split())
+            if not kind.match(title):
+                continue
+            end = next((h.start() for h in heads[i + 1:] if int(h.group(1)) <= int(m.group(1))), len(html))
+            part = html[m.end():end]
+            if len(part) > len(best) and len(_plain(part)) >= 400:
+                best = part
+        if best:
+            return best
+    return ""
+
+
+def story_text(html):
+    """A page's text for a story video: its opening, then its plot, then the rest. Only the first MAX_SOURCE_CHARS of a source are read, and on a long page (a film, a
+    game, an epic) the plot comes after all the background, so the model never saw the story."""
+    whole = _plain(html)
+    part = _story_section(html)
+    plot = _plain(part) if part else ""
+    if not plot:
+        return whole
+    return whole[:LEAD_CHARS] + " " + plot + " " + whole[LEAD_CHARS:]
+
+
 def default_fetch(url, timeout=15):
     import requests
     r = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0 (compatible; reader)"})
@@ -190,7 +227,7 @@ def default_fetch_raw(url, timeout=30):
     return r.content
 
 
-def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None, audio=None, transcribe=None, trim=None, render=None):
+def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None, audio=None, transcribe=None, trim=None, render=None, focus=None):
     """[{"id": "S1", "ref", "text"}] from up to three items: a web link (its paragraphs), a PDF link or file, a YouTube link (its captions), a
     caption file (.srt, .vtt), a text file, or pasted text. Items that cannot be read are skipped (the second return value lists them with the
     reason). A YouTube video without captions, and an audio or video file, are listened to by the speech model on this PC (minutes, first 40 minutes
@@ -221,7 +258,7 @@ def gather_sources(items, fetch=None, fetch_raw=None, youtube=None, workdir=None
                         text = case_sources.pdf_text(fetch_raw(item))
                     else:
                         scripted = "<script" in str(text).lower()
-                        text = _plain(text)
+                        text = story_text(text) if focus == "story" else _plain(text)
                         if len(text) < 40 and scripted:        # a page that would be skipped as empty but runs scripts: let a headless browser on this PC build it
                             print("[Log] This page has almost no text until its scripts run: opening it in a headless browser on this PC...")
                             text = _plain((render or case_sources.rendered_html)(item))

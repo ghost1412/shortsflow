@@ -42,7 +42,8 @@ def _make_script(args, session_dir, opts):
     except ValueError as e:
         print(f"[Error] {e}")
         sys.exit(2)
-    sources, skipped = cs.gather_sources(getattr(args, "sources", None) or [])
+    story = any(s.get("scene") == "story" for s in template)           # a story video reads a page's plot first
+    sources, skipped = cs.gather_sources(getattr(args, "sources", None) or [], **({"focus": "story"} if story else {}))
     for item, why in skipped:
         print(f"[Warning] Source skipped ({why}): {item}")
     if not sources:

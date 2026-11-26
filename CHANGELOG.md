@@ -4,6 +4,10 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Story videos read a long page's plot first (its Plot, Story or Synopsis part, after the opening), so a film, game or epic page is no longer cut off before the story begins.
+
+- Story look, drawing kit: women and children, long hair, braids and bald heads, hair colours, war paint, a tattoo band or a scar, twin blades and a trident, five more card objects (thunderbolt, box, skull, mountain, wings); an expression can follow the moment; a sentence that names a drawable object gets a title card; the feather no longer floats over a bare head and the sun no longer sits under a character's chin.
+
 - Browser app: the Case tab's "Sections" list is now built from the pipeline's own templates, so Story, Recipe and News can be chosen (the typed list was missing them).
 
 - Case explainer: a **story look** (`--case template=story`): a narrated tale with drawn characters and gold name plates over painted skies (sunset, storm, fire, night and more), title cards with a golden object (chariot wheel, spear, arrow, bow, sun, crown, sword, fire), figure cards, and its own opening and closing cards. All drawn by code from a plan the text model writes; a character keeps its look across videos.

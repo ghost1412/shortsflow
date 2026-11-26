@@ -132,7 +132,7 @@ def test_a_run_with_no_text_model_stops_with_a_clear_message_not_a_traceback(mon
 
     from engine import case_study
     from engine.modes import case as case_mode
-    monkeypatch.setattr(case_study, "gather_sources", lambda items: ([], []))
+    monkeypatch.setattr(case_study, "gather_sources", lambda items, **kw: ([], []))
 
     def nobody(*a, **k):
         raise RuntimeError("The local model did not answer (connection refused)")
