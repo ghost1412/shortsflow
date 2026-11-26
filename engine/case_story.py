@@ -79,7 +79,7 @@ def request(script, known):
         "Then list the beats of each section. A beat starts at a sentence number and says what is on screen from there until the next beat. It is ONE of two kinds. "
         "A CHARACTER beat: \"character\" is the person that sentence is about or who speaks in it, and their name is shown. A CARD beat: \"character\" is null, \"name\" is the "
         "card's title of at most 3 words, and \"emblem\" is the one object that shows it, from: " + ", ".join(story_art.EMBLEMS) + " (or empty when none fits). Use a card when the "
-        "sentence is about a thing, a curse, a weapon or someone you did not describe. \"role\" is a short line under the name of at most 5 words (like \"Son of the Sun\"; empty is fine). "
+        "sentence is about a thing, a curse, a weapon or someone you did not describe. \"role\" is a short line under the name of at most 5 words (like \"The King's Son\"; empty is fine). "
         "A sentence that holds a number worth showing big may "
         "have \"big\" (the number exactly as the narration says it) and \"label\" (at most 4 words). Use a new beat when the person on screen should change, about every "
         "one or two sentences, and always a beat at sentence 1 of every section. Never invent facts: only what the narration says.\n\n"
