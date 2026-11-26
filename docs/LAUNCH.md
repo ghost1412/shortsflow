@@ -25,7 +25,7 @@ Best timing: Show HN on a weekday morning US Eastern; stay around for the first 
 - Edit the video by editing its transcript: `--cut "you know"` or delete words in `transcript.txt` and re-run with `--edit_transcript`
 - `--remove_fillers` cuts um/uh/er; `--tighten` removes silences
 - Active-speaker layout now uses a face detector (YuNet) plus voice-pitch diarisation instead of mouth motion alone
-- REST API with a job queue, API keys and signed webhooks (`shortsflow api`), plus an n8n example
+- REST API with a job queue, API keys and signed webhooks (`shortsflow api`)
 - Brand kit: `--logo`, `--handle`, `--end_card`
 - Fully local: Whisper on your GPU, Ollama for the LLM, Kokoro for the voice (`--tts_provider kokoro`); only stock footage needs a key
 
@@ -49,7 +49,7 @@ On Windows there is a one-click installer (no Python or API key needed): open it
 - For podcasts, `--layout active` cuts to whoever is talking. It combines a face detector with voice-pitch clustering, because mouth motion alone was weak on real footage (on one real two-person interview, pitch got the speaker right for 92% of speaking time versus 45% for mouth motion).
 - It can also generate from an idea (30+ formats: facts quizzes, Manim explainers, stories). That mode runs a YouTube channel, @spottheliee, from one GitHub Actions workflow.
 
-It can run fully locally: Whisper on your GPU, Ollama for the LLM, Kokoro for the voice. There is a REST API with webhooks for automation (an n8n example is included) and an MCP server for agents. MIT licensed.
+It can run fully locally: Whisper on your GPU, Ollama for the LLM, Kokoro for the voice. There is a REST API with webhooks for automation and an MCP server for agents. MIT licensed.
 
 Honest limitations: the Windows installer is not code-signed yet (SmartScreen will warn you), it downloads around 2 GB (about 5 GB with an NVIDIA card), and on a CPU-only machine transcribing a long video is slow. It started as a script and grew, so parts are still being refactored. The pitch-based speaker switching needs the two voices to differ by roughly 20%, and I have only checked it on a few interviews. Filler removal and the publishing integration (Upload-Post) have had little testing on real footage, so treat them as experimental. Rendering a short takes a few minutes, and a GPU helps a lot.
 
@@ -69,7 +69,7 @@ Hi r/selfhosted! I've been building an open-source tool for making vertical shor
 - **Edit by transcript**: delete words from a text file and the video follows
 - **Podcast mode**: cuts to the active speaker, or shows both stacked when it's unsure
 - **Fully local**: Whisper on your GPU, Ollama for the LLM, Kokoro for the voice; only stock footage (Pexels) needs an API key, and only for the generate-from-a-topic mode
-- **Automate it**: REST API with API keys and signed webhooks, n8n example included
+- **Automate it**: REST API with API keys and signed webhooks
 - **Install**: a one-click Windows installer from the Releases page (unsigned, so SmartScreen warns), `pip install shortsflow` then `shortsflow clip video.mp4` (no API key needed for clipping), `docker run -p 7860:7860 ghcr.io/ghost1412/shortsflow`, or open the Colab
 
 Repo: https://github.com/ghost1412/shortsflow

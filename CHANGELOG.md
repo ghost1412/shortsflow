@@ -4,6 +4,10 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: a dub line the translation model left out is asked for once more, alone, before it is left in the original language.
+
+- Fix: a chosen AI provider (`--llm_provider`, `LLM_PROVIDER`) is now the only one your text is sent to. Before, a failed or keyless choice went on to other providers you had keys for (also from Ollama to Groq or Hugging Face). Only Automatic falls back now; a chosen Ollama also gets time to load its model instead of 12 seconds.
+
 - Story review: a missing creature is judged as a portrait (not by what its sentence describes) and an enemy must look threatening; it is drawn as a character, not an icon. A busy model is asked again after a wait, and an answer the model wraps in a list is read (before, every verdict was lost and the check counted as failed).
 
 - Gemini: a model whose free requests for the day are used up is left alone for an hour instead of a minute.
