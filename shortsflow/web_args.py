@@ -474,7 +474,7 @@ CASE_BACKGROUNDS = {"Stock video": "footage", "Stock photos": "images", "Cartoon
 # the "Sections" list of the Case tab: every template of the pipeline, with a plain label (a template without one shows its name, so none can go missing)
 _CASE_TEMPLATE_LABELS = {"case": "Case: what happened, how, impact, what could change", "postmortem": "Postmortem: what broke, why, cost, what changed",
                          "history": "History", "explainer": "Explainer", "recipe": "Recipe", "news": "News", "animation": "One continuous animation",
-                         "story": "Story: drawn characters over painted skies"}
+                         "story": "Story (preview, still rough): drawn characters over painted skies"}
 CASE_TEMPLATE_CHOICES = [(_CASE_TEMPLATE_LABELS.get(t, t), t) for t in _case_options.TEMPLATES]
 
 

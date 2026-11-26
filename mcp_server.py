@@ -247,7 +247,7 @@ TOOLS_DEFINITIONS = [
                          "description": "case = a sectioned explainer; animate = one continuous animation (equations, processes, algorithms)."},
                 "template": {"type": "string", "enum": EXPLAINER_TEMPLATES, "default": "case",
                              "description": ("The kind of story, only for kind 'case': case, postmortem (what went wrong), history, explainer, recipe, "
-                                             "news, animation, or story (drawn characters over painted skies, for a narrated tale; 9:16 works best). Ignored for 'animate'.")},
+                                             "news, animation, or story (a rough preview: drawn characters over painted skies, for a narrated tale about people; 9:16 works best). Ignored for 'animate'.")},
                 "theme": {"type": "string", "enum": EXPLAINER_THEMES, "default": "dark", "description": "The look (colours and type) of the whole video."},
                 "formats": {"type": "string", "default": "16:9,9:16",
                             "description": "Video shapes to render, comma separated, from 16:9, 9:16, 1:1 and 4:5. One shape renders faster."},

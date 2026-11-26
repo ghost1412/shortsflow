@@ -60,7 +60,7 @@ def _avatar(raw):
 
 
 OPTIONS = (
-    Option("template", "text", "case", "the sections of the video: " + ", ".join(TEMPLATES) + ", or the path of a JSON file of {id, title, question, scene}"),
+    Option("template", "text", "case", "the sections of the video: " + ", ".join(TEMPLATES) + " (story is a preview, still rough), or the path of a JSON file of {id, title, question, scene}"),
     Option("theme", "choice", "dark", "the whole look", THEMES),
     Option("formats", "text", "16:9,9:16", "video shapes to make, comma separated (" + ", ".join(SHAPES) + ")", check=_formats),
     Option("background", "text", "footage", "what is behind the scenes: footage (stock video), images (stock photos), cartoon (an illustration per beat, see cartoon=), none (the look's own background), "
