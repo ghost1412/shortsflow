@@ -11,7 +11,7 @@ import json
 import os
 import re
 
-from engine import story_art
+from engine import story_art, story_objects
 
 MAX_CHARACTERS = 6
 MAX_NAME = 26
@@ -58,6 +58,13 @@ def sentences(text):
     return [p.strip() for p in parts if p.strip()]
 
 
+def named_here(known, script):
+    """The saved people this story names. Only they are mentioned to the model and carried over: given the whole library, it took it for the cast and drew
+    none of the story's own people."""
+    text = " ".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]]])
+    return {name: spec for name, spec in (known or {}).items() if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text, re.I)}
+
+
 def request(script, known):
     """The prompt that plans the story's pictures."""
     lines = []
@@ -65,7 +72,8 @@ def request(script, known):
         lines.append(f"Section {si} (id \"{sec['id'] if 'id' in sec else si}\", {sec.get('title', '')}):")
         for k, s in enumerate(sentences(sec.get("narration")), 1):
             lines.append(f"  {k}. {s}")
-    known_line = ("People already drawn (use these exact names for them, do not redescribe them): " + ", ".join(sorted(known)) + ". ") if known else ""
+    known = named_here(known if isinstance(known, dict) else {k: None for k in known or []}, script)
+    known_line = ("People of this story who are already drawn (use these exact names for them, do not redescribe them): " + ", ".join(sorted(known)) + ". ") if known else ""
     return (
         "You are the art director of a short animated story video. Plan its pictures from this narration.\n\n" + "\n".join(lines) + "\n\n"
         + known_line +
@@ -84,9 +92,12 @@ def request(script, known):
         "sentence is about a thing, a curse, a weapon or someone you did not describe. A character beat may set \"mood\" (from the same mood list) when the person feels differently at that moment than usual: nobody smiles while falling or dying. \"role\" is a short line under the name of at most 5 words (like \"The King's Son\"; empty is fine). "
         "A sentence that holds a number worth showing big may "
         "have \"big\" (the number exactly as the narration says it) and \"label\" (at most 4 words). Use a new beat when the person on screen should change, about every "
-        "one or two sentences, and always a beat at sentence 1 of every section. Never invent facts: only what the narration says.\n\n"
+        "one or two sentences, and always a beat at sentence 1 of every section. Never invent facts: only what the narration says.\n"
+        f"Also list for each section \"props\": up to {MAX_PROPS} things a viewer should SEE that a sentence mentions, such as an object, an animal, a vehicle or a building "
+        "(never a person), each as {\"sentence\": its number, \"object\": one to three plain words, like \"wooden horse\" or \"golden apple\"}. Prefer the thing the "
+        "moment turns on. Leave the list empty when the section names no such thing.\n\n"
         "Reply with raw JSON only:\n"
-        "{\"characters\": {\"Name\": {\"skin\": \"...\", \"headgear\": \"...\", ...}}, \"sections\": [{\"sky\": \"...\", \"ground\": \"...\", \"beats\": "
+        "{\"characters\": {\"Name\": {\"skin\": \"...\", \"headgear\": \"...\", ...}}, \"sections\": [{\"sky\": \"...\", \"ground\": \"...\", \"props\": [{\"sentence\": 2, \"object\": \"...\"}], \"beats\": "
         "[{\"sentence\": 1, \"character\": \"Name\" or null, \"name\": \"...\", \"role\": \"...\", \"emblem\": \"\", \"big\": \"\", \"label\": \"\"}]}]}")
 
 
@@ -111,31 +122,94 @@ OBJECT_WORDS = ((r"lightning|thunderbolt", "lightning", "The Thunderbolt"), (r"b
 MAX_ADDED_CARDS = 3
 
 
-def add_object_cards(plan_, script):
-    """Adds title cards the model did not plan (it often plans none): a sentence that names a drawable object gets a card with that object, at most one in a section,
-    each object once and three in a video. Only where nothing is lost: never on the first sentence, and only on a sentence that keeps the same face as the one
-    before; the face comes back on the next sentence."""
+MAX_PROPS = 2                 # things a section may ask to show
+MAX_DRAWINGS = 6              # new drawings one video may ask for
+
+
+def kit_emblem(name):
+    """(emblem, title) when the kit already draws this thing, else None."""
+    return next(((e, title) for pattern, e, title in OBJECT_WORDS if re.fullmatch(rf"(?:(?:the|a|an)\s+)?(?:{pattern})", str(name).strip(), re.I)), None)
+
+
+def check_props(raw, narration, characters):
+    """The things the model wants shown, as [{"sentence", "object"}]: one to three plain words, never a person of the story, and the sentence has to mention it."""
+    sents = sentences(narration)
+    out = []
+    for row in raw if isinstance(raw, list) else []:
+        if not isinstance(row, dict):
+            continue
+        name = " ".join(str(row.get("object") or "").lower().split())
+        name = re.sub(r"^(a|an|the)\s+", "", name)
+        try:
+            k = int(row.get("sentence"))
+        except (TypeError, ValueError):
+            continue
+        if not (1 <= k <= len(sents) and re.fullmatch(r"[a-z][a-z' -]{1,29}", name) and len(name.split()) <= 3):
+            continue
+        if any(name == c.lower() or name in c.lower().split() for c in characters):
+            continue
+        said = sents[k - 1].lower()
+        if not any(len(w) >= 3 and re.search(rf"\b{re.escape(w[:max(3, len(w) - 1)])}", said) for w in name.split()):
+            continue                                       # only what the narration says
+        if all(name != o["object"] for o in out):
+            out.append({"sentence": k, "object": name})
+    return out[:MAX_PROPS]
+
+
+def free_slot(row, count, k):
+    """(the beat before, the beat at k or None) when a card may take sentence k, else None: never the first sentence, and only where the same face carries on."""
+    if not 2 <= k <= count:
+        return None
+    at = {b["sentence"]: b for b in row["beats"]}
+    before = at[max(n for n in at if n < k)]
+    here = at.get(k)
+    if here and here["character"] != before["character"]:
+        return None                                        # this sentence brings someone new on screen: leave it
+    return before, here
+
+
+def wanted_drawings(plan_, script):
+    """The names of the things worth drawing: asked for by a section, not in the kit, and with a free slot for their card."""
+    names = []
+    for sec, row in zip(script["sections"], plan_["sections"]):
+        if any(not b["character"] for b in row["beats"]):
+            continue
+        count = len(sentences(sec.get("narration")))
+        names += [o["object"] for o in row.get("props", []) if not kit_emblem(o["object"]) and free_slot(row, count, o["sentence"])]
+    return list(dict.fromkeys(names))[:MAX_DRAWINGS]
+
+
+def add_object_cards(plan_, script, drawn=()):
+    """Adds title cards the model did not plan (it often plans none), at most one in a section, each thing once and three in a video. The things a section asked to
+    show come first (from the kit, or among `drawn`, the names that now have a drawing); then any sentence that names something the kit draws. Only where
+    nothing is lost (see `free_slot`); the face comes back on the next sentence."""
     used = {b["emblem"] for s in plan_["sections"] for b in s["beats"] if b.get("emblem")}
     added = 0
     for sec, row in zip(script["sections"], plan_["sections"]):
         if added >= MAX_ADDED_CARDS or any(not b["character"] for b in row["beats"]):
             continue
         sents = sentences(sec.get("narration"))
-        for k in range(2, len(sents) + 1):
-            hit = next(((e, title) for pattern, e, title in OBJECT_WORDS if e not in used and re.search(rf"\b(?:{pattern})\b", sents[k - 1], re.I)), None)
-            if not hit:
+        choices = []                                       # (sentence, emblem, title), best first
+        for o in row.get("props", []):
+            kit = kit_emblem(o["object"])
+            if kit:
+                choices.append((o["sentence"], kit[0], kit[1]))
+            elif o["object"] in drawn:
+                choices.append((o["sentence"], "custom:" + o["object"], o["object"].title()))
+        for k, text in enumerate(sents, 1):
+            choices += [(k, e, title) for pattern, e, title in OBJECT_WORDS if re.search(rf"\b(?:{pattern})\b", text, re.I)]
+        for k, emblem, title in choices:
+            slot = None if emblem in used else free_slot(row, len(sents), k)
+            if not slot:
                 continue
-            at = {b["sentence"]: b for b in row["beats"]}
-            before = at[max(n for n in at if n < k)]
-            here = at.get(k)
-            if here and here["character"] != before["character"]:
-                continue                                    # this sentence brings someone new on screen: leave it
-            card = {"sentence": k, "character": None, "name": hit[1], "role": "", "mood": "", "emblem": hit[0], "big": "", "label": ""}
+            before, here = slot
+            at = {b["sentence"] for b in row["beats"]}
+            card = {"sentence": k, "character": None, "name": title[:MAX_NAME], "role": "", "mood": "", "emblem": emblem, "big": "", "label": ""}
             row["beats"] = [b for b in row["beats"] if b["sentence"] != k] + [card]
             if k < len(sents) and k + 1 not in at:
                 row["beats"].append(dict(here or before, sentence=k + 1))
             row["beats"].sort(key=lambda b: b["sentence"])
-            used.add(hit[0])
+            used.add(emblem)
             added += 1
             break
     return plan_
@@ -148,11 +222,11 @@ def check_plan(reply, script, library=None):
     if not isinstance(data, dict):
         return None, "the answer was not a JSON object"
     library = library or {}
-    chars = {}
+    chars = dict(list(named_here(library, script).items())[:MAX_CHARACTERS])       # saved people of this story need no new description
     raw_chars = data.get("characters") if isinstance(data.get("characters"), dict) else {}
-    for name, spec in list(raw_chars.items())[:MAX_CHARACTERS]:
+    for name, spec in raw_chars.items():
         name = _clip(name, MAX_NAME)
-        if name:
+        if name and (name in chars or len(chars) < MAX_CHARACTERS):
             chars[name] = library.get(name) or story_art.clean_spec(spec)
     raw_sections = data.get("sections") if isinstance(data.get("sections"), list) else []
     out_sections = []
@@ -196,14 +270,15 @@ def check_plan(reply, script, library=None):
             beats.insert(0, {"sentence": 1, "character": first, "name": first or _clip(sec.get("title"), MAX_NAME), "role": "", "emblem": "", "big": "", "label": ""})
         sky = str(row.get("sky") or "").strip().lower()
         ground = str(row.get("ground") or "").strip().lower()
-        out_sections.append({"sky": sky if sky in story_art.SKIES else "sunset", "ground": ground if ground in story_art.GROUNDS else "none", "beats": beats})
+        out_sections.append({"sky": sky if sky in story_art.SKIES else "sunset", "ground": ground if ground in story_art.GROUNDS else "none", "beats": beats,
+                             "props": check_props(row.get("props"), narration, chars)})
     if not chars and not any(b["name"] for s in out_sections for b in s["beats"]):
         return None, "no character or card was planned"
-    return add_object_cards({"characters": chars, "sections": out_sections}, script), ""
+    return {"characters": chars, "sections": out_sections}, ""
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v4"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v6"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
@@ -220,13 +295,16 @@ def plan(script, ask, session_dir, aspect="9:16", library=None):
         pass
     library = load_library() if library is None else library
     prompt, problem = request(script, library), ""
-    for _ in range(2):
+    for attempt in range(2):
         try:
             reply = ask(prompt + (f"\n\nYour last answer could not be used: {problem}. Answer again, following the format exactly." if problem else ""))
         except Exception as e:
             print(f"[Warning] The text model could not plan the story's pictures ({' '.join(str(e).split())[:100]}).")
             return None
         plan_, problem = check_plan(reply, script, library)
+        if plan_ and attempt == 0 and not any(b["character"] for s in plan_["sections"] for b in s["beats"]):
+            plan_, problem = None, ("no beat shows a person. Describe the people named in THIS narration under \"characters\", and set \"character\" to that exact name "
+                                    "on the beats where they act or speak")
         if plan_:
             for name, spec in plan_["characters"].items():
                 if name not in library:
@@ -265,7 +343,7 @@ def beat_times(narration, words, duration, beats):
     return [(a, max(a + 0.5, b)) for a, b in zip(out, ends)]
 
 
-def attach(script, session_dir, aspect, ask, words, timing):
+def attach(script, session_dir, aspect, ask, words, timing, vision=None, render=None):
     """[None | {"kind": "story", "backdrop": svg path, "beats": [{"from", "to", "character": svg path or None, "name", "role", "big", "label"}]}] per section; None for the
     sections that are not story scenes and for all of them when the plan cannot be made (then each shows its text as a quote)."""
     if not any(s.get("scene") == "story" for s in script["sections"]):
@@ -277,6 +355,11 @@ def attach(script, session_dir, aspect, ask, words, timing):
     w, h = SIZES.get(aspect, SIZES["9:16"])
     folder = os.path.join(session_dir, "story_art")
     os.makedirs(folder, exist_ok=True)
+    # things the kit cannot draw: the model draws them, they are checked blind, and only what passes gets a card (engine/story_objects.py)
+    wanted = wanted_drawings(plan_, script)
+    objects = story_objects.make(wanted, ask, folder, vision=vision, render=render) if wanted else {}
+    drawn = {name: got["path"] for name, got in objects.items() if got["path"]}
+    add_object_cards(plan_, script, drawn)
     paths = {}
 
     def bust(name, mood):
@@ -291,6 +374,9 @@ def attach(script, session_dir, aspect, ask, words, timing):
     emblems = {}
     for kind in {b.get("emblem") for s in plan_["sections"] for b in s["beats"] if b.get("emblem")}:
         p = os.path.join(folder, f"emblem_{kind}.svg")
+        if kind.startswith("custom:"):
+            emblems[kind] = drawn.get(kind[len("custom:"):])
+            continue
         with open(p, "w", encoding="utf-8") as f:
             f.write(story_art.emblem_svg(kind))
         emblems[kind] = p
@@ -307,5 +393,9 @@ def attach(script, session_dir, aspect, ask, words, timing):
         times = beat_times(sec.get("narration"), ws, end - start, row["beats"])
         beats = [{"from": a, "to": b, "character": bust(bt["character"], bt.get("mood", "")) if bt["character"] else None, "name": bt["name"], "role": bt["role"],
                   "emblem": emblems.get(bt.get("emblem")), "big": bt["big"], "label": bt["label"]} for bt, (a, b) in zip(row["beats"], times)]
-        out.append({"kind": "story", "backdrop": bd, "beats": beats, "characters": sorted({bt["character"] for bt in row["beats"] if bt["character"]})})
+        shown = {bt["emblem"] for bt in row["beats"] if bt.get("emblem")}
+        report = [{"name": o["object"], "status": objects.get(o["object"], {}).get("status") or ("in the kit" if kit_emblem(o["object"]) else "no free place for a card"),
+                   "shown": ("custom:" + o["object"]) in shown or bool(kit_emblem(o["object"]) and kit_emblem(o["object"])[0] in shown)} for o in row.get("props", [])]
+        out.append({"kind": "story", "backdrop": bd, "beats": beats, "characters": sorted({bt["character"] for bt in row["beats"] if bt["character"]}),
+                    "cards": [bt["name"] for bt in row["beats"] if not bt["character"]], "objects": report})
     return out

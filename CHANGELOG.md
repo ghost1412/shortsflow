@@ -4,6 +4,10 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Story look: for an object or animal the kit lacks, the text model draws it and ShortsFlow checks the drawing blind (an image model picks what it shows from a list that includes look-alikes); only a recognised drawing is used and saved, a failed one is redrawn once and then left out, and decisions.md lists every result. A drawing is shown only where a title card fits, which in practice is often nowhere.
+
+- Fixed: once earlier videos had saved characters, the story planner could take that whole list for the cast and show only text cards; now only saved people the story names are mentioned, and a plan without a single face is asked for again.
+
 - Story videos read a long page's plot first (its Plot, Story or Synopsis part, after the opening), so a film, game or epic page is no longer cut off before the story begins.
 
 - Story look, drawing kit: women and children, long hair, braids and bald heads, hair colours, war paint, a tattoo band or a scar, twin blades and a trident, five more card objects (thunderbolt, box, skull, mountain, wings); an expression can follow the moment; a sentence that names a drawable object gets a title card; the feather no longer floats over a bare head and the sun no longer sits under a character's chin.

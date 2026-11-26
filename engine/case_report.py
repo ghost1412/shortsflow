@@ -48,6 +48,10 @@ def build(script, opts=None, art=None, results=None, avatar=None, warnings=None)
                 lines.append("- icons: " + ("; ".join(shown) if shown else "not recorded (a picture made before icons were recorded)"))
             elif art:                                           # picture details were collected and this section has none: it fell back
                 lines.append("- the picture could not be made, so this section shows its labels as a checklist")
+        if scene == "story" and plan:
+            lines.append("- on screen: " + (", ".join(plan.get("characters") or []) or "no characters") + ("; cards: " + ", ".join(plan["cards"]) if plan.get("cards") else "; no cards"))
+            for o in plan.get("objects") or []:
+                lines.append(f"- thing asked for: {o['name']}: {o['status']}" + (" (shown on a card)" if o["shown"] else " (not shown)"))
         if sec.get("footage"):
             lines.append("- background ideas: " + "; ".join(sec["footage"]))
         lines.append("")

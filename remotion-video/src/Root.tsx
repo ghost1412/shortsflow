@@ -4,6 +4,7 @@ import { ShortFlow, shortFlowSchema } from "./ShortFlow";
 import { OverlayOnly, overlaySchema } from "./overlay";
 import { CaseVideo, caseVideoSchema } from "./CaseVideo";
 import { PresenterCard, presenterCardSchema } from "./Presenter";
+import { DrawingSheet, drawingSheetSchema, SHEET_CELL, SHEET_COLUMNS } from "./DrawingSheet";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -93,6 +94,17 @@ export const RemotionRoot: React.FC = () => {
           words: [],
           transition: "number" as const,
         }}
+      />
+      <Composition
+        id="DrawingSheet"
+        component={DrawingSheet}
+        fps={30}
+        width={SHEET_CELL * SHEET_COLUMNS}
+        height={SHEET_CELL}
+        durationInFrames={1}
+        schema={drawingSheetSchema}
+        calculateMetadata={({ props }) => ({ height: SHEET_CELL * Math.max(1, Math.ceil(props.items.length / SHEET_COLUMNS)) })}
+        defaultProps={{ items: [] }}
       />
       <Composition
         id="PresenterCard"

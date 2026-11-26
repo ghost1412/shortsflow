@@ -21,3 +21,5 @@ def _private_home(tmp_path_factory, monkeypatch):
     for name in ("HOME", "USERPROFILE"):
         monkeypatch.setenv(name, str(home))
     monkeypatch.setenv("SHORTSFLOW_ICONS", str(home / "icons"))
+    monkeypatch.setenv("SHORTSFLOW_CHARACTERS", str(home / "characters"))
+    monkeypatch.setenv("SHORTSFLOW_STORY_OBJECTS", str(home / "story_objects"))
