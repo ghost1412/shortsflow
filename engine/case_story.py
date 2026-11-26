@@ -335,6 +335,9 @@ def check_plan(reply, script, library=None):
             beat = {"sentence": k, "character": who or None, "name": name, "role": _clip(b.get("role"), MAX_ROLE), "mood": mood if who and mood in story_art.MOODS else "",
                     "emblem": emblem if not who and not big and emblem in story_art.EMBLEMS else "",
                     "big": big, "label": _clip(b.get("label"), 30) if big else ""}
+            heading = str(sec.get("title") or "").strip().lower()
+            if not beat["character"] and not beat["big"] and not beat["emblem"] and heading and beat["name"].lower() == heading:
+                continue                                       # a card that only repeats the section's heading shows nothing
             if beat["character"] or beat["big"] or beat["emblem"] or (beat["name"] and is_title(beat["name"], narration, chars)):
                 beats.append(beat)
         beats.sort(key=lambda x: x["sentence"])
@@ -351,7 +354,7 @@ def check_plan(reply, script, library=None):
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v12"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v13"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 

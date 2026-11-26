@@ -303,6 +303,20 @@ def _describe_people(names, script, ask):
     return {str(r.get("name")): story_art.clean_spec(r) for r in rows if r.get("name")}
 
 
+def _drop_human_picture(plan, item):
+    """A creature that could not be drawn must not stay on screen as a person (a hare as a man with a moustache misleads more than a name does):
+    its bust leaves the cast and each of its beats becomes a card with its name. True when there was such a bust."""
+    names = [item["name"], *item.get("also", [])]
+    human = [n for n, spec in plan["characters"].items() if not spec.get("creature") and any(_same(n, other) for other in names)]
+    for who in human:
+        del plan["characters"][who]
+        for section in plan["sections"]:
+            for beat in section["beats"]:
+                if beat.get("character") == who:
+                    beat.update(character=None, name=who, mood="", role="", emblem="", big=beat.get("big", ""), label=beat.get("label", ""))
+    return bool(human)
+
+
 def review_coverage(plan, script, ask, folder, drawn, vision, render, report):
     wanted = needed(script, ask)
     if wanted is None:
@@ -350,6 +364,8 @@ def review_coverage(plan, script, ask, folder, drawn, vision, render, report):
                 else:
                     drawn[name.lower()] = path
                     beat.setdefault("asides", []).append({"sentence": item["sentence"], "emblem": "custom:" + name.lower()})
+        if why and item["kind"] == "creature" and _drop_human_picture(plan, item):
+            why += "; its picture as a human was taken out, so only its name is shown"
         if why:
             report["left"].append({"name": name, "kind": item["kind"], "why": why})
         else:
