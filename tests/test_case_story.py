@@ -3,7 +3,17 @@ import json
 import os
 import xml.dom.minidom
 
+import pytest
+
 from engine import case_render as cr, case_story as st, story_art as sa
+
+
+@pytest.fixture(autouse=True)
+def no_real_image_model(monkeypatch):
+    """The story tests stay offline: no image model (a Gemini key on this PC must not be used) and no renderer."""
+    from engine import story_objects, visual_context
+    monkeypatch.setattr(visual_context, "choose_backend", lambda: (None, None, "none"))
+    monkeypatch.setattr(story_objects, "render_sheet", lambda documents, out, **k: None)
 
 SCRIPT = {"title": "The Wheel", "hook": "h", "verified": True, "sources": [], "sections": [
     {"id": "moment", "title": "The moment", "scene": "story", "on_screen": [],
@@ -86,11 +96,12 @@ def test_a_run_plans_once_and_a_saved_plan_is_reused(tmp_path, monkeypatch):
     timing = [(0.0, 9.0), (9.0, 15.0)]
     words = [[{"word": "w", "start": i * 0.3, "end": i * 0.3 + 0.2} for i in range(24)], [{"word": "w", "start": i * 0.3, "end": i * 0.3 + 0.2} for i in range(10)]]
     out = st.attach(SCRIPT, str(tmp_path), "9:16", ask, words, timing)
-    assert len(calls) == 1 and all(o and o["kind"] == "story" for o in out)
+    planned = lambda: sum("art director of a short animated story" in c for c in calls)
+    assert planned() == 1 and all(o and o["kind"] == "story" for o in out)
     assert os.path.isfile(out[0]["backdrop"]) and os.path.isfile(out[0]["beats"][0]["character"]) and out[0]["beats"][2]["character"] is None
     assert "Karna" in st.load_library(str(tmp_path / "lib")) and os.path.isfile(str(tmp_path / "story_plan.json"))
     st.attach(SCRIPT, str(tmp_path), "9:16", ask, words, timing)
-    assert len(calls) == 1                                                         # the plan saved with the run is used
+    assert planned() == 1                                                         # the plan saved with the run is used
     assert st.attach({"sections": [{"scene": "quote", "narration": "x", "title": "t"}]}, str(tmp_path), "9:16", ask, [[]], [(0, 1)]) == [None]
 
 

@@ -6,6 +6,7 @@ or a big figure with its label. Everything the model says is checked: only known
 narration says it. A person is saved in the library (`~/.shortsflow/characters`), so the same person looks the same in the next video.
 The plan is saved with the run (`story_plan.json`) so a resumed run does not ask again.
 """
+import copy
 import hashlib
 import json
 import os
@@ -97,7 +98,8 @@ def request(script, known):
         "(never a person), each as {\"sentence\": its number, \"object\": one to three plain words, like \"wooden horse\" or \"golden apple\"}. Prefer the thing the "
         "moment turns on. Leave the list empty when the section names no such thing.\n\n"
         "Reply with raw JSON only:\n"
-        "{\"characters\": {\"Name\": {\"skin\": \"...\", \"headgear\": \"...\", ...}}, \"sections\": [{\"sky\": \"...\", \"ground\": \"...\", \"props\": [{\"sentence\": 2, \"object\": \"...\"}], \"beats\": "
+        "Also give \"setting\": the time and world of the story in at most 12 words (like \"an ancient Persian fantasy\").\n"
+        "{\"setting\": \"...\", \"characters\": {\"Name\": {\"skin\": \"...\", \"headgear\": \"...\", ...}}, \"sections\": [{\"sky\": \"...\", \"ground\": \"...\", \"props\": [{\"sentence\": 2, \"object\": \"...\"}], \"beats\": "
         "[{\"sentence\": 1, \"character\": \"Name\" or null, \"name\": \"...\", \"role\": \"...\", \"emblem\": \"\", \"big\": \"\", \"label\": \"\"}]}]}")
 
 
@@ -320,11 +322,11 @@ def check_plan(reply, script, library=None):
                              "props": check_props(row.get("props"), narration, chars)})
     if not chars and not any(b["name"] for s in out_sections for b in s["beats"]):
         return None, "no character or card was planned"
-    return {"characters": chars, "sections": out_sections}, ""
+    return {"characters": chars, "sections": out_sections, "setting": _clip(data.get("setting"), 90)}, ""
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v7"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v9"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
@@ -361,6 +363,34 @@ def plan(script, ask, session_dir, aspect="9:16", library=None):
             return plan_
         print(f"[Log] The story plan was not usable: {problem}.")
     return None
+
+
+def reviewed(plan_, script, ask, session_dir, folder, drawn, vision=None, render=None):
+    """(report, plan) after ShortsFlow's own review (engine/story_review.py). The reviewed plan and its drawings are kept with the run, so a resumed run, or its
+    other shape, shows the same thing without reviewing again. A review that fails leaves the plan as it was and says so."""
+    from engine import story_review
+    key = hashlib.sha1((_key(script, "any") + json.dumps(plan_, sort_keys=True)).encode("utf-8")).hexdigest()[:12]
+    path = os.path.join(session_dir, "story_review.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            saved = json.load(f)
+        if saved.get("key") == key and all(os.path.isfile(p) for p in saved["drawn"].values()):
+            drawn.update(saved["drawn"])
+            return saved["report"], saved["plan"]
+    except (OSError, ValueError, KeyError, AttributeError):
+        pass
+    fixed = copy.deepcopy(plan_)
+    try:
+        report = story_review.run(fixed, script, ask, folder, drawn, vision=vision, render=render)
+    except Exception as e:                                       # the review is a second look: it must never cost the video
+        print(f"[Warning] The story review stopped ({' '.join(str(e).split())[:120]}); the plan is used as it was.")
+        return {"checked": 0, "needed": [], "replaced": [], "removed": [], "added": [], "left": [], "notes": ["the review stopped with an error"]}, plan_
+    for line in story_review.summary(report):
+        print(f"[Log] Story review: {line[2:]}")
+    os.makedirs(session_dir, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"key": key, "report": report, "plan": fixed, "drawn": drawn}, f, indent=1)
+    return report, fixed
 
 
 SIZES = {"9:16": (1080, 1920), "16:9": (1920, 1080), "1:1": (1080, 1080), "4:5": (1080, 1350)}
@@ -403,14 +433,18 @@ def attach(script, session_dir, aspect, ask, words, timing, vision=None, render=
     os.makedirs(folder, exist_ok=True)
     # things the kit cannot draw: the model draws them, they are checked blind, and only what passes gets a card (engine/story_objects.py)
     wanted = wanted_drawings(plan_, script)
-    objects = story_objects.make(wanted, ask, folder, vision=vision, render=render) if wanted else {}
+    setting = plan_.get("setting") or str(script.get("title", ""))
+    objects = story_objects.make(wanted, ask, folder, vision=vision, render=render, setting=setting) if wanted else {}
     drawn = {name: got["path"] for name, got in objects.items() if got["path"]}
     add_object_cards(plan_, script, drawn)
     add_asides(plan_, script, drawn)
+    review, plan_ = reviewed(plan_, script, ask, session_dir, folder, drawn, vision, render)
     paths = {}
 
     def bust(name, mood):
-        """The drawing of a person in the mood of the moment (their own mood when the beat sets none), drawn once per mood."""
+        """The drawing of a person in the mood of the moment (their own mood when the beat sets none), drawn once per mood. A creature has one drawing of its own."""
+        if plan_["characters"][name].get("creature"):
+            return plan_["characters"][name]["creature"]
         if (name, mood) not in paths:
             spec = dict(plan_["characters"][name], **({"mood": mood} if mood else {}))
             p = os.path.join(folder, f"char_{_slug(name)}{'_' + mood if mood else ''}.svg")
@@ -451,5 +485,5 @@ def attach(script, session_dir, aspect, ask, words, timing, vision=None, render=
         report = [{"name": o["object"], "status": objects.get(o["object"], {}).get("status") or ("in the kit" if kit_emblem(o["object"]) else "not drawn (too many things asked for)"),
                    "shown": ("custom:" + o["object"]) in shown or bool(kit_emblem(o["object"]) and kit_emblem(o["object"])[0] in shown)} for o in row.get("props", [])]
         out.append({"kind": "story", "backdrop": bd, "beats": beats, "characters": sorted({bt["character"] for bt in row["beats"] if bt["character"]}),
-                    "cards": [bt["name"] for bt in row["beats"] if not bt["character"]], "objects": report})
+                    "cards": [bt["name"] for bt in row["beats"] if not bt["character"]], "objects": report, "review": review})
     return out

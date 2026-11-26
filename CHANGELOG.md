@@ -4,6 +4,10 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Story look: **ShortsFlow reviews its own story before rendering.** It lists who and what the narration needs on screen and adds what is missing (a person is described, a creature is drawn whole from what it looks like, a thing is drawn); it judges every card and object against its sentence and the story's time (an image model says what the picture shows without knowing the sentence, then the text model decides), redraws a wrong one for the story's setting or removes it; what it cannot fix is listed as still missing in decisions.md.
+
+- A drawing made for a story is now checked in the same two steps (the earlier pick-from-a-list check let poor drawings pass as the nearest name).
+
 - Story look: for an object or animal the kit lacks, the text model draws it and ShortsFlow checks the drawing blind (an image model picks what it shows from a list that includes look-alikes); only a recognised drawing is used and saved, a failed one is redrawn once and then left out, and decisions.md lists every result. A thing is shown beside the speaker on a medallion while its sentence is spoken (the face stays), or as a full title card where one fits.
 
 - Fixed: once earlier videos had saved characters, the story planner could take that whole list for the cast and show only text cards; now only saved people the story names are mentioned, and a plan without a single face is asked for again.

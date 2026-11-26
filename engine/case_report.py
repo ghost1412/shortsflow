@@ -55,6 +55,10 @@ def build(script, opts=None, art=None, results=None, avatar=None, warnings=None)
         if sec.get("footage"):
             lines.append("- background ideas: " + "; ".join(sec["footage"]))
         lines.append("")
+    story_review_ = next((p["review"] for p in first_art if isinstance(p, dict) and p.get("review")), None)
+    if story_review_:
+        from engine import story_review
+        lines += ["## ShortsFlow's own review of the story", *story_review.summary(story_review_), ""]
     if warnings:
         lines += ["## Narration timing warnings", *[f"- {w}" for w in warnings], ""]
     if results:

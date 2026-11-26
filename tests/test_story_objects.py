@@ -3,14 +3,20 @@ import json
 import os
 import xml.dom.minidom
 
+import pytest
+
 from engine import case_story as st, story_objects as so
+
+
+@pytest.fixture(autouse=True)
+def no_real_image_model(monkeypatch):
+    """The story tests stay offline: no image model (a Gemini key on this PC must not be used) and no renderer."""
+    from engine import story_objects, visual_context
+    monkeypatch.setattr(visual_context, "choose_backend", lambda: (None, None, "none"))
+    monkeypatch.setattr(story_objects, "render_sheet", lambda documents, out, **k: None)
 
 DRAWING = json.dumps({"svg": "<rect x='-60' y='-20' width='120' height='60' rx='8' fill='#b45309' stroke='#1f2937'/><circle cx='-40' cy='60' r='18' fill='#f59e0b'/>"
                              "<circle cx='40' cy='60' r='18' fill='#f59e0b'/><polygon points='20,-20 60,-80 80,-20' fill='#b45309'/><rect x='-80' y='-30' width='30' height='20' fill='#facc15'/>"})
-
-
-def asker(prompt):
-    return json.dumps({"look_alikes": ["pony cart", "table", "dog", "wooden horse"]}) if "look_alikes" in prompt else DRAWING
 
 
 def render(documents, out):
@@ -19,52 +25,64 @@ def render(documents, out):
     return out
 
 
-def eyes(answer_for):
-    """A stand-in image model: answer_for(prompt) gives its one line."""
+def eyes(line):
+    """A stand-in image model: always answers `line` (or line(prompt)); what it was asked is kept."""
     seen = []
 
     def ask_image(frames, model, prompt=None):
         seen.append(prompt)
-        return answer_for(prompt)
+        return line(prompt) if callable(line) else line
     return ("m", ask_image, "test"), seen
 
 
-def listed(prompt):
-    return prompt.split("what it is: ")[1].split(".\n")[0].split("; ")
+def asker(prompt, same=True):
+    """A stand-in text model: it draws, and it judges whether what was seen is what was wanted."""
+    if "someone who was not told" in prompt:
+        count = prompt.count("Wanted: ")
+        return json.dumps({"verdicts": [{"id": i, "same": same} for i in range(1, count + 1)]})
+    return DRAWING
 
 
 def test_a_recognised_drawing_is_used_and_saved_and_the_next_video_draws_nothing(tmp_path):
-    vision, seen = eyes(lambda p: "1=wooden horse")
-    got = so.make(["wooden horse"], asker, str(tmp_path / "run"), vision=vision, render=render, directory=str(tmp_path / "lib"))["wooden horse"]
-    assert got["status"] == "checked" and os.path.isfile(got["path"]) and so.load("wooden horse", str(tmp_path / "lib"))
-    xml.dom.minidom.parse(got["path"])
-    names = listed(seen[0])
-    assert "wooden horse" in names and "pony cart" in names and names == sorted(names) and len(names) >= 6     # look-alikes and unlike decoys, in an order that tells nothing
-    again = so.make(["wooden horse"], lambda p: (_ for _ in ()).throw(AssertionError("asked again")), str(tmp_path / "run2"), vision=vision, render=render, directory=str(tmp_path / "lib"))
-    assert again["wooden horse"]["status"] == "saved before" and len(seen) == 1
-
-
-def test_a_drawing_nobody_recognises_is_tried_twice_and_then_left_out_and_never_saved(tmp_path):
-    vision, seen = eyes(lambda p: "1=table")
+    vision, seen = eyes("1=a wooden horse on wheels")
     prompts = []
 
     def ask(prompt):
         prompts.append(prompt)
         return asker(prompt)
     got = so.make(["wooden horse"], ask, str(tmp_path / "run"), vision=vision, render=render, directory=str(tmp_path / "lib"))["wooden horse"]
+    assert got["status"] == "checked" and os.path.isfile(got["path"]) and so.load("wooden horse", str(tmp_path / "lib"))
+    xml.dom.minidom.parse(got["path"])
+    assert "wooden horse" not in seen[0]                                  # the image model is never told what it should see
+    assert "Wanted: wooden horse" in prompts[-1] and "a wooden horse on wheels" in prompts[-1]
+    again = so.make(["wooden horse"], lambda p: (_ for _ in ()).throw(AssertionError("asked again")), str(tmp_path / "run2"), vision=vision, render=render, directory=str(tmp_path / "lib"))
+    assert again["wooden horse"]["status"] == "saved before" and len(seen) == 1
+    fresh = so.make(["wooden horse"], ask, str(tmp_path / "run3"), vision=vision, render=render, directory=str(tmp_path / "lib"), fresh=True, feedback="a toy", setting="ancient Troy")
+    assert fresh["wooden horse"]["status"] == "checked" and any("ancient Troy" in p and "rejected because: a toy" in p for p in prompts)
+
+
+def test_a_drawing_seen_as_something_else_is_tried_twice_and_then_left_out_and_never_saved(tmp_path):
+    vision, seen = eyes("1=a kitchen table")
+    prompts = []
+
+    def ask(prompt):
+        prompts.append(prompt)
+        return asker(prompt, same=False)
+    got = so.make(["wooden horse"], ask, str(tmp_path / "run"), vision=vision, render=render, directory=str(tmp_path / "lib"))["wooden horse"]
     assert got == {"path": None, "status": "not recognised"} and len(seen) == so.ROUNDS and not so.load("wooden horse", str(tmp_path / "lib"))
     assert any("could not be recognised" in p for p in prompts)
     assert sorted(f for f in os.listdir(tmp_path / "run") if f.startswith("rejected")) == ["rejected_1_wooden_horse.svg", "rejected_2_wooden_horse.svg"]
 
 
-def test_with_nothing_to_look_at_it_a_drawing_is_used_but_marked_unchecked_and_not_saved(tmp_path):
-    for vision, how in ((("", None, "none"), render), (eyes(lambda p: "")[0], render), (eyes(lambda p: "1=wooden horse")[0], lambda d, o: None)):
-        got = so.make(["wooden horse"], asker, str(tmp_path / "run"), vision=vision, render=how, directory=str(tmp_path / "lib"))["wooden horse"]
+def test_with_nothing_to_look_at_it_or_judge_it_a_drawing_is_used_but_marked_unchecked_and_not_saved(tmp_path):
+    mute_judge = lambda p: "no idea" if "someone who was not told" in p else DRAWING
+    for vision, how, ask in ((("", None, "none"), render, asker), (eyes("")[0], render, asker), (eyes("1=x")[0], lambda d, o: None, asker), (eyes("1=x")[0], render, mute_judge)):
+        got = so.make(["wooden horse"], ask, str(tmp_path / "run"), vision=vision, render=how, directory=str(tmp_path / "lib"))["wooden horse"]
         assert got["status"] == "unchecked" and got["path"] and not so.load("wooden horse", str(tmp_path / "lib"))
 
 
 def test_a_broken_drawing_or_a_silent_model_gives_nothing(tmp_path):
-    vision, seen = eyes(lambda p: "1=x")
+    vision, seen = eyes("1=x")
     assert so.make(["ship"], lambda p: "<script>x</script>", str(tmp_path), vision=vision, render=render, directory=str(tmp_path / "l"))["ship"]["status"] == "not drawn"
 
     def silent(prompt):
@@ -72,14 +90,15 @@ def test_a_broken_drawing_or_a_silent_model_gives_nothing(tmp_path):
     assert so.make(["ship"], silent, str(tmp_path), vision=vision, render=render, directory=str(tmp_path / "l"))["ship"]["status"] == "not drawn" and not seen
 
 
-def test_the_answer_line_is_read_whatever_its_punctuation():
-    assert so.read_answer("1=Wolf; 2: none\n3 - The Lighthouse.", 3) == {1: "wolf", 2: "none", 3: "the lighthouse"}
-    assert so.read_answer("I cannot tell", 2) is None and so.read_answer("7=wolf", 2) is None
+def test_what_the_image_model_says_is_read_whole_and_in_order():
+    assert so.read_answer("1=a sword, with a gem; 2: a 2-masted ship\n3 = fire.", 3) == {1: "a sword, with a gem", 2: "a 2-masted ship", 3: "fire"}
+    assert so.read_answer("A single golden crown.", 1) == {1: "A single golden crown."}
+    assert so.read_answer("I cannot tell", 2) is None and so.read_answer("7=wolf", 2) is None and so.read_answer("", 1) is None
 
 
-def test_look_alikes_never_include_the_thing_itself():
-    out = so.look_alikes(["wooden horse"], lambda p: json.dumps({"look_alikes": ["horse", "wooden horse", "camel", "Camel", "x" * 60, 5]}))
-    assert out == ["camel"] and so.look_alikes(["a"], lambda p: "nonsense") == [] and so.look_alikes([], asker) == []
+def test_many_drawings_are_looked_at_a_few_at_a_time(tmp_path):
+    vision, seen = eyes(lambda p: "1=a; 2=b; 3=c")
+    assert so.describe_all(["<svg/>"] * 5, str(tmp_path), vision, render) == ["a", "b", "c", "a", "b"] and len(seen) == 2
 
 
 NARRATION = "The Greeks build a wooden horse. The Trojans pull the horse inside the city. Soldiers climb out at night."
@@ -116,10 +135,15 @@ def test_a_whole_run_shows_the_drawn_thing_and_reports_what_it_left_out(tmp_path
                                                           "beats": [{"sentence": 1, "character": "Odysseus"}]}]}
 
     def ask(prompt):
-        if "look_alikes" in prompt or prompt.startswith("Draw ONE"):
+        if "someone who was not told" in prompt:
+            return json.dumps({"verdicts": [{"id": i, "same": "Wanted: wooden horse" in line} for i, line in
+                                            enumerate([x for x in prompt.splitlines() if "Wanted: " in x], 1)]})
+        if prompt.startswith("Draw ONE"):
             return asker(prompt)
+        if "numbered section.sentence" in prompt or "decide whether to keep it" in prompt:
+            return "no answer"                                    # the review has its own tests: here it gets nothing to work with
         return json.dumps(reply)
-    vision, _ = eyes(lambda p: "1=wooden horse; 2=none")
+    vision, _ = eyes("1=a horse made of wood; 2=a blob")
     out = st.attach(script, str(tmp_path / "run"), "9:16", ask, [[]], [(0.0, 12.0)], vision=vision, render=render)[0]
     card = [b for b in out["beats"] if not b["character"]]
     assert len(card) == 1 and card[0]["emblem"].endswith("wooden_horse.svg") and os.path.isfile(card[0]["emblem"]) and out["cards"] == ["Wooden Horse"]

@@ -3,7 +3,17 @@ import json
 import os
 import xml.dom.minidom
 
+import pytest
+
 from engine import case_story as st, case_study as cs, story_art as sa
+
+
+@pytest.fixture(autouse=True)
+def no_real_image_model(monkeypatch):
+    """The story tests stay offline: no image model (a Gemini key on this PC must not be used) and no renderer."""
+    from engine import story_objects, visual_context
+    monkeypatch.setattr(visual_context, "choose_backend", lambda: (None, None, "none"))
+    monkeypatch.setattr(story_objects, "render_sheet", lambda documents, out, **k: None)
 
 
 def page(*parts):

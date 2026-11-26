@@ -2,9 +2,9 @@
 its own work before using it.
 
 1. Draw: the same one-object request and the same checks as the icons of the picture scenes (`engine/art_icons.py`: flat shapes only, nothing else survives).
-2. Check, blind: the drawings are put on one numbered picture (the `DrawingSheet` still of the video renderer) and an image-reading model is asked which name, from
-   a list that also holds wrong ones, each drawing shows, or "none". The wrong ones include things that look alike (the text model names them: a pear and a bottle
-   for an apple), because with only unlike names a poor drawing passes by being the nearest thing on the list. Asking "is this a horse?" would only get a yes; a drawing passes when the model finds the
+2. Check, blind, in two steps: the drawings are put on a numbered picture (the `DrawingSheet` still of the video renderer) and an image-reading model says what
+   each one depicts without being told what it should be; the text model then decides whether that is the wanted thing. (A first version let the image model pick
+   from a list of names: poor drawings passed by being the nearest name on it.) Asking "is this a horse?" would only get a yes; a drawing passes when the model finds the
    right name by itself.
 3. A drawing that is not recognised is drawn once more; if it fails again it is left out and the story keeps its face on screen.
 4. Only a drawing that passed is saved (`~/.shortsflow/story_objects`) and reused by later videos. With no image-reading model, a drawing is used in this video,
@@ -23,7 +23,6 @@ import uuid
 from engine import art_icons
 
 ROUNDS = 2
-DECOYS = ("a chair", "a fish", "a bicycle", "an umbrella", "a teapot", "a guitar", "a cactus", "an anchor", "a ladder", "a mushroom", "a key", "a drum")
 
 
 def library_dir():
@@ -79,73 +78,86 @@ def render_sheet(documents, out, run=None, remotion_dir=None):
     return out
 
 
-def question(count, names):
-    return (f"The picture shows {count} numbered drawings. For each number, say which ONE of these names the drawing shows. Choose only from this list, and answer "
-            f"none when you cannot tell what it is: {'; '.join(names)}.\nAnswer on one line in exactly this form and nothing else: 1=name; 2=none")
+PER_SHEET = 3                 # drawings on one picture: the image model's answer is kept short enough to arrive whole
+
+
+def look_question(count):
+    return (f"The picture shows {count} numbered flat cartoon drawing(s). Ignore the drawing style and the colours. For each number, say what object or creature it "
+            "depicts, in at most 12 words, naming the features that tell its kind or period (for a ship: sails or oars, or funnels, portholes, a motor). Say what it "
+            "looks like to you, even if it is unclear.\nAnswer on one line in exactly this form and nothing else: 1=description; 2=description")
 
 
 def read_answer(text, count):
-    """{number: name or "none"} from the image model's line; None when it holds no answer at all."""
+    """{number: description} from the image model's line "1=...; 2=..."; None when it holds none."""
+    parts = re.split(r"(?:^|[;\n|])\s*(\d+)\s*[=:]\s*", str(text or "").strip())
     found = {}
-    for m in re.finditer(r"(\d+)\s*[=:\-]\s*([^;\n|]+)", str(text or "")):
-        n = int(m.group(1))
-        if 1 <= n <= count:
-            found.setdefault(n, m.group(2).strip(" .\"'*,").lower())
+    for i in range(1, len(parts) - 1, 2):
+        n = int(parts[i])
+        said = parts[i + 1].strip(" .;\"'*")
+        if 1 <= n <= count and said:
+            found.setdefault(n, said[:160])
+    if not found and count == 1 and str(text or "").strip():
+        found[1] = " ".join(str(text).split())[:160]              # a single drawing is often described without its number
     return found or None
 
 
-def _plain(name):
-    return re.sub(r"^(a|an|the)\s+", "", " ".join(str(name).lower().split()))
-
-
-LOOK_ALIKES = 3               # look-alike wrong answers asked for per name
-
-
-def look_alikes(names, ask):
-    """Wrong answers that would catch a poor drawing: for each name, things its drawing could be mistaken for ("golden apple": pear, bottle, lemon). [] when the
-    text model gives none; the check then still has its unlike decoys."""
-    if not ask or not names:
-        return []
-    prompt = (f"A drawing is to be checked by asking someone which thing it shows. For EACH of these, name {LOOK_ALIKES} different things that a poor drawing of it "
-              f"could easily be mistaken for (similar outline, not the same thing and not a kind of it): {'; '.join(names)}.\n"
-              'Reply with raw JSON only: {"look_alikes": ["...", "..."]} (one flat list, plain names of one to three words).')
-    try:
-        from engine.script_gen import robust_json_parse
-        data = robust_json_parse(ask(prompt))
-    except Exception:
-        return []
-    found = data.get("look_alikes") if isinstance(data, dict) else None
-    out = []
-    for item in found if isinstance(found, list) else []:
-        name = _plain(item) if isinstance(item, str) else ""
-        wanted = [_plain(n) for n in names]
-        if re.fullmatch(r"[a-z][a-z' -]{1,29}", name) and name not in out and not any(name == w or name in w.split() or w in name.split() for w in wanted):
-            out.append(name)
-    return out[:LOOK_ALIKES * len(names)]
-
-
-def check(drawings, folder, vision, render=None, similar=()):
-    """{name: True or False} for [(name, svg document)]: whether the image model, not told which is which, named it right. None when it cannot be checked."""
+def describe_all(documents, folder, vision, render=None):
+    """What the image model sees in each drawing, told nothing about what it should be: a list of descriptions in order, None when nothing can look at them."""
     model, ask_image = vision[0], vision[1]
-    if not drawings or not ask_image:
+    if not documents or not ask_image:
         return None
     os.makedirs(folder, exist_ok=True)
-    sheet = (render or render_sheet)([d for _, d in drawings], os.path.join(folder, f"check_{uuid.uuid4().hex[:6]}.jpg"))
-    if not sheet:
-        return None
-    wanted = [_plain(n) for n, _ in drawings]
-    decoys = [d for d in DECOYS if _plain(d) not in wanted][:max(3, len(wanted))]
-    names = sorted(set(wanted + [_plain(d) for d in decoys] + [_plain(s) for s in similar]))     # in alphabetical order: the order tells nothing
-    with open(sheet, "rb") as f:
-        reply = ask_image([f.read()], model, prompt=question(len(drawings), names))
-    answers = read_answer(reply, len(drawings))
-    if answers is None:
-        return None
-    return {name: _plain(answers.get(i, "none")) == _plain(name) for i, (name, _) in enumerate(drawings, 1)}
+    out = []
+    for i in range(0, len(documents), PER_SHEET):
+        batch = documents[i:i + PER_SHEET]
+        sheet = (render or render_sheet)(batch, os.path.join(folder, f"look_{uuid.uuid4().hex[:6]}.jpg"))
+        if not sheet:
+            return None
+        with open(sheet, "rb") as f:
+            answers = read_answer(ask_image([f.read()], model, prompt=look_question(len(batch))), len(batch))
+        if answers is None:
+            return None
+        out += [answers.get(n, "nothing recognisable") for n in range(1, len(batch) + 1)]
+    return out
 
 
-def _draw(name, ask, again=False):
+def same_question(pairs):
+    lines = "\n".join(f"{i}. Wanted: {wanted}. Someone who was not told sees: {seen}" for i, (wanted, seen) in enumerate(pairs, 1))
+    return ("Each drawing below was made to show one thing, and someone who was not told what it should be described it. For each, is what they saw that thing "
+            "(the same kind of object or creature, in plain words or a close synonym)? A different thing is a no, even a similar-looking one (a stethoscope is not "
+            "a thread, an owl is not a wolf, a butterfly is not a pair of wings).\n\n" + lines +
+            "\n\nReply with raw JSON only: {\"verdicts\": [{\"id\": 1, \"same\": true}]}")
+
+
+def check(drawings, folder, vision, ask, render=None):
+    """{name: True or False} for [(name, svg document)]: described blind by the image model, then compared with the wanted name by the text model. None when it
+    cannot be checked."""
+    seen = describe_all([d for _, d in drawings], folder, vision, render)
+    if seen is None or not ask:
+        return None
+    try:
+        from engine.script_gen import robust_json_parse
+        data = robust_json_parse(ask(same_question([(n, s) for (n, _), s in zip(drawings, seen)])))
+    except Exception:
+        return None
+    rows = data if isinstance(data, list) else data.get("verdicts") if isinstance(data, dict) else None
+    verdicts = {}
+    for r in rows if isinstance(rows, list) else []:
+        try:
+            verdicts[int(r["id"])] = r.get("same") is True
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+    if not verdicts:
+        return None
+    return {name: verdicts.get(i, False) for i, (name, _) in enumerate(drawings, 1)}
+
+
+def _draw(name, ask, again=False, setting="", feedback=""):
     prompt = art_icons.request(name)
+    if setting:
+        prompt += f"\n\nThe story: {setting}. Draw it as it would look in that time and world (nothing modern in an old story)."
+    if feedback:
+        prompt += f"\nAn earlier picture was rejected because: {feedback}. Avoid that."
     if again:
         prompt += f"\n\nYour last drawing could not be recognised as {name}. Draw it again with its most typical shape, seen from the side, so that nobody could mistake it."
     for _ in range(art_icons.TRIES):
@@ -155,14 +167,14 @@ def _draw(name, ask, again=False):
     return None
 
 
-def make(names, ask, folder, vision=None, render=None, directory=None):
+def make(names, ask, folder, vision=None, render=None, directory=None, setting="", feedback="", fresh=False):
     """{name: {"path": svg file or None, "status": "saved before" | "checked" | "unchecked" | "not recognised" | "not drawn"}} for every name asked for."""
     if vision is None:
         from engine.visual_context import choose_backend
         vision = choose_backend()
     results, todo = {}, []
     for name in dict.fromkeys(names):
-        saved = load(name, directory)
+        saved = None if fresh else load(name, directory)             # a rejected picture must not come back from the library
         if saved:
             results[name] = {"path": saved, "status": "saved before"}
         else:
@@ -171,7 +183,7 @@ def make(names, ask, folder, vision=None, render=None, directory=None):
         drawn = []
         for name in todo:
             try:
-                markup = _draw(name, ask, again=round_ > 0) if ask else None
+                markup = _draw(name, ask, again=round_ > 0, setting=setting, feedback=feedback) if ask else None
             except Exception as e:
                 print(f"[Warning] The text model could not draw '{name}' ({' '.join(str(e).split())[:100]}).")
                 markup = None
@@ -179,7 +191,7 @@ def make(names, ask, folder, vision=None, render=None, directory=None):
                 drawn.append((name, svg_doc(markup)))
             else:
                 results[name] = {"path": None, "status": "not drawn"}
-        verdicts = check(drawn, folder, vision, render, similar=look_alikes([n for n, _ in drawn], ask)) if drawn else {}
+        verdicts = check(drawn, folder, vision, ask, render) if drawn else {}
         todo = []
         for name, document in drawn:
             if verdicts is None:                       # nothing can look at it: used here, flagged, never saved
