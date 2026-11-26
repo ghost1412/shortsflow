@@ -68,9 +68,10 @@ def request(section, topic, labels):
         "Link things with arrows when one causes, sends or leads to another (list the pairs in the order the story goes).\n"
         f"Colours: {', '.join(kit.COLORS)}. Settings: {', '.join(kit.SETTINGS)} (night suits attacks and secrets, cloud suits online services, city suits companies "
         f"and the public, office suits work). Layouts: row (a story from left to right), hub (the first thing in the middle), triangle (exactly 3).\n\n"
-        "Answer with one JSON object and nothing else, with exactly one item per thing, in the order above:\n"
-        '{"setting": "night", "layout": "row", "items": [{"kind": "hacker", "color": "red"}, {"kind": "server", "color": "blue", "mark": "warning"}, '
-        '{"kind": "database", "color": "teal", "mark": "cross", "many": false}], "links": [[1, 2], [2, 3]]}\n'
+        "Answer with one JSON object and nothing else, with exactly one item per thing, in the order above. This shows the SHAPE only: replace every <...> with your "
+        "own choice for these things.\n"
+        '{"setting": "<setting>", "layout": "<layout>", "items": [{"kind": "<icon for thing 1>", "color": "<colour>"}, {"kind": "<icon for thing 2>", '
+        '"color": "<colour>", "mark": "<mark, or leave this out>"}], "links": [[1, 2]]}\n'
         '(a person also takes "mood": "worried"; "mark", "many" and "draw" are optional.)'
     )
 
@@ -161,7 +162,7 @@ def usable_labels(section):
 
 
 def _key(section, labels, aspect):
-    raw = "|".join([str(section.get("title", "")), str(section.get("narration", "")), *labels, art_aspect(aspect), "kit-v7"])
+    raw = "|".join([str(section.get("title", "")), str(section.get("narration", "")), *labels, art_aspect(aspect), "kit-v8"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
