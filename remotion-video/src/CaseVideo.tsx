@@ -38,7 +38,9 @@ export const caseVideoSchema = z.object({
       items: z.array(z.object({ src: z.string(), cx: z.number(), cy: z.number() })).optional(),                // one picture per icon (centre in percent), brought in when its label is spoken
       links: z.array(z.object({ src: z.string(), from: z.number(), to: z.number() })).optional() }).optional(),   // the arrows, shown once both ends are in   // the explaining picture of an illustration section; one point (percent of the picture) per label
     story: z.object({ backdrop: z.string(),                                              // the story look: a drawn backdrop and who speaks, beat by beat
-      beats: z.array(z.object({ from: z.number(), to: z.number(), character: z.string().optional(), emblem: z.string().optional(), name: z.string().default(""), role: z.string().default(""),
+      beats: z.array(z.object({ from: z.number(), to: z.number(), character: z.string().optional(), emblem: z.string().optional(),
+        asides: z.array(z.object({ src: z.string(), at: z.number(), until: z.number() })).optional(),            // things shown beside the speaker while named
+        name: z.string().default(""), role: z.string().default(""),
         big: z.string().default(""), label: z.string().default("") })).default([]) }).optional(),
     clipRate: z.number().default(1),
     clipAspect: z.number().default(16 / 9),     // width / height of the clip: older clips are 16:9, the landscape panel clips are wider
@@ -842,6 +844,39 @@ const sectionMotion = (kind: string, frame: number, frames: number, fade: number
 const GOLD = "#f0c15a";
 const SERIF = 'Georgia, "Palatino Linotype", "Book Antiqua", "Times New Roman", serif';
 
+// a thing the story names, popping up above and beside the speaker while its sentence is spoken; the face stays
+const StoryAside: React.FC<{ src: string; frames: number }> = ({ src, frames }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const { u, portrait } = useUnit();
+  const pop = spring({ frame, fps, config: { damping: 13, stiffness: 120 } });
+  const out = interpolate(frame, [frames - 7, frames], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const size = (portrait ? 380 : 320) * u;
+  return (
+    <div style={{ position: "absolute", right: (portrait ? 34 : 120) * u, top: portrait ? "13.6%" : "26%", width: size, height: size, opacity: out,
+      transform: `translateY(${Math.sin(frame / (fps * 0.7)) * 8 * u}px) scale(${0.4 + 0.6 * pop}) rotate(${(1 - pop) * 16}deg)` }}>
+      <div style={{ position: "absolute", inset: "3%", borderRadius: "50%", background: "radial-gradient(circle, #fff8e6 0%, #f1ddb0 78%, #dcc084 100%)", border: `${7 * u}px solid ${GOLD}`, boxShadow: `0 0 ${40 * u}px rgba(240,193,90,0.55), 0 ${12 * u}px ${30 * u}px rgba(0,0,0,0.5)` }} />
+      <Img src={asset(src)} style={{ position: "absolute", inset: "14%", width: "72%", height: "72%", filter: `drop-shadow(0 ${3 * u}px ${5 * u}px rgba(0,0,0,0.45))` }} />
+    </div>
+  );
+};
+
+const StoryAsides: React.FC<{ items?: { src: string; at: number; until: number }[] }> = ({ items }) => {
+  const { fps } = useVideoConfig();
+  return (
+    <>
+      {(items ?? []).map((a, i) => {
+        const len = Math.max(8, Math.round((a.until - a.at) * fps));
+        return (
+          <Sequence key={i} from={Math.max(0, Math.round(a.at * fps))} durationInFrames={len}>
+            <StoryAside src={a.src} frames={len} />
+          </Sequence>
+        );
+      })}
+    </>
+  );
+};
+
 const StoryBeat: React.FC<{ beat: NonNullable<Props["sections"][number]["story"]>["beats"][number]; frames: number }> = ({ beat, frames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -885,7 +920,12 @@ const StoryBeat: React.FC<{ beat: NonNullable<Props["sections"][number]["story"]
               <Img src={asset(beat.emblem)} style={{ width: "100%", height: "100%", filter: `drop-shadow(0 0 ${44 * u}px rgba(240,193,90,0.45))` }} />
             </div>
           </>
-        ) : plate(true)}
+        ) : (
+          <>
+            {plate(true)}
+            <StoryAsides items={beat.asides} />
+          </>
+        )}
       </AbsoluteFill>
     );
   }
@@ -897,6 +937,7 @@ const StoryBeat: React.FC<{ beat: NonNullable<Props["sections"][number]["story"]
         <Img src={asset(beat.character)} style={{ width: "100%", height: "100%", filter: `drop-shadow(0 ${14 * u}px ${30 * u}px rgba(0,0,0,0.5))` }} />
       </div>
       {beat.name ? plate(false) : null}
+      <StoryAsides items={beat.asides} />
     </AbsoluteFill>
   );
 };

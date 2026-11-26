@@ -169,14 +169,60 @@ def free_slot(row, count, k):
 
 
 def wanted_drawings(plan_, script):
-    """The names of the things worth drawing: asked for by a section, not in the kit, and with a free slot for their card."""
-    names = []
-    for sec, row in zip(script["sections"], plan_["sections"]):
-        if any(not b["character"] for b in row["beats"]):
-            continue
-        count = len(sentences(sec.get("narration")))
-        names += [o["object"] for o in row.get("props", []) if not kit_emblem(o["object"]) and free_slot(row, count, o["sentence"])]
+    """The names of the things worth drawing: asked for by a section and not in the kit. Each can be shown, beside the speaker if no card fits."""
+    names = [o["object"] for row in plan_["sections"] for o in row.get("props", []) if not kit_emblem(o["object"])]
     return list(dict.fromkeys(names))[:MAX_DRAWINGS]
+
+
+MAX_ASIDES = 2                # things shown beside the speaker in one section
+MAX_VIDEO_ASIDES = 7
+
+
+def add_asides(plan_, script, drawn=()):
+    """Shows a thing BESIDE what is on screen while its sentence is spoken, so the face stays: the section's own things first (from the kit, or among `drawn`), then
+    anything a sentence names that the kit draws. Not over a card that already shows an object or a figure; each thing once in a video."""
+    used = {b["emblem"] for s in plan_["sections"] for b in s["beats"] if b.get("emblem")}
+    total = 0
+    for sec, row in zip(script["sections"], plan_["sections"]):
+        sents = sentences(sec.get("narration"))
+        choices = []
+        for o in row.get("props", []):
+            kit = kit_emblem(o["object"])
+            if kit:
+                choices.append((o["sentence"], kit[0]))
+            elif o["object"] in drawn:
+                choices.append((o["sentence"], "custom:" + o["object"]))
+        for k, text in enumerate(sents, 1):
+            choices += [(k, e) for pattern, e, _ in OBJECT_WORDS if re.search(rf"\b(?:{pattern})\b", text, re.I)]
+        taken = set()
+        for k, emblem in choices:
+            if len(taken) >= MAX_ASIDES or total >= MAX_VIDEO_ASIDES:
+                break
+            if emblem in used or k in taken or not 1 <= k <= len(sents):
+                continue
+            beat = [b for b in row["beats"] if b["sentence"] <= k][-1]
+            if beat.get("emblem") or beat.get("big"):
+                continue                                    # the screen is already showing a thing
+            beat.setdefault("asides", []).append({"sentence": k, "emblem": emblem})
+            used.add(emblem)
+            taken.add(k)
+            total += 1
+    return plan_
+
+
+def aside_times(asides, sentence_times, start, end):
+    """[(at, until)] seconds inside a beat that runs from `start` to `end`: each thing appears when its sentence starts and stays for the sentence, at least 2.5 s
+    where the beat allows, and leaves when the next thing comes."""
+    out = []
+    ordered = sorted(asides, key=lambda a: a["sentence"])
+    for i, a in enumerate(ordered):
+        s_from, s_to = sentence_times[min(a["sentence"], len(sentence_times)) - 1]
+        at = max(0.0, s_from - start)
+        until = max(s_to - start, at + 2.5)
+        if i + 1 < len(ordered):
+            until = min(until, max(at + 0.8, sentence_times[min(ordered[i + 1]["sentence"], len(sentence_times)) - 1][0] - start))
+        out.append((a["emblem"], round(at, 2), round(min(until, end - start), 2)))
+    return out
 
 
 def add_object_cards(plan_, script, drawn=()):
@@ -278,7 +324,7 @@ def check_plan(reply, script, library=None):
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v6"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v7"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
@@ -360,6 +406,7 @@ def attach(script, session_dir, aspect, ask, words, timing, vision=None, render=
     objects = story_objects.make(wanted, ask, folder, vision=vision, render=render) if wanted else {}
     drawn = {name: got["path"] for name, got in objects.items() if got["path"]}
     add_object_cards(plan_, script, drawn)
+    add_asides(plan_, script, drawn)
     paths = {}
 
     def bust(name, mood):
@@ -372,7 +419,9 @@ def attach(script, session_dir, aspect, ask, words, timing, vision=None, render=
             paths[(name, mood)] = p
         return paths[(name, mood)]
     emblems = {}
-    for kind in {b.get("emblem") for s in plan_["sections"] for b in s["beats"] if b.get("emblem")}:
+    kinds = {b.get("emblem") for s in plan_["sections"] for b in s["beats"] if b.get("emblem")}
+    kinds |= {a["emblem"] for s in plan_["sections"] for b in s["beats"] for a in b.get("asides", [])}
+    for kind in sorted(kinds):
         p = os.path.join(folder, f"emblem_{kind}.svg")
         if kind.startswith("custom:"):
             emblems[kind] = drawn.get(kind[len("custom:"):])
@@ -393,8 +442,13 @@ def attach(script, session_dir, aspect, ask, words, timing, vision=None, render=
         times = beat_times(sec.get("narration"), ws, end - start, row["beats"])
         beats = [{"from": a, "to": b, "character": bust(bt["character"], bt.get("mood", "")) if bt["character"] else None, "name": bt["name"], "role": bt["role"],
                   "emblem": emblems.get(bt.get("emblem")), "big": bt["big"], "label": bt["label"]} for bt, (a, b) in zip(row["beats"], times)]
-        shown = {bt["emblem"] for bt in row["beats"] if bt.get("emblem")}
-        report = [{"name": o["object"], "status": objects.get(o["object"], {}).get("status") or ("in the kit" if kit_emblem(o["object"]) else "no free place for a card"),
+        narration = sec.get("narration")
+        by_sentence = beat_times(narration, ws, end - start, [{"sentence": k} for k in range(1, len(sentences(narration)) + 1)])
+        for shown_beat, bt, (a, b) in zip(beats, row["beats"], times):
+            if bt.get("asides"):
+                shown_beat["asides"] = [{"src": emblems[e], "at": x, "until": y} for e, x, y in aside_times(bt["asides"], by_sentence, a, b) if emblems.get(e) and y > x]
+        shown = {bt["emblem"] for bt in row["beats"] if bt.get("emblem")} | {a["emblem"] for bt in row["beats"] for a in bt.get("asides", [])}
+        report = [{"name": o["object"], "status": objects.get(o["object"], {}).get("status") or ("in the kit" if kit_emblem(o["object"]) else "not drawn (too many things asked for)"),
                    "shown": ("custom:" + o["object"]) in shown or bool(kit_emblem(o["object"]) and kit_emblem(o["object"])[0] in shown)} for o in row.get("props", [])]
         out.append({"kind": "story", "backdrop": bd, "beats": beats, "characters": sorted({bt["character"] for bt in row["beats"] if bt["character"]}),
                     "cards": [bt["name"] for bt in row["beats"] if not bt["character"]], "objects": report})

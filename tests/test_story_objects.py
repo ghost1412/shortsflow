@@ -96,10 +96,10 @@ def test_only_things_the_sentence_mentions_are_kept_and_never_a_person():
     assert st.check_props("nonsense", NARRATION, []) == []
 
 
-def test_only_things_with_a_free_place_are_drawn_and_a_card_appears_only_for_a_drawing_that_exists():
+def test_every_thing_asked_for_is_drawn_and_a_card_appears_only_for_a_drawing_that_exists():
     script = {"sections": [{"narration": NARRATION}]}
     plan = plan_with([{"sentence": 1, "object": "city gate"}, {"sentence": 2, "object": "wooden horse"}])
-    assert st.wanted_drawings(plan, script) == ["wooden horse"]                   # sentence 1 never takes a card, so nothing is drawn for it
+    assert st.wanted_drawings(plan, script) == ["city gate", "wooden horse"]      # both are drawn: what fits no card can stand beside the speaker
     without = st.add_object_cards(plan_with([{"sentence": 2, "object": "wooden horse"}]), script)
     assert all(b["character"] for b in without["sections"][0]["beats"])            # not drawn: the face stays
     beats = st.add_object_cards(plan_with([{"sentence": 2, "object": "wooden horse"}]), script, drawn={"wooden horse": "x.svg"})["sections"][0]["beats"]
@@ -159,3 +159,33 @@ def test_a_plan_without_a_single_face_is_sent_back_once(tmp_path, monkeypatch):
     assert len(asked) == 2 and "no beat shows a person" in asked[1] and plan["sections"][0]["beats"][0]["character"] == "Sinon"
     stubborn = st.plan(script, lambda p: json.dumps(cards), str(tmp_path / "b"))         # a story with nobody to show is still accepted the second time
     assert stubborn and stubborn["sections"][0]["beats"][0]["character"] is None
+
+
+def asides(plan):
+    return [(b["sentence"], b["character"], a["sentence"], a["emblem"]) for s in plan["sections"] for b in s["beats"] for a in b.get("asides", [])]
+
+
+def test_a_thing_stands_beside_the_speaker_even_in_the_first_sentence_and_the_face_stays():
+    plan = st.add_asides(plan_with([{"sentence": 1, "object": "city gate"}]), {"sections": [{"narration": NARRATION}]}, drawn={"city gate": "g.svg"})
+    assert asides(plan) == [(1, "Odysseus", 1, "custom:city gate")] and all(b["character"] for b in plan["sections"][0]["beats"])
+    assert asides(st.add_asides(plan_with([{"sentence": 1, "object": "city gate"}]), {"sections": [{"narration": NARRATION}]})) == []      # no drawing, nothing shown
+
+
+def test_a_thing_is_shown_once_two_a_section_and_never_over_a_card_that_shows_one():
+    props = [{"sentence": 1, "object": "ship"}, {"sentence": 2, "object": "wooden horse"}, {"sentence": 3, "object": "torch"}]
+    drawn = {"ship": 1, "wooden horse": 1, "torch": 1}
+    plan = st.add_asides(plan_with(props), {"sections": [{"narration": NARRATION}]}, drawn=drawn)
+    assert [a[3] for a in asides(plan)] == ["custom:ship", "custom:wooden horse"]
+    busy = plan_with(props)
+    busy["sections"][0]["beats"][0]["emblem"] = "wheel"
+    assert asides(st.add_asides(busy, {"sections": [{"narration": NARRATION}]}, drawn=drawn)) == []
+    two = {"characters": {}, "sections": [plan_with(props[:1])["sections"][0], plan_with(props[:1])["sections"][0]]}
+    assert len(asides(st.add_asides(two, {"sections": [{"narration": NARRATION}] * 2}, drawn=drawn))) == 1
+
+
+def test_a_thing_appears_with_its_sentence_stays_a_moment_and_leaves_for_the_next_one():
+    sentence_times = [(0.0, 4.0), (4.0, 5.0), (5.0, 12.0)]
+    got = st.aside_times([{"sentence": 3, "emblem": "b"}, {"sentence": 2, "emblem": "a"}], sentence_times, 0.0, 12.0)
+    assert got == [("a", 4.0, 5.0), ("b", 5.0, 12.0)]
+    assert st.aside_times([{"sentence": 2, "emblem": "a"}], sentence_times, 2.0, 12.0) == [("a", 2.0, 4.5)]            # at least 2.5 s
+    assert st.aside_times([{"sentence": 2, "emblem": "a"}], sentence_times, 0.0, 5.5) == [("a", 4.0, 5.5)]             # never past its beat

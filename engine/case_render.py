@@ -641,6 +641,8 @@ def render_case(props, audio_path, output_path, music_path=None, aspect="16:9", 
                 if back:
                     s["story"] = dict(s["story"], backdrop=back, beats=[dict(b) for b in s["story"]["beats"]])
                     for b in s["story"]["beats"]:
+                        if b.get("asides"):
+                            b["asides"] = [dict(x, src=rel_) for x in b["asides"] for rel_ in [copy_to_public(x["src"], assets)] if rel_]
                         for key in ("character", "emblem"):              # a drawing that cannot be staged leaves its name plate alone
                             rel = copy_to_public(b[key], assets) if b.get(key) else None
                             if rel:

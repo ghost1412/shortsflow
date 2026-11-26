@@ -51,7 +51,7 @@ def build(script, opts=None, art=None, results=None, avatar=None, warnings=None)
         if scene == "story" and plan:
             lines.append("- on screen: " + (", ".join(plan.get("characters") or []) or "no characters") + ("; cards: " + ", ".join(plan["cards"]) if plan.get("cards") else "; no cards"))
             for o in plan.get("objects") or []:
-                lines.append(f"- thing asked for: {o['name']}: {o['status']}" + (" (shown on a card)" if o["shown"] else " (not shown)"))
+                lines.append(f"- thing asked for: {o['name']}: {o['status']}" + (" (shown)" if o["shown"] else " (not shown)"))
         if sec.get("footage"):
             lines.append("- background ideas: " + "; ".join(sec["footage"]))
         lines.append("")
