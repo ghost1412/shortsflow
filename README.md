@@ -125,6 +125,12 @@ python main.py --mode CASE --case help                                          
 - **A presenter if you want one.** A drawn host who talks with the narration: people of different looks, cats, a dog or a robot, or your own built in the app (it can suggest the look from your photo, read on your PC).
 - **Local fallbacks.** Gemini, then other providers, then local Ollama if the cloud is rate-limited. The Edge voice takes over if ElevenLabs is out of credits.
 
+**Story videos** (`--case template=story`, new and still rough; not in 0.9.4 yet): a narrated tale drawn by code, with characters and gold name plates over painted skies. Before rendering, ShortsFlow reviews its own story: it tries to add people, creatures and objects the narration needs, replaces or removes pictures that do not fit, and lists what is still missing. Expect flat, still figures with one shared face shape, no action, and drawings that vary in quality; check the result before you share it. [Details](docs/FEATURES.md).
+
+```bash
+python main.py --mode CASE --prompt "The story" --sources LINK_TO_THE_STORY --case template=story --case formats=9:16 --case draft
+```
+
 ## How good is it? We measure it
 
 Clip quality is checked on public-domain and Creative Commons videos with no AI key at all, with a benchmark that runs on GitHub's runners
@@ -144,7 +150,7 @@ a standalone opening line, titles that say only what the clip says, a face found
 ## Privacy: what leaves your PC
 
 Everything runs locally by default. Only these leave it, and each is optional: AI text providers (Gemini, Groq, Hugging Face, Ollama is local) receive the
-transcript text when you set a key; Gemini receives small frames for `--visual_context` when a key is set; OpenStreetMap place names for trip recaps
+transcript text when you set a key; Gemini receives small frames for `--visual_context` when a key is set, and, in a story video, the drawings of objects and creatures so it can say what each shows (`SHORTSFLOW_VISION=ollama` keeps them on your PC with a local vision model); OpenStreetMap place names for trip recaps
 (`--recap_no_geocode` turns it off); Microsoft's Edge voice service or ElevenLabs receive the text to speak in the dub and idea-to-video modes;
 a short stock-footage search phrase per section goes to Pexels in `--mode CASE`; a presenter's photo stays on your PC (only if you choose Gemini to suggest a look from it is it sent to Google), and the presenter's voice sample line goes to the Edge voice service; Google Drive upload and publishing to YouTube, TikTok and the rest through Upload-Post (the video and its title) only when you press Publish or switch on auto-publish in the app's Settings, which is off by default. A pasted YouTube link is downloaded to your PC; use your own files where the video's terms require it.
 The transcript of each video you process is also kept on your PC in `~/.shortsflow/cache/transcripts` so it is not redone; delete that folder's files or set `SHORTSFLOW_TRANSCRIPT_CACHE=off` to stop it. If you start the browser app for other devices (`--host 0.0.0.0` or `--share`), visitors cannot use file paths or folder boxes; behind your own tunnel or reverse proxy, set `SHORTSFLOW_REMOTE=1` yourself.
