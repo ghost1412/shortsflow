@@ -263,6 +263,31 @@ def add_object_cards(plan_, script, drawn=()):
     return plan_
 
 
+def is_title(name, narration, cast=()):
+    """Can a card with no picture and no number stand on this title alone? Two words or more, a name from the cast, or one word the narration
+    writes as a name (with a capital in the middle of a sentence). A single ordinary word on an empty screen ("Moment", "Who", "Girl") shows nothing."""
+    words = name.split()
+    if len(words) != 1:
+        return bool(words)
+    word = words[0]
+    if any(word.lower() == n.lower() for n in cast):
+        return True
+    capital = word[:1].upper() + word[1:]
+    return re.search(r"[^.!?\s\"'\u201c(]\s+" + re.escape(capital) + r"\b", narration) is not None
+
+
+def first_named(chars, narration):
+    """The person a section opens on when the plan has none: the one its narration names first (a whole name, else a part of it), else the first of the cast."""
+    low = narration.lower()
+    found = []
+    for name in chars:
+        places = [m.start() for part in [name.lower(), *[w for w in name.lower().split() if len(w) > 3]]
+                  for m in [re.search(r"\b" + re.escape(part) + r"\b", low)] if m]
+        if places:
+            found.append((min(places), name))
+    return min(found)[1] if found else next(iter(chars or {}), None)
+
+
 def check_plan(reply, script, library=None):
     """(plan, problem): the plan with only usable parts. {"characters": {name: spec}, "sections": [{"sky", "ground", "beats": [{"sentence", "character", "name", "role",
     "big", "label"}]}]}, one entry of sections per section of the script. A section the model left out gets a calm default, so a plan is never refused for that alone."""
@@ -310,11 +335,11 @@ def check_plan(reply, script, library=None):
             beat = {"sentence": k, "character": who or None, "name": name, "role": _clip(b.get("role"), MAX_ROLE), "mood": mood if who and mood in story_art.MOODS else "",
                     "emblem": emblem if not who and not big and emblem in story_art.EMBLEMS else "",
                     "big": big, "label": _clip(b.get("label"), 30) if big else ""}
-            if beat["character"] or beat["name"] or beat["big"]:
+            if beat["character"] or beat["big"] or beat["emblem"] or (beat["name"] and is_title(beat["name"], narration, chars)):
                 beats.append(beat)
         beats.sort(key=lambda x: x["sentence"])
         if not beats or beats[0]["sentence"] != 1:
-            first = next(iter(chars), None) if chars else None
+            first = first_named(chars, narration)
             beats.insert(0, {"sentence": 1, "character": first, "name": first or _clip(sec.get("title"), MAX_NAME), "role": "", "emblem": "", "big": "", "label": ""})
         sky = str(row.get("sky") or "").strip().lower()
         ground = str(row.get("ground") or "").strip().lower()
@@ -326,7 +351,7 @@ def check_plan(reply, script, library=None):
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v11"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v12"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
