@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: highlights chapters: good titles such as "Eye Health Issues" were thrown away because their capitals looked like invented names, and a list of keywords was shown instead.
+
 - Shorts and highlights: a clip no longer opens on words that lean on what the viewer did not hear ("So, in that sense, …", "And so …", "Because …"). Only those words are cut, using the word timings; the sentence stays, and openings like "So I quit my job" or "Because of the war …" are left alone.
 
 - Fix: shorts: while the view shows both people stacked, animated captions sit on the line between the two halves instead of on the lower person's face. A caption height you set yourself is not moved.

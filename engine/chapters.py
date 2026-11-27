@@ -139,10 +139,24 @@ def llm_titles(texts, ask=None):
     return [_clean_title(t) for t in titles]
 
 
+def _is_heading(title):
+    """"Eye Health Issues": every longer word capitalised. A chapter title is usually written so, and then a capital does not mark a name."""
+    longer = [w for w in re.findall(r"[A-Za-z][\w'’]*", title) if len(w) > 3]
+    return len(longer) >= 2 and all(w[0].isupper() for w in longer)
+
+
+def _shares_a_word(title, text):
+    said = {w.lower().rstrip("s") for w in re.findall(r"[A-Za-z][\w'’]*", text)}
+    return any(len(w) > 2 and w.lower() not in _STOP and w.lower().rstrip("s") in said for w in re.findall(r"[A-Za-z][\w'’]*", title))
+
+
 def grounded_title(title, text):
-    """True when the title's numbers and capitalised names (not the first word) occur in the chapter text."""
+    """True when the title's numbers occur in the chapter text, and its capitalised names (not the first word) do too. A title written
+    as a heading cannot be checked for names that way: it has to share a word with what is said instead."""
     from engine.title_variants import ungrounded_names, ungrounded_numbers
-    return bool(title) and not ungrounded_numbers(title, text) and not ungrounded_names(title, text)
+    if not title or ungrounded_numbers(title, text):
+        return False
+    return _shares_a_word(title, text) if _is_heading(title) else not ungrounded_names(title, text)
 
 
 def title_chapters(chapters, highlights, transcript_segments, ask=None):
