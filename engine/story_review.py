@@ -279,6 +279,9 @@ def _put_on_screen(plan, item, name):
     here = at.get(k)
     if here and (here.get("emblem") or here.get("big")):
         return False
+    shown = here.get("character") if here else None
+    if shown and shown != name and sum(b.get("character") == shown for s in plan["sections"] for b in s["beats"]) < 2:
+        return False                                        # it is the only time that one is seen
     before = at[max(n for n in at if n <= k)]
     new = {"sentence": k, "character": name, "name": name[:26], "role": "", "mood": "", "emblem": "", "big": "", "label": ""}
     if here and here.get("asides"):
@@ -341,7 +344,7 @@ def review_coverage(plan, script, ask, folder, drawn, vision, render, report):
             else:
                 plan["characters"][name] = spec
                 if not _put_on_screen(plan, item, name):
-                    why = "the sentence that names them already shows a card"
+                    why = "the sentence that names them already shows something that cannot give way"
         else:
             looks = re.sub(r"^(a|an|the)\s+", "", re.sub(r"[^a-z' -]", " ", item["looks"].lower()).strip())
             looks = " ".join(looks.split()[:7])
@@ -355,7 +358,7 @@ def review_coverage(plan, script, ask, folder, drawn, vision, render, report):
                 who = existing or name
                 plan["characters"][who] = {"creature": path}
                 if not any(b.get("character") == who for s in plan["sections"] for b in s["beats"]) and not _put_on_screen(plan, item, who):
-                    why = "the sentence that names it already shows a card"
+                    why = "the sentence that names it already shows something that cannot give way"
             elif path:
                 row = plan["sections"][item["section"]]
                 beat = [b for b in row["beats"] if b["sentence"] <= item["sentence"]][-1]
@@ -370,6 +373,15 @@ def review_coverage(plan, script, ask, folder, drawn, vision, render, report):
             report["left"].append({"name": name, "kind": item["kind"], "why": why})
         else:
             report["added"].append({"name": name, "kind": item["kind"], "sentence": sentence})
+    note_lost(plan, wanted, report)
+
+
+def note_lost(plan, wanted, report):
+    """The last look: a needed person or creature that no beat shows is reported, whatever took it off the screen (it may have been there before the review)."""
+    told = {x["name"] for x in report["left"]}
+    for item in wanted:
+        if item["kind"] in ("person", "creature") and item["name"] not in told and not shown_as(plan, item):
+            report["left"].append({"name": item["name"], "kind": item["kind"], "why": "no picture of them is on screen"})
 
 
 def run(plan, script, ask, folder, drawn, vision=None, render=None):

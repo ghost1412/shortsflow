@@ -59,11 +59,28 @@ def sentences(text):
     return [p.strip() for p in parts if p.strip()]
 
 
+# a saved "name" that is only a role or a family word belongs to the story it was made for: the next story's grandmother or king is somebody else
+ROLE_WORDS = frozenset("grandmother grandfather mother father mom dad sister brother son daughter wife husband girl boy child baby man woman king queen prince princess "
+                       "lord lady master maiden knight soldier guard warrior hunter woodcutter shepherd giant monster demon witch wizard hero villain stranger narrator "
+                       "wolf fox hare tortoise dragon snake lion bear".split())
+
+
+def clearly_named(name, text):
+    """Does the narration name THIS saved person? Only a proper name counts, written as saved. A title that starts with an article ("The Prince") or a bare
+    role ("Grandmother") belongs to the story it was made for: "the prince of Ayodhya" is somebody else. One word the story also writes in lower case is
+    an ordinary word."""
+    if re.match(r"(?i)(the|a|an)\s", name) or not name[:1].isupper() or name.lower() in ROLE_WORDS:
+        return False
+    if len(name.split()) == 1 and re.search(rf"(?<!\w){re.escape(name.lower())}(?!\w)", text):
+        return False
+    return re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text) is not None
+
+
 def named_here(known, script):
     """The saved people this story names. Only they are mentioned to the model and carried over: given the whole library, it took it for the cast and drew
     none of the story's own people."""
-    text = " ".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]]])
-    return {name: spec for name, spec in (known or {}).items() if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text, re.I)}
+    text = ". ".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]]])
+    return {name: spec for name, spec in (known or {}).items() if clearly_named(name, text)}
 
 
 def request(script, known):
@@ -294,8 +311,8 @@ def check_plan(reply, script, library=None):
     data = _parse(reply) if isinstance(reply, str) else reply
     if not isinstance(data, dict):
         return None, "the answer was not a JSON object"
-    library = library or {}
-    chars = dict(list(named_here(library, script).items())[:MAX_CHARACTERS])       # saved people of this story need no new description
+    library = named_here(library or {}, script)      # a saved look is used only for a person this narration clearly names, also when the model names one itself
+    chars = dict(list(library.items())[:MAX_CHARACTERS])                          # saved people of this story need no new description
     raw_chars = data.get("characters") if isinstance(data.get("characters"), dict) else {}
     for name, spec in raw_chars.items():
         name = _clip(name, MAX_NAME)
@@ -354,7 +371,7 @@ def check_plan(reply, script, library=None):
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v13"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v14"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 

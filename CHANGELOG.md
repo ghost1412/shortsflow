@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Story look: a saved character is reused only when the narration clearly names it (a saved "The Prince" replaced the hero of another story); a character the review adds can no longer take another one's only appearance, and anyone needed who is not on screen is reported; large years and dates are scaled to fit, clear of the captions, in both shapes.
+
 - Highlights video: `--cold_open` now works for `--extract_mode long`: a strong later line plays first, and the chapters and subtitles move with it (not with `--tighten`).
 
 - Fix: `--srt` for a highlights video wrote subtitles for its first moment only; it now covers the whole video.

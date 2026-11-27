@@ -877,6 +877,24 @@ const StoryAsides: React.FC<{ items?: { src: string; at: number; until: number }
   );
 };
 
+// One line of text that is scaled down (never up) to the width it has: its real width is measured, so any number, date or label fits any video shape.
+const FitLine: React.FC<{ children: React.ReactNode; room?: number }> = ({ children, room = 0.9 }) => {
+  const outer = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLSpanElement>(null);
+  const [k, setK] = useState(1);
+  useLayoutEffect(() => {
+    const o = outer.current, i = inner.current;
+    if (!o || !i) return;
+    const next = Math.min(1, (room * o.clientWidth) / Math.max(1, i.offsetWidth));
+    if (Math.abs(next - k) > 0.004) setK(next);
+  });
+  return (
+    <div ref={outer} style={{ width: "100%", display: "flex", justifyContent: "center", whiteSpace: "nowrap", overflow: "visible" }}>
+      <span ref={inner} style={{ display: "inline-block", flex: "none", transform: `scale(${k})`, transformOrigin: "50% 50%" }}>{children}</span>
+    </div>
+  );
+};
+
 const StoryBeat: React.FC<{ beat: NonNullable<Props["sections"][number]["story"]>["beats"][number]; frames: number }> = ({ beat, frames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -903,8 +921,11 @@ const StoryBeat: React.FC<{ beat: NonNullable<Props["sections"][number]["story"]
       <AbsoluteFill style={{ opacity: o }}>
         <AbsoluteFill style={{ background: "radial-gradient(ellipse at center, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.78) 100%)" }} />
         {beat.name ? plate(false) : null}
-        <div style={{ position: "absolute", left: 0, right: 0, top: portrait ? "27%" : "18%", textAlign: "center", fontFamily: SERIF, fontWeight: 700, color: GOLD, fontSize: (portrait ? 520 : 420) * u, lineHeight: 1, transform: `scale(${0.82 + 0.18 * rise})`, textShadow: `0 ${10 * u}px ${50 * u}px rgba(240,193,90,0.35)` }}>{beat.big}</div>
-        {beat.label ? <div style={{ position: "absolute", left: 0, right: 0, top: portrait ? "58%" : "70%", textAlign: "center", fontFamily: SERIF, fontSize: 52 * u, color: GOLD, letterSpacing: 8 * u, textTransform: "uppercase" }}>{beat.label}</div> : null}
+        {/* the figure and its label share the room between the name plate and the caption bar, so neither can reach into either */}
+        <div style={{ position: "absolute", left: 0, right: 0, top: portrait ? "20%" : "19%", bottom: captionZone(u, h), display: "flex", flexDirection: "column", justifyContent: "center", gap: (portrait ? 56 : 16) * u }}>
+          <div style={{ textAlign: "center", fontFamily: SERIF, fontWeight: 700, color: GOLD, fontSize: (portrait ? 520 : 340) * u, lineHeight: 1, transform: `scale(${0.82 + 0.18 * rise})`, textShadow: `0 ${10 * u}px ${50 * u}px rgba(240,193,90,0.35)` }}><FitLine>{beat.big}</FitLine></div>
+          {beat.label ? <div style={{ textAlign: "center", fontFamily: SERIF, fontSize: 52 * u, color: GOLD, letterSpacing: 8 * u, textTransform: "uppercase" }}><FitLine>{beat.label}</FitLine></div> : null}
+        </div>
       </AbsoluteFill>
     );
   }
