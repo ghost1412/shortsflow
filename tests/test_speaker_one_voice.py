@@ -40,11 +40,19 @@ def test_who_speaks_all_through_a_clip_is_not_scaled_down_to_a_listener():
     assert got == ["L"] * 30
 
 
-def test_a_face_that_always_looks_busy_is_judged_against_its_own_silence():
-    rows = [{"L": 3.0, "R": 6.0}] * 15 + [{"L": 12.0, "R": 6.0}] * 30          # silence first, then the left one speaks
-    env = np.array([0.0] * 15 + [1.0] * 30)
+def test_head_movement_in_the_pauses_does_not_hide_who_speaks():
+    rows = [{"L": 11.4, "R": 2.5}] * 20 + [{"L": 8.2, "R": 3.1}] * 40      # in the pauses the speaker's face moves even MORE than while talking
+    env = np.array([0.0] * 20 + [1.0] * 40)
     got = sf._motion_decisions(samples(rows), env)
-    assert got[:15] == [None] * 15 and got[25:] == ["L"] * 20
+    assert got[:20] == [None] * 20 and got[25:] == ["L"] * 35
+
+
+def test_a_short_doubt_does_not_cut_to_the_view_of_both_but_a_long_one_does():
+    times = [i / 5 for i in range(100)]
+    short = ["L"] * 40 + ["split"] * 6 + ["L"] * 54
+    assert [s["target"] for s in sf.shots_from_decisions(times, short, 20.0)] == ["L"]
+    long_ = ["L"] * 40 + ["split"] * 25 + ["L"] * 35
+    assert [s["target"] for s in sf.shots_from_decisions(times, long_, 20.0)] == ["L", "split", "L"]
 
 
 def test_a_pitch_trackers_scattered_slips_to_half_the_pitch_are_not_a_second_speaker():

@@ -19,6 +19,7 @@ from engine.paths import project_root
 
 MIN_DWELL = 2.5          # seconds a shot must last before the camera may cut
 SWITCH_PERSIST = 0.6     # seconds a new speaker must be consistently detected before cutting to them
+SPLIT_PERSIST = 1.8      # seconds of doubt before leaving one speaker for the view of both: a short doubt is not worth two cuts
 CONFIDENCE = 0.25        # (top - second) / (top + second) mouth-score margin needed to trust a speaker
 SAMPLE_FPS = 5.0
 SINGLE_ZOOM = 1.25       # slight push-in on the active speaker
@@ -175,7 +176,6 @@ MOTION_WINDOW = 2.0       # seconds of mouth movement compared at once: one samp
 PITCH_LONG_RUN = 1.0      # seconds: a stretch this long counts as someone talking
 PITCH_MIN_LONGEST = 1.4   # the rarer voice has at least one stretch this long ...
 PITCH_RUN_SHARE = 0.3     # ... and this share of its samples are in long stretches (a tracker's slips to half the pitch come singly)
-QUIET_NEEDED = 10         # silent samples needed to learn how much each face "moves" when nobody speaks
 
 
 def _pitch_track(video_path, start, end, sample_fps, ffmpeg_exe):
@@ -302,21 +302,9 @@ def plan_speaker_shots(video_path, start, end, ffmpeg_exe=None):
     return shots
 
 
-def _quiet_levels(samples, env):
-    """How much each face's mouth area changes while nobody speaks (a beard, an angle or a jittery detection makes one face look busier), or 1 for both
-    when there is too little silence to tell. Not learnt from the talking: someone who speaks all through a clip would be scaled down to a listener."""
-    levels = {"L": 1.0, "R": 1.0}
-    if env is None:
-        return levels
-    quiet = [s for i, s in enumerate(samples) if float(env[min(i, len(env) - 1)]) <= 0.15]
-    values = {slot: [s["faces"][slot] for s in quiet if s["faces"].get(slot, 0) > 0] for slot in levels}
-    if min(len(v) for v in values.values()) >= QUIET_NEEDED:
-        levels = {slot: float(np.median(v)) or 1.0 for slot, v in values.items()}
-    return levels
-
-
 def _motion_decisions(samples, env):
-    levels = _quiet_levels(samples, env)
+    """Who is talking, sample by sample, from how much each mouth area changes over a short stretch. The two faces are compared as measured: scaling a face
+    by its own movement (all of it, or only in pauses, where a head still moves) turned the one who talks into the listener."""
     half = int(MOTION_WINDOW * SAMPLE_FPS / 2)
     decisions = []
     for i, s in enumerate(samples):
@@ -326,7 +314,7 @@ def _motion_decisions(samples, env):
         for slot in ("L", "R"):
             near = [other["faces"][slot] for other in around if slot in other["faces"]]
             if slot in s["faces"] and near:
-                scores[slot] = float(np.median(near)) / levels[slot]
+                scores[slot] = float(np.median(near))
         # One missing detection is usually a detector miss, not the person leaving - hold the shot
         if len(scores) == 2 and loud > 0.15:
             hi, lo = sorted(scores.values(), reverse=True)
@@ -337,7 +325,7 @@ def _motion_decisions(samples, env):
     return decisions
 
 
-def shots_from_decisions(times, decisions, duration, min_dwell=MIN_DWELL, switch_persist=SWITCH_PERSIST):
+def shots_from_decisions(times, decisions, duration, min_dwell=MIN_DWELL, switch_persist=SWITCH_PERSIST, split_persist=SPLIT_PERSIST):
     """
     Turn per-sample speaker decisions ("L" / "R" / "split" / None = no opinion) into shots.
     Every shot lasts at least min_dwell seconds, and a new target must be seen consistently
@@ -353,7 +341,8 @@ def shots_from_decisions(times, decisions, duration, min_dwell=MIN_DWELL, switch
             continue
         if d != candidate:
             candidate, candidate_since = d, t
-        if t - candidate_since >= switch_persist:
+        wait = max(switch_persist, split_persist) if d == "split" else switch_persist
+        if t - candidate_since >= wait:
             cut = max(candidate_since, current["start"] + min_dwell)
             if cut <= t:
                 shots.append({"start": cut, "target": d})
