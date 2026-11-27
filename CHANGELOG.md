@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- `--case narrator=voice_server` now starts the installed voice server by itself for the narration and stops it again before the render (a server that was already running, or one at another address, is left alone).
+
 - Story look: a saved character is reused only when the narration clearly names it (a saved "The Prince" replaced the hero of another story); a character the review adds can no longer take another one's only appearance, and anyone needed who is not on screen is reported; large years and dates are scaled to fit, clear of the captions, in both shapes.
 
 - Highlights video: `--cold_open` now works for `--extract_mode long`: a strong later line plays first, and the chapters and subtitles move with it (not with `--tighten`).

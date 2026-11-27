@@ -99,6 +99,16 @@ def _narration(args, script, session_dir, resumed, avatar=None, narrator="standa
             print("[Log] Reusing the saved narration (no new voice is made).")
             return cached
         print("[Warning] The saved narration is missing, incomplete or was spoken another way; making it again.")
+    if narrator != "voice_server":
+        return _speak(args, script, session_dir, avatar, narrator, voice_sample)
+    from engine import expressive_voice as ev, voice_server
+    with voice_server.while_needed(ev.server_url()):              # started here when it must be, and stopped again before the render
+        return _speak(args, script, session_dir, avatar, narrator, voice_sample)
+
+
+def _speak(args, script, session_dir, avatar, narrator, voice_sample):
+    """The narration, newly spoken."""
+    from engine import case_render as cr
     provider = getattr(args, "tts_provider", None)
     if provider in (None, "auto") and os.getenv("ELEVENLABS_API_KEY"):
         provider = "elevenlabs"
@@ -129,8 +139,8 @@ def _narration(args, script, session_dir, resumed, avatar=None, narrator="standa
             expressive = {"speak": ev.speak, "sample": sample, "tag": tag}
             print(f"[Log] Narration: the local voice server, each section in its mood (voice copied from {copy}).")
         else:
-            print(f"[Warning] narrator=voice_server, but no voice server answers at {ev.server_url()} (start it on the Voice-over card, or "
-                  "`python -m engine.voice_server start`). The standard voice is used.")
+            print(f"[Warning] narrator=voice_server, but no voice server answers at {ev.server_url()} (install it on the Voice-over card or with "
+                  "`python -m engine.voice_server install`; a server at another address must already be running). The standard voice is used.")
     return cr.speak_sections(script, session_dir, provider=provider, voice=voice, edge_voice=edge_voice, expressive=expressive,
                              clone_voice=os.getenv("VOICE_CLONE_SAMPLE") or None)
 

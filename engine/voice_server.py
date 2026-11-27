@@ -9,6 +9,7 @@ SHORTSFLOW_VOICE_SERVER), apart from ShortsFlow's own packages: about 2.5 GB of 
 
 Only clone your own voice, or the voice of someone who agreed.
 """
+import contextlib
 import json
 import os
 import subprocess
@@ -250,6 +251,30 @@ def stop(base=None):
     except OSError:
         pass
     return ok
+
+
+@contextlib.contextmanager
+def while_needed(address, base=None, port=DEFAULT_PORT, log=print):
+    """For a job that wants the server at `address` for a while: an installed add-on that is not running is started, and the one started here (only that
+    one) is stopped when the job leaves, also after an error, so it frees the graphics card before the render. A server that was already running, a server
+    of the user's own at another address and a missing add-on are left alone."""
+    ours = address.rstrip("/") in (url(port), f"http://localhost:{port}")
+    started = False
+    if ours and installed(base) and not running(port):
+        asked = time.time()
+        try:
+            start(base, port, log=log)
+            started = True
+        except Exception as e:
+            log(f"[Warning] The voice server could not be started ({e}).")
+            pid_file = paths(base)["pid"]            # stop only what this attempt launched: an old pid file may name a process that is not ours
+            if os.path.isfile(pid_file) and os.path.getmtime(pid_file) >= asked - 2:
+                stop(base)
+    try:
+        yield started
+    finally:
+        if started:
+            log("[Log] Stopping the voice server this run started." if stop(base) else "[Warning] The voice server this run started could not be stopped.")
 
 
 def ensure_running(port=DEFAULT_PORT, log=print):
