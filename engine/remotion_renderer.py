@@ -205,6 +205,7 @@ def render_with_remotion(
     start_offset=0.0,
     caption_style="HORMOZI",
     subtitle_y_pos=1150,
+    caption_moves=None,  # [{"from": s, "to": e, "y": px}]: another caption height for a stretch of the clip
     beat_timestamps=None,
     captions=None,
     funny_explainer=None,
@@ -429,6 +430,7 @@ def render_with_remotion(
           "category": "general",
           "titleText": title_text,
           "subtitleYPos": subtitle_y_pos,
+          "captionMoves": caption_moves or [],
           "captionSize": _caption_size_from_env(),
           "captionsOff": os.getenv("SHORTSFLOW_NO_CAPTIONS") == "1",
           "captionStyle": caption_style,

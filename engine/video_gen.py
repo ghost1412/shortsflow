@@ -96,6 +96,28 @@ FIT_CAPTION_Y = 1320       # Remotion caption top edge for --layout fit: just be
 PLAIN_CAPTION_Y = 1400
 
 
+def _spans_file(segment):
+    return os.path.splitext(segment)[0] + ".split.json"
+
+
+def _save_split_spans(segment, spans):
+    """Written for every new cut (empty when it never shows two people), so an old cut's stretches are not reused."""
+    try:
+        os.makedirs(os.path.dirname(segment) or ".", exist_ok=True)
+        with open(_spans_file(segment), "w", encoding="utf-8") as f:
+            json.dump(spans, f)
+    except OSError as e:
+        print(f"[Warning] Could not note the two-person stretches of {segment}: {e}")
+
+
+def _load_split_spans(segment):
+    try:
+        with open(_spans_file(segment), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
 def plain_caption_y(requested):
     """Top edge of the plain (non-Remotion) clip captions. They used to sit in the exact middle (960), on a close-up speaker's
     eyes; the default height now puts them in the lower third (1400, still above the app's bottom bar). An explicit
@@ -2899,6 +2921,7 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
         text_filter = ""
 
         # Reframing: Auto-Crop 16:9 to 9:16 for Shorts
+        _save_split_spans(target, [])
         active_shots = None
         if mode == "shorts" and layout in ("active", "auto"):
             from engine.speaker_focus import plan_speaker_shots
@@ -2925,8 +2948,9 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
                 # chain for the clip half only; the full graph is assembled below once colour grades are prepended
                 vf_filter = f"{letterbox_crop}" if letterbox_crop else "null"
             elif active_shots:
-                from engine.speaker_focus import build_active_speaker_filter
+                from engine.speaker_focus import build_active_speaker_filter, split_spans
                 vf_filter = build_active_speaker_filter(active_shots, w, h)
+                _save_split_spans(target, split_spans(active_shots))
             elif layout == "split":
                 vf_filter = generate_ffmpeg_split_screen_filter(w, h)
             elif layout == "fit" or auto_fit:
@@ -3155,12 +3179,13 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
                 out = os.path.join(output_dir, f"video_clip_{i+1}.mp4")
                 print(f"[Log] Rendering Final Short {i+1} via Remotion...")
                 r_subs, r_dur, r_offset = transcript_path, hi['end'] - hi['start'], hi['start']
+                spans, tight_info = _load_split_spans(task_path), {}
                 if silence_intervals:  # --tighten / --remove_fillers: cut the segment, retime the captions to match
                     try:
                         from engine.transcript_edit import tighten_segment
                         fine = {"padding": 0.02, "min_gap": 0.06} if remove_fillers else {}
                         tight = tighten_segment(task_path, hi, silence_intervals, transcript_data,
-                                                os.path.join(output_dir, "temp_segments"), i, **fine)
+                                                os.path.join(output_dir, "temp_segments"), i, info=tight_info, **fine)
                         if tight:
                             task_path, r_subs, r_dur = tight[0], tight[1], tight[2]
                             r_offset = 0.0
@@ -3178,9 +3203,12 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
                     except Exception as e:
                         clip_caption_y = subtitle_y_pos
                         print(f"[Warning] Face check for Short {i+1} captions skipped: {e}")
+                from engine.caption_layout import seam_moves
+                moves = [dict(m, y=_aspect.scale_y(m["y"], h)) for m in seam_moves(spans, subtitle_y_pos, tight_info.get("keeps"))]
                 try:
                     from engine.remotion_renderer import render_with_remotion
                     render_with_remotion(
+                        caption_moves=moves,
                         audio_path=task_path,
                         subs_path=r_subs,
                         output_path=out,

@@ -370,6 +370,11 @@ def _face_crop(center_x, target_w, target_h, center_y=None, zoom=1.0):
     return f"crop={cw}:{ch}:{x}:{y},scale={target_w}:{target_h},setsar=1"
 
 
+def split_spans(shots):
+    """(start, end) seconds of the shots that show both people stacked."""
+    return [(s["start"], s["end"]) for s in shots or [] if s["target"] == "split"]
+
+
 def build_active_speaker_filter(shots, target_w=1080, target_h=1920):
     """FFmpeg -vf filtergraph that cuts between per-shot crops (single input, single output)."""
     n = len(shots)

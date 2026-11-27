@@ -154,6 +154,7 @@ export const shortFlowSchema = z.object({
   category: z.string().default("general"),
   titleText: z.string().optional(),
   subtitleYPos: z.number().default(1150), // in pixels (out of 1920)
+  captionMoves: z.array(z.object({ from: z.number(), to: z.number(), y: z.number() })).default([]), // other heights for stretches (seconds)
   captionsOff: z.boolean().default(false), // --caption_position off: draw no captions at all
   captionSize: z.number().default(1), // scales the whole caption block from its top edge (0.8 small, 1.3 large)
   captionStyle: z.enum(["HORMOZI", "GLOW_BOX", "BOUNCE", "MINIMAL", "KARAOKE", "NEON", "BAR", "MARKER", "SOFT", "WORDCUT", "NEGATIVE", "HANDWRITTEN", "SIMPLE", "TYPEWRITER"]).default("HORMOZI"),
@@ -1450,6 +1451,7 @@ export const ShortFlow: React.FC<ShortFlowProps> = ({
   category,
   titleText,
   subtitleYPos,
+  captionMoves = [],
   captionSize = 1,
   captionsOff = false,
   captionStyle = "HORMOZI",
@@ -1484,6 +1486,7 @@ export const ShortFlow: React.FC<ShortFlowProps> = ({
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const currentTime = frame / fps;
+  const captionY = captionMoves.find((m) => currentTime >= m.from && currentTime < m.to)?.y ?? subtitleYPos;
   const durationInSeconds = durationInFrames / fps;
 
   // Dynamic Audio Ducking & Avatar Bounce Logic
@@ -1873,11 +1876,11 @@ export const ShortFlow: React.FC<ShortFlowProps> = ({
       {statPops && statPops.length > 0 && <StatPopOverlay pops={statPops} fps={fps} frame={frame} />}
 
       {/* 5. STYLISH CAPTIONS */}
-      {!captionsOff && <div style={{ position: "absolute", inset: 0, transformOrigin: `50% ${subtitleYPos}px`, transform: captionSize !== 1 ? `scale(${captionSize})` : undefined, pointerEvents: "none" }}>
+      {!captionsOff && <div style={{ position: "absolute", inset: 0, transformOrigin: `50% ${captionY}px`, transform: captionSize !== 1 ? `scale(${captionSize})` : undefined, pointerEvents: "none" }}>
         <Subtitles
           words={words}
           currentTime={currentTime}
-          yPos={subtitleYPos}
+          yPos={captionY}
           fps={fps}
           captionStyle={captionStyle}
           captionEmoji={captionEmoji}

@@ -7,6 +7,24 @@ POSITIONS = {"top": 350, "middle": 860, "bottom": 1480}
 SIZES = {"small": 0.8, "default": 1.0, "large": 1.3, "xlarge": 1.6}
 
 
+SEAM_Y = 890                # caption top edge that centres a word on the line between two stacked halves (y=960)
+
+
+def seam_moves(spans, current_y, keeps=None):
+    """[{"from": s, "to": e, "y": SEAM_Y}] for the stretches of a clip that show two people stacked, where the default
+    height would sit on the lower one's face. A height the user chose is left alone (empty list). `keeps` are the
+    kept pieces of a tightened clip: the stretches move onto its shorter timeline."""
+    if current_y != DEFAULT_Y or not spans:
+        return []
+    out = []
+    for start, end in spans:
+        if keeps is not None:
+            start, end = (sum(max(0.0, min(t, b) - a) for a, b in keeps) for t in (start, end))
+        if end - start > 0.05:
+            out.append({"from": round(float(start), 3), "to": round(float(end), 3), "y": SEAM_Y})
+    return out
+
+
 def y_for(position, current=DEFAULT_Y):
     """Caption top edge for a named position; 'default' (or nothing) keeps `current`. An explicit --subtitle_y_pos that is
     not the default always wins over a named position."""

@@ -295,7 +295,7 @@ def clip_transcript(transcript_data, start, end, keeps):
     return remap_transcript(shifted, cut)
 
 
-def tighten_segment(task_path, hi, silence_intervals, transcript_data, out_dir, idx, padding=0.08, min_gap=0.25):
+def tighten_segment(task_path, hi, silence_intervals, transcript_data, out_dir, idx, padding=0.08, min_gap=0.25, info=None):
     """
     Cut segment `task_path` (source range hi['start']..hi['end']) down to the keep intervals in `silence_intervals`
     (source seconds). Returns (video_path, transcript_path, duration), or None when there is nothing worth cutting.
@@ -307,6 +307,8 @@ def tighten_segment(task_path, hi, silence_intervals, transcript_data, out_dir, 
     kept = sum(b - a for a, b in keeps)
     if not keeps or (end - start) - kept < 0.15:
         return None
+    if info is not None:
+        info["keeps"] = keeps
     video = os.path.join(out_dir, f"seg_{idx}_tight.mp4")
     render_edited_video(task_path, keeps, video, out_dir)
     sub = os.path.join(out_dir, f"transcript_clip_{idx}.json")
