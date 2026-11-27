@@ -54,7 +54,8 @@ def needed_question(script):
     return ("This is the narration of a short story video, each sentence numbered section.sentence:\n" + "\n".join(lines) + "\n\n"
             f"List, most important first and at most {MAX_NEEDED}, who and what a viewer MUST see to follow it: people (kind \"person\": human-shaped, including gods), "
             "creatures (kind \"creature\": a monster, beast or being that does not look like a person), and objects, vehicles or places the story turns on (kind \"thing\"). "
-            "Use the narration's own name. For a creature also give \"tone\": \"threatening\" (an enemy or monster), \"gentle\" or \"neutral\". List each person or creature ONCE: when the narration (or the story it tells) calls one by two names or a title, put the other "
+            "Use the narration's own name. For a creature also give \"species\" (the nearest of: " + ", ".join(story_art.SPECIES[1:]) + "; \"human\" for a monster with a person's shape; "
+            "\"other\" when none of these is close, like a dragon) and \"features\" (any of: horns, fangs, glowing_eyes, spread_wings, snake_hair). For a creature also give \"tone\": \"threatening\" (an enemy or monster), \"gentle\" or \"neutral\". List each person or creature ONCE: when the narration (or the story it tells) calls one by two names or a title, put the other "
             "names under \"also\" (a queen who is also called by her title is one person). \"at\" is the first sentence that names it, as section.sentence. \"looks\" says in at most 10 words how it looks in this story's "
             "tradition, for a creature or a thing (like \"huge black horned smoke demon\"). Never list a feeling or an idea.\n\n"
             "Reply with raw JSON only: {\"needed\": [{\"name\": \"...\", \"also\": [], \"kind\": \"person\", \"at\": \"1.1\", \"looks\": \"\", \"tone\": \"\"}]}")
@@ -68,7 +69,7 @@ def needed(script, ask):
     sents = _sentences(script)
     out = []
     for r in rows:
-        name = " ".join(str(r.get("name") or "").split())[:30]
+        name = " ".join(str(r.get("name") or "").split())[:40]
         kind = str(r.get("kind") or "").lower()
         m = re.match(r"\s*(\d+)\.(\d+)", str(r.get("at") or ""))
         if not name or kind not in KINDS or not m:
@@ -85,7 +86,8 @@ def needed(script, ask):
         if all(not any(_same(x, y) for x in [name, *also] for y in [o["name"], *o["also"]]) for o in out):
             tone = str(r.get("tone") or "").lower()
             out.append({"name": name, "also": also, "kind": kind, "section": si, "sentence": k, "looks": " ".join(str(r.get("looks") or "").split())[:80],
-                        "tone": tone if tone in story_objects.TONES else ("threatening" if kind == "creature" else "")})
+                        "tone": tone if tone in story_objects.TONES else ("threatening" if kind == "creature" else ""),
+                        "species": str(r.get("species") or "").strip().lower(), "features": r.get("features") if isinstance(r.get("features"), list) else []})
     return out[:MAX_NEEDED]
 
 
@@ -100,7 +102,7 @@ def shown_as(plan, item):
     if item["kind"] in ("person", "creature"):
         names = [item["name"], *item.get("also", [])]
         hit = next((b["character"] for b in beats if b.get("character") and any(_same(b["character"], n) for n in names)), None)
-        if hit and item["kind"] == "creature" and not plan["characters"].get(hit, {}).get("creature"):
+        if hit and item["kind"] == "creature" and not story_art.is_beast(plan["characters"].get(hit, {})):
             return None                                              # drawn as an ordinary person: not shown as what it is
         return hit
     for b in beats:
@@ -302,17 +304,41 @@ def _describe_people(names, script, ask):
     prompt = ("Describe each of these people from the story \"" + str(script.get("title", "")) + "\" as a bust: " + ", ".join(names) + ". For each, choose only from these values: "
               f"figure: {', '.join(story_art.FIGURES)}; hair: {', '.join(story_art.HAIR)}; hair_colour: {', '.join(story_art.HAIR_COLOURS)}; skin: {', '.join(story_art.SKIN)}; "
               f"headgear: {', '.join(story_art.HEADGEAR)}; facial_hair: {', '.join(story_art.FACIAL_HAIR)}; outfit: {', '.join(story_art.OUTFITS)}; outfit_colour: "
-              f"{', '.join(story_art.COLOURS)}; weapon: {', '.join(story_art.WEAPONS)}; mood: {', '.join(story_art.MOODS)}; age: {', '.join(story_art.AGES)}.\n"
+              f"{', '.join(story_art.COLOURS)}; weapon: {', '.join(story_art.WEAPONS)}; mood: {', '.join(story_art.MOODS)}; age: {', '.join(story_art.AGES)}; species (human, or the animal it is): {', '.join(story_art.SPECIES)}.\n"
               "Reply with raw JSON only: {\"people\": [{\"name\": \"...\", \"figure\": \"...\"}]}")
     rows = _ask_rows(ask, prompt, "people") or []
     return {str(r.get("name")): story_art.clean_spec(r) for r in rows if r.get("name")}
+
+
+def _from_parts(plan, item):
+    """A creature the drawing kit can build (an animal it has, or a person's shape with monster features) gets that, which is dependable; its name in the
+    cast, or None when only a new drawing can show it. A cast member who already looks like it is kept as it is."""
+    names = [item["name"], *item.get("also", [])]
+    who = next((n for n in plan["characters"] if any(_same(n, other) for other in names)), None)
+    if who and story_art.is_beast(plan["characters"][who]):
+        return who
+    species = str(item.get("species") or "").strip().lower()
+    features = [str(f).strip().lower() for f in item.get("features") or [] if isinstance(f, str)]
+    marks = [f for f in features if f in story_art.story_beasts.FEATURES]
+    snakes = "snake_hair" in features
+    if species not in story_art.SPECIES[1:] and not (species == "human" and (marks or snakes)):
+        return None
+    base = dict(plan["characters"].get(who) or {"mood": "angry" if item.get("tone") == "threatening" else "neutral"})
+    if species != "human":
+        base.update(species=species, outfit=base.get("outfit") if who else "none")
+    base["ornaments"] = [*(base.get("ornaments") or []), *marks]
+    if snakes:
+        base["hair"] = "snakes"
+    who = who or item["name"]
+    plan["characters"][who] = story_art.clean_spec(base)
+    return who
 
 
 def _drop_human_picture(plan, item):
     """A creature that could not be drawn must not stay on screen as a person (a hare as a man with a moustache misleads more than a name does):
     its bust leaves the cast and each of its beats becomes a card with its name. True when there was such a bust."""
     names = [item["name"], *item.get("also", [])]
-    human = [n for n, spec in plan["characters"].items() if not spec.get("creature") and any(_same(n, other) for other in names)]
+    human = [n for n, spec in plan["characters"].items() if not story_art.is_beast(spec) and any(_same(n, other) for other in names)]
     for who in human:
         del plan["characters"][who]
         for section in plan["sections"]:
@@ -350,12 +376,20 @@ def review_coverage(plan, script, ask, folder, drawn, vision, render, report):
         else:
             looks = re.sub(r"^(a|an|the)\s+", "", re.sub(r"[^a-z' -]", " ", item["looks"].lower()).strip())
             looks = " ".join(looks.split()[:7])
-            if item["kind"] == "creature":
+            built = _from_parts(plan, item) if item["kind"] == "creature" else None
+            if built:
+                who, why = built, ""
+                if not any(b.get("character") == who for s in plan["sections"] for b in s["beats"]) and not _put_on_screen(plan, item, who):
+                    why = "the sentence that names it already shows something that cannot give way"
+                path = None
+            elif item["kind"] == "creature":
                 path, why = _draw_figure(name, looks, item.get("tone") or "threatening", setting, ask, folder, vision, render)
             else:
                 extra = f". The {name} looks like: {looks}" if looks else ""
                 path, why = _draw_for(name.lower(), sentence, setting + extra, ask, folder, vision, render)
-            if path and item["kind"] == "creature":
+            if built:
+                pass
+            elif path and item["kind"] == "creature":
                 existing = next((n for n in plan["characters"] if _same(n, name)), None)
                 who = existing or name
                 plan["characters"][who] = {"creature": path}

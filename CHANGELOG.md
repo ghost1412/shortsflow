@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Story look: animals and monsters are built from drawn parts: 21 animals (they can wear clothes) and snake hair, horns, fangs, glowing eyes and spread wings; the review uses these parts for a creature before it asks for a new drawing.
+
 - Story look: someone in modern clothes keeps nothing of an old tale (a halo, face paint, old weapons, a man's braid); long names are no longer cut inside a word (which made one person appear twice).
 
 - Story look: modern clothes (suit, shirt, uniform, lab coat, dress, spacesuit), hat, flat cap, military cap, space helmet, glasses and a hair bun; the planner is told to dress each person for their own time.

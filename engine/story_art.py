@@ -9,15 +9,18 @@ import math
 import random
 import re
 
-SKIN = {"fair": "#f1c9a0", "tan": "#d9a066", "brown": "#b57a47", "dark": "#7d4d2e", "blue": "#3f6fd8", "grey": "#b9b3a8", "green": "#6fae6a", "ashen": "#d9d6cf"}
+from engine import story_beasts
+
+SKIN = {"fair": "#f1c9a0", "tan": "#d9a066", "brown": "#b57a47", "dark": "#7d4d2e", "blue": "#3f6fd8", "grey": "#b9b3a8", "green": "#6fae6a", "ashen": "#d9d6cf", "red": "#b85342"}
 FIGURES = ("man", "woman", "child")
-HAIR = ("short", "long", "braid", "bun", "bald")
+HAIR = ("short", "long", "braid", "bun", "bald", "snakes")
 HAIR_COLOURS = {"black": "#1f1620", "brown": "#5a3a22", "white": "#e9e6e1", "red": "#9a3b1c", "blonde": "#d9ac52"}
 MARKINGS = ("none", "stripe", "paint", "scar")
 HEADGEAR = ("crown", "helmet", "turban", "topknot", "hood", "hat", "cap", "military_cap", "space_helmet", "none")
 FACIAL_HAIR = ("none", "moustache", "beard", "long_beard")
-OUTFITS = ("armour", "robe", "shawl", "simple", "suit", "shirt", "uniform", "lab_coat", "dress", "spacesuit")
-ORNAMENTS = ("halo", "feather", "tilak", "earrings", "necklace", "glasses")
+OUTFITS = ("armour", "robe", "shawl", "simple", "suit", "shirt", "uniform", "lab_coat", "dress", "spacesuit", "none")
+ORNAMENTS = ("halo", "feather", "tilak", "earrings", "necklace", "glasses", *story_beasts.FEATURES)
+SPECIES = story_beasts.SPECIES
 MOODS = ("neutral", "stern", "sad", "angry", "proud", "calm")
 WEAPONS = ("none", "bow", "spear", "staff", "sword", "twin_blades", "trident")
 AGES = ("young", "adult", "old")
@@ -29,7 +32,7 @@ GROUNDS = ("battlefield", "hills", "city", "trees", "sea", "none")
 MODERN_OUTFITS = ("suit", "shirt", "uniform", "lab_coat", "dress", "spacesuit")
 DEFAULT_SPEC = {"skin": "tan", "headgear": "none", "headgear_colour": "gold", "facial_hair": "none", "outfit": "robe", "outfit_colour": "maroon",
                 "trim_colour": "gold", "ornaments": [], "mood": "neutral", "weapon": "none", "age": "adult", "figure": "man", "hair": "short", "hair_colour": "black",
-                "marking": "none", "marking_colour": "red"}
+                "marking": "none", "marking_colour": "red", "species": "human", "coat_colour": ""}
 
 
 def _hex(value, table, default):
@@ -43,11 +46,16 @@ def clean_spec(raw):
     """A spec with only known values (anything else falls back to the default for that part); a skin may also be a '#rrggbb' colour."""
     raw = raw if isinstance(raw, dict) else {}
     out = dict(DEFAULT_SPEC)
+    out["species"] = _hex(raw.get("species"), SPECIES, "human")
+    coat = str(raw.get("coat_colour") or "").strip().lower()
+    out["coat_colour"] = coat if coat in story_beasts.COATS and out["species"] != "human" else ""
     skin = str(raw.get("skin") or "").strip().lower()
     out["skin"] = skin if skin in SKIN or re.fullmatch(r"#[0-9a-f]{6}", skin) else DEFAULT_SPEC["skin"]
     out["headgear"] = _hex(raw.get("headgear"), HEADGEAR, "none")
     out["facial_hair"] = _hex(raw.get("facial_hair"), FACIAL_HAIR, "none")
-    out["outfit"] = _hex(raw.get("outfit"), OUTFITS, "robe")
+    out["outfit"] = _hex(raw.get("outfit"), OUTFITS, "robe" if out["species"] == "human" else "none")      # an animal wears only what it is given
+    if out["species"] == "human" and out["outfit"] == "none":
+        out["outfit"] = "simple"
     out["mood"] = _hex(raw.get("mood"), MOODS, "neutral")
     out["weapon"] = _hex(raw.get("weapon"), WEAPONS, "none")
     out["age"] = _hex(raw.get("age"), AGES, "adult")
@@ -377,10 +385,28 @@ def character_svg(spec):
     spec = clean_spec(spec)
     skin = _skin(spec)
     trim = COLOURS[spec["trim_colour"]]
+    if spec["species"] != "human":
+        behind, neck, head = story_beasts.parts(spec)
+        clothes = story_beasts.coat_body(spec) if spec["outfit"] == "none" else _body(spec, trim)
+        body = (_halo(spec) + story_beasts.wings(spec) + behind + _weapon(spec) + neck + clothes + story_beasts.horns(spec) + head + _extras(dict(spec, ornaments=[o for o in spec["ornaments"] if o != "earrings"]))
+                + _headgear(spec, skin))
+        return _document(spec, body)
     ears, face, features = _face(spec, skin)
     neck = f'<path d="M258 400 L258 480 Q300 520 342 480 L342 400 Z" fill="{shade(skin, 0.22)}"/>'
-    body = (_halo(spec) + _weapon(spec) + _hair_back(spec) + neck + _body(spec, trim) + ears + face + _hair(spec) + features + _beard(spec) + _extras(spec)
-            + _headgear(spec, skin) + _hair_front(spec))
+    snakes = spec["hair"] == "snakes" and spec["headgear"] not in ("hood", "space_helmet")
+    monster = ((story_beasts.human_glow() if "glowing_eyes" in spec["ornaments"] else "") + (story_beasts.human_fangs() if "fangs" in spec["ornaments"] else ""))
+    body = (_halo(spec) + story_beasts.wings(spec) + _weapon(spec) + _hair_back(spec) + (story_beasts.snake_hair() if snakes else "") + neck + _body(spec, trim)
+            + story_beasts.horns(spec) + ears + face + _hair(spec) + features + monster + _beard(spec) + _extras(spec) + _headgear(spec, skin) + _hair_front(spec))
+    return _document(spec, body)
+
+
+def is_beast(spec):
+    """Does this spec show something other than an ordinary person: an animal, or monster features?"""
+    return bool(spec.get("creature") or spec.get("species", "human") != "human" or spec.get("hair") == "snakes"
+                or any(f in (spec.get("ornaments") or []) for f in story_beasts.FEATURES))
+
+
+def _document(spec, body):
     if spec["figure"] == "child":                      # smaller, still standing on the bottom edge
         body = f'<g transform="translate(60 160) scale(0.8)">{body}</g>'
 

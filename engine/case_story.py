@@ -95,7 +95,10 @@ def request(script, known):
     return (
         "You are the art director of a short animated story video. Plan its pictures from this narration.\n\n" + "\n".join(lines) + "\n\n"
         + known_line +
-        "Describe each PERSON (or god or creature with a human shape) who is named in the narration, at most " + str(MAX_CHARACTERS) + ", as a bust. Use the look the story's tradition gives them. "
+        "Describe each person, god, ANIMAL or creature who acts in the narration, at most " + str(MAX_CHARACTERS) + ", as a bust. Use the look the story's tradition gives them. "
+        "species: human for a person or god; for an animal (or a being with an animal's head, who may also wear clothes) the nearest of " + ", ".join(story_art.SPECIES[1:]) + ". Never draw an animal as a human. "
+        f"An animal also takes coat_colour ({', '.join(story_art.story_beasts.COATS)}) and outfit \"none\" unless it wears clothes in the story. A monster takes what makes it one: "
+        "hair \"snakes\", and among ornaments horns, fangs, glowing_eyes, spread_wings. "
         "For each, choose only from these values: "
         f"figure: {', '.join(story_art.FIGURES)}; hair: {', '.join(story_art.HAIR)}; hair_colour: {', '.join(story_art.HAIR_COLOURS)}; "
         f"marking, only when the person is known for one (stripe = a painted or tattooed band down over one eye, paint = lines on the cheeks, scar = a healed cut): {', '.join(story_art.MARKINGS)}; marking_colour: {', '.join(story_art.COLOURS)}; "
@@ -379,7 +382,7 @@ def check_plan(reply, script, library=None):
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v15"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v16"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
