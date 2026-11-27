@@ -12,6 +12,9 @@ SUBTITLE_SHARE = 0.004     # share of the subtitle band outside the crop that is
 GRAD_MIN = 14.0
 STILL_MAX = 5.0
 MOTION_MIN = 3.0           # mean change of the centre over the shots below which the picture counts as held
+OUTLINE_SHARE = 0.012      # share of the side strips with an outline in the same place in most frames, taken far apart (a see-through HUD)
+OUTLINE_KEPT = 0.7         # "most frames"
+LINE_SPAN = 0.6            # an outline across this much of the picture's width or height is a black bar's edge, not a HUD
 
 
 def _dims(video):
@@ -57,6 +60,34 @@ def measure(video, start, end, size=None, shots=4, gap=1.5):
     return {"hud": hud, "subtitle": float(white)}
 
 
+def fixed_outlines(video, windows, size=None, per_window=6):
+    """The share of the side strips (what a centre crop cuts away) where an outline stays put in most of the frames taken across all the moments, or
+    None when it cannot be told. A speedometer ring or a score box is drawn over the moving scene: its pixels change (it is see-through), but its
+    outline does not move, while the scene's own outlines are somewhere else a few seconds later."""
+    import numpy as np
+    width, height = size or _dims(video)
+    h = max(40, int(round(THUMB_W * height / width)))
+    times = [s + (e - s) * (i + 0.5) / per_window for s, e in windows for i in range(per_window)]
+    frames = [f for f in (_frame(video, t, THUMB_W, h) for t in times) if f is not None]
+    if len(frames) < 5:
+        return None
+    crop_w = min(THUMB_W, h * 9 / 16)
+    left, right = int((THUMB_W - crop_w) / 2), int((THUMB_W + crop_w) / 2)
+    if float(np.stack(frames).std(axis=0)[:, left:right].mean()) < MOTION_MIN:
+        return None                            # nothing moves, so "stays in the same place" says nothing
+    edges = []
+    for f in frames:
+        gy, gx = np.gradient(f)
+        edges.append(np.hypot(gx, gy) > GRAD_MIN)
+    kept = np.stack(edges).mean(axis=0) >= OUTLINE_KEPT
+    long_rows, long_columns = kept.mean(axis=1) > LINE_SPAN, kept.mean(axis=0) > LINE_SPAN
+    kept[long_rows, :] = False
+    kept[:, long_columns] = False
+    outside = np.ones((h, THUMB_W), dtype=bool)
+    outside[:, left:right] = False
+    return float(kept[outside].mean()) if outside.any() else None
+
+
 def decide(scores):
     """("fit" | "crop", reason) from the per-moment measurements (None entries are ignored)."""
     got = [s for s in scores if s]
@@ -77,6 +108,11 @@ def choose(video, highlights, size=None, max_moments=6):
     wins = [(float(h["start"]), float(h["end"])) for h in highlights][:max_moments]
     try:
         scores = [measure(video, s, e, size=size) for s, e in wins]
+        framing, reason = decide(scores)
+        if framing == "crop":                  # a second look before cutting the sides away: the first one misses a see-through HUD
+            share = fixed_outlines(video, wins, size=size)
+            if share is not None and share >= OUTLINE_SHARE:
+                return "fit", f"outlines stay in place at the sides, like an on-screen display (share {share:.3f})"
     except Exception as e:
         return "fit", f"could not measure ({e})"
-    return decide(scores)
+    return framing, reason

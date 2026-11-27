@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: game clips with a see-through on-screen display (a racing game's speedometer and map) were cropped at the sides. Automatic framing now also looks for outlines that stay in place across moments before it crops.
+
 - `shortsflow doctor` now marks what clipping needs ("FIX") apart from what only some features use ("optional"), and fails only for the former.
 
 - Story look: animals and monsters are built from drawn parts: 21 animals (they can wear clothes) and snake hair, horns, fangs, glowing eyes and spread wings; the review uses these parts for a creature before it asks for a new drawing.
