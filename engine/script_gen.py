@@ -265,6 +265,7 @@ def _call_anthropic(api_key, model, prompt, system_prompt, max_tokens=4096, temp
     data = resp.json()
     return data["content"][0]["text"]
 
+LAST_ANSWERED_LOCALLY = False  # True when get_llm_response's last answer came from its own Ollama step (a caller cannot tell otherwise)
 _GEMINI_COOLDOWN = {}          # Gemini model -> time until which it is not asked again after "429 Too Many Requests"
 
 
@@ -287,6 +288,8 @@ def get_llm_response(
 ):
     import requests
 
+    global LAST_ANSWERED_LOCALLY
+    LAST_ANSWERED_LOCALLY = False
 
     target_provider = (provider or os.getenv("LLM_PROVIDER") or "auto").lower().strip()
     target_model = model or os.getenv("LLM_MODEL")
@@ -542,6 +545,7 @@ def get_llm_response(
 
             content = data["message"]["content"]
             print(f"[Log] Local LLM ({ollama_model}) success!")
+            LAST_ANSWERED_LOCALLY = True
             return content
 
         except Exception as e:

@@ -410,9 +410,13 @@ def plan(script, ask, session_dir, aspect="9:16", library=None):
             plan_, problem = None, ("no beat shows a person. Describe the people named in THIS narration under \"characters\", and set \"character\" to that exact name "
                                     "on the beats where they act or speak")
         if plan_:
-            for name, spec in plan_["characters"].items():
-                if name not in library:
-                    save_character(name, spec)
+            if getattr(ask, "last_source", None) == "local":          # a small model's looks are often wrong: do not hand them to later videos
+                print("[Warning] The story's pictures were planned by the model on this PC, which often gets people wrong (age, man or woman, who is missing). "
+                      "Check the video; these characters are not saved for later ones.")
+            else:
+                for name, spec in plan_["characters"].items():
+                    if name not in library:
+                        save_character(name, spec)
             os.makedirs(session_dir, exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
                 json.dump({"key": key, "plan": plan_}, f, indent=1)

@@ -61,9 +61,11 @@ def make_ask(system, mode="auto", cloud=None, local=None, log=print, clock=time.
         if mode == "auto" and clock() < state["down_until"]:
             return via_local(prompt)
         try:
+            from engine import script_gen
+            script_gen.LAST_ANSWERED_LOCALLY = False
             reply = cloud(prompt, system)
             if str(reply or "").strip():
-                ask.last_source = "cloud"
+                ask.last_source = "local" if script_gen.LAST_ANSWERED_LOCALLY else "cloud"     # the "cloud" chain may end at Ollama
                 return reply
             error = "an empty answer"
         except Exception as e:

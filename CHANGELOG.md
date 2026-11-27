@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Story look: characters planned by the model on this PC are no longer saved for later videos (its looks are often wrong), and the run says so. This also covers the case where the automatic chain ended at Ollama.
+
 - Fix: a Gemini model whose free requests for the day are used up is no longer retried (the last model was tried four times on every request), a model limited through every try rests for ten minutes, and when all models are resting the app goes straight to its fallbacks.
 
 - Fix: story look: the "trees" background drew only palm trees, so woods, Paris and fables had palms. Trees are now broad-leaved trees and firs; palms are their own background, for deserts and tropical shores.
