@@ -15,7 +15,7 @@ import re
 from engine import story_art, story_objects
 
 MAX_CHARACTERS = 6
-MAX_NAME = 26
+MAX_NAME = 40
 MAX_ROLE = 42
 
 
@@ -133,7 +133,12 @@ def _parse(reply):
 
 
 def _clip(text, n):
-    return " ".join(str(text or "").split())[:n].strip()
+    """At most n characters, cut between words (a name cut inside one, "... Bor", was taken for a second person)."""
+    text = " ".join(str(text or "").split())
+    if len(text) <= n:
+        return text
+    cut = text[:n + 1]
+    return (cut.rsplit(" ", 1)[0] if " " in cut else text[:n]).strip()
 
 
 # words in a sentence that name an object the kit can draw: (pattern, emblem, the card's title)

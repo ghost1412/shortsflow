@@ -183,9 +183,10 @@ def _remove(plan, item):
 
 
 def _swap(item, emblem):
+    from engine import case_story
     if item["where"] == "card":
         item["beat"]["emblem"] = emblem
-        item["beat"]["name"] = emblem.replace("custom:", "").title()[:26]
+        item["beat"]["name"] = case_story._clip(emblem.replace("custom:", "").title(), case_story.MAX_NAME)
     else:
         for a in item["beat"]["asides"]:
             if a["emblem"] == item["emblem"] and a["sentence"] == item["k"]:
@@ -273,6 +274,7 @@ def review_pictures(plan, script, ask, folder, drawn, vision, render, report):
 
 def _put_on_screen(plan, item, name):
     """Gives the sentence that names a person or creature their face; the face before comes back on the next sentence. False when that sentence shows something else."""
+    from engine import case_story
     row = plan["sections"][item["section"]]
     k = item["sentence"]
     at = {b["sentence"]: b for b in row["beats"]}
@@ -283,7 +285,7 @@ def _put_on_screen(plan, item, name):
     if shown and shown != name and sum(b.get("character") == shown for s in plan["sections"] for b in s["beats"]) < 2:
         return False                                        # it is the only time that one is seen
     before = at[max(n for n in at if n <= k)]
-    new = {"sentence": k, "character": name, "name": name[:26], "role": "", "mood": "", "emblem": "", "big": "", "label": ""}
+    new = {"sentence": k, "character": name, "name": case_story._clip(name, case_story.MAX_NAME), "role": "", "mood": "", "emblem": "", "big": "", "label": ""}
     if here and here.get("asides"):
         new["asides"] = here["asides"]
     row["beats"] = [b for b in row["beats"] if b["sentence"] != k] + [new]

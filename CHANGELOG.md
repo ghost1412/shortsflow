@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Story look: someone in modern clothes keeps nothing of an old tale (a halo, face paint, old weapons, a man's braid); long names are no longer cut inside a word (which made one person appear twice).
+
 - Story look: modern clothes (suit, shirt, uniform, lab coat, dress, spacesuit), hat, flat cap, military cap, space helmet, glasses and a hair bun; the planner is told to dress each person for their own time.
 
 - `--case narrator=voice_server` now starts the installed voice server by itself for the narration and stops it again before the render (a server that was already running, or one at another address, is left alone).

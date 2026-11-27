@@ -34,3 +34,20 @@ def test_the_planner_is_offered_the_new_parts_and_told_to_dress_people_for_their
     for part in (*NEW_OUTFITS, *NEW_HEADGEAR, "glasses"):
         assert part in prompt
     assert "Dress each person for their OWN time and job" in prompt
+
+
+def test_someone_in_modern_clothes_keeps_nothing_of_an_old_tale():
+    spec = sa.clean_spec({"outfit": "uniform", "figure": "man", "hair": "braid", "marking": "stripe", "ornaments": ["halo", "glasses"], "weapon": "sword",
+                          "headgear": "helmet"})
+    assert (spec["hair"], spec["marking"], spec["ornaments"], spec["weapon"], spec["headgear"]) == ("short", "none", ["glasses"], "none", "none")
+    kept = sa.clean_spec({"outfit": "suit", "headgear": "turban", "marking": "scar", "figure": "woman", "hair": "braid", "ornaments": ["earrings"]})
+    assert (kept["headgear"], kept["marking"], kept["hair"], kept["ornaments"]) == ("turban", "scar", "braid", ["earrings"])
+    old = sa.clean_spec({"outfit": "armour", "ornaments": ["halo"], "weapon": "bow", "marking": "paint", "hair": "braid"})
+    assert old["ornaments"] == ["halo"] and old["weapon"] == "bow" and old["marking"] == "paint" and old["hair"] == "braid"
+
+
+def test_a_long_name_is_kept_whole():
+    name = "Konstantin Fyodorovich Borodin"
+    script = {"sections": [{"title": "t", "narration": f"{name} taught him."}]}
+    plan, _ = case_story.check_plan({"characters": {name: {}}, "sections": [{"beats": [{"sentence": 1, "character": name}]}]}, script, library={})
+    assert list(plan["characters"]) == [name] and plan["sections"][0]["beats"][0]["name"] == name

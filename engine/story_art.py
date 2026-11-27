@@ -26,6 +26,7 @@ COLOURS = {"gold": "#e9b949", "silver": "#c9ced6", "red": "#c0392b", "blue": "#2
 SKIES = ("sunset", "dusk", "night", "dawn", "fire", "storm", "rays", "day")
 GROUNDS = ("battlefield", "hills", "city", "trees", "sea", "none")
 
+MODERN_OUTFITS = ("suit", "shirt", "uniform", "lab_coat", "dress", "spacesuit")
 DEFAULT_SPEC = {"skin": "tan", "headgear": "none", "headgear_colour": "gold", "facial_hair": "none", "outfit": "robe", "outfit_colour": "maroon",
                 "trim_colour": "gold", "ornaments": [], "mood": "neutral", "weapon": "none", "age": "adult", "figure": "man", "hair": "short", "hair_colour": "black",
                 "marking": "none", "marking_colour": "red"}
@@ -61,6 +62,16 @@ def clean_spec(raw):
     orn = raw.get("ornaments")
     orn = [orn] if isinstance(orn, str) else orn if isinstance(orn, list) else []
     out["ornaments"] = [o for o in dict.fromkeys(str(x).strip().lower() for x in orn) if o in ORNAMENTS]
+    if out["outfit"] in MODERN_OUTFITS:                  # someone dressed for the modern age keeps nothing of an old tale (a model gave a cosmonaut a halo)
+        out["ornaments"] = [o for o in out["ornaments"] if o not in ("halo", "tilak", "feather")]
+        if out["marking"] in ("stripe", "paint"):
+            out["marking"] = "none"
+        if out["weapon"] in ("bow", "spear", "staff", "sword", "twin_blades", "trident"):
+            out["weapon"] = "none"
+        if out["headgear"] in ("helmet", "topknot"):
+            out["headgear"] = "none"
+        if out["figure"] == "man" and out["hair"] in ("braid", "bun"):
+            out["hair"] = "short"
     return out
 
 
