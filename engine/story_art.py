@@ -27,7 +27,7 @@ AGES = ("young", "adult", "old")
 COLOURS = {"gold": "#e9b949", "silver": "#c9ced6", "red": "#c0392b", "blue": "#2f5fc4", "green": "#2e8b57", "purple": "#7b3fa0", "white": "#f4efe6",
            "black": "#241a2b", "saffron": "#e8832a", "teal": "#1f8a8a", "maroon": "#7a1f2b", "brown": "#7a4a2a"}
 SKIES = ("sunset", "dusk", "night", "dawn", "fire", "storm", "rays", "day")
-GROUNDS = ("battlefield", "hills", "city", "trees", "sea", "none")
+GROUNDS = ("battlefield", "hills", "city", "trees", "palms", "sea", "none")
 
 MODERN_OUTFITS = ("suit", "shirt", "uniform", "lab_coat", "dress", "spacesuit")
 DEFAULT_SPEC = {"skin": "tan", "headgear": "none", "headgear_colour": "gold", "facial_hair": "none", "outfit": "robe", "outfit_colour": "maroon",
@@ -463,7 +463,26 @@ def _ground(kind, w, h, horizon, colour, rng):
                 out += f'<path d="M{x + bw / 2:.0f} {y + 20 - bh - bw * 0.6:.0f} L{x + bw / 2:.0f} {y + 20 - bh - bw * 0.95:.0f}" stroke="{colour}" stroke-width="3"/>'
             x += bw - 4
         return out
-    if kind == "trees":
+    if kind == "trees":                      # a wood of broad-leaved trees and firs, as most countries and tales have
+        out = f'<path d="M0 {y + 20} Q{w * 0.5} {y - 20} {w} {y + 20} L{w} {h} L0 {h} Z" fill="{colour}"/>'
+        count = max(9, int(w / 90))
+        for i in range(count):
+            x = (i + rng.uniform(0.15, 0.85)) * w / count
+            tall = rng.uniform(120, 270)
+            base = y + 22
+            if rng.random() < 0.45:          # a fir: three tiers that narrow to a point
+                half = tall * rng.uniform(0.22, 0.3)
+                out += f'<rect x="{x - 5:.0f}" y="{base - tall * 0.25:.0f}" width="10" height="{tall * 0.25:.0f}" fill="{colour}"/>'
+                for k, (low, high, width) in enumerate(((0.16, 0.58, 1.0), (0.40, 0.80, 0.76), (0.62, 1.0, 0.54))):
+                    out += f'<path d="M{x - half * width:.0f} {base - tall * low:.0f} L{x:.0f} {base - tall * high:.0f} L{x + half * width:.0f} {base - tall * low:.0f} Z" fill="{colour}"/>'
+            else:                            # a broad-leaved tree: a trunk under a crown of rounded clumps
+                r = tall * rng.uniform(0.2, 0.26)
+                top = base - tall + r
+                out += f'<path d="M{x - 7:.0f} {base:.0f} L{x - 4:.0f} {top:.0f} L{x + 4:.0f} {top:.0f} L{x + 7:.0f} {base:.0f} Z" fill="{colour}"/>'
+                for dx, dy, size in ((0, 0, 1.0), (-0.85, 0.55, 0.78), (0.85, 0.55, 0.78), (0, 0.75, 0.9), (-0.45, -0.45, 0.66), (0.5, -0.4, 0.64)):
+                    out += f'<circle cx="{x + dx * r:.0f}" cy="{top + dy * r:.0f}" r="{r * size:.0f}" fill="{colour}"/>'
+        return out
+    if kind == "palms":
         out = f'<path d="M0 {y + 20} Q{w * 0.5} {y - 20} {w} {y + 20} L{w} {h} L0 {h} Z" fill="{colour}"/>'
         for _ in range(9):
             x = rng.uniform(0, w)

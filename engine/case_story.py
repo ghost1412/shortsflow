@@ -109,7 +109,7 @@ def request(script, known):
         "military_cap or glasses only if they are known for it), never the armour, robe, crown or turban of an old tale, and carries no old weapon. An astronaut wears the "
         "spacesuit, with the space_helmet. People of an ancient or fairy tale wear none of the modern things.\n"
         "For EACH section choose the backdrop: sky: " + ", ".join(story_art.SKIES) + " (the mood of the moment: sunset or dusk for calm or sad, fire or storm for battle and "
-        "danger, rays for a solemn card, night for secrets, dawn for hope; day only for a peaceful, bright scene, and vary the sky between sections) and ground: " + ", ".join(story_art.GROUNDS) + ".\n"
+        "danger, rays for a solemn card, night for secrets, dawn for hope; day only for a peaceful, bright scene, and vary the sky between sections) and ground (choose by where the story takes place: trees for woods, countryside and gardens; palms ONLY for deserts, oases and tropical shores; city for a town): " + ", ".join(story_art.GROUNDS) + ".\n"
         "Then list the beats of each section. A beat starts at a sentence number and says what is on screen from there until the next beat. It is ONE of two kinds. "
         "A CHARACTER beat: \"character\" is the person that sentence is about or who speaks in it, and their name is shown. A CARD beat: \"character\" is null, \"name\" is the "
         "card's title of at most 3 words, and \"emblem\" is the one object that shows it, from: " + ", ".join(story_art.EMBLEMS) + " (or empty when none fits). Use a card when the "
@@ -382,7 +382,7 @@ def check_plan(reply, script, library=None):
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v16"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v17"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 

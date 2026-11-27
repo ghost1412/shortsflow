@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: story look: the "trees" background drew only palm trees, so woods, Paris and fables had palms. Trees are now broad-leaved trees and firs; palms are their own background, for deserts and tropical shores.
+
 - Fix: game clips with a see-through on-screen display (a racing game's speedometer and map) were cropped at the sides. Automatic framing now also looks for outlines that stay in place across moments before it crops.
 
 - `shortsflow doctor` now marks what clipping needs ("FIX") apart from what only some features use ("optional"), and fails only for the former.
