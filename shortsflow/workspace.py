@@ -86,6 +86,29 @@ def install_remotion(home):
     return subprocess.run(cmd, cwd=remotion).returncode == 0
 
 
+# without these ShortsFlow cannot clip a video; everything else `doctor` lists is for some features only
+REQUIRED = ("FFmpeg", "Clipping extras (Whisper, OpenCV)")
+
+
+def doctor_lines(rows):
+    """(lines, required items missing): OK, FIX for what clipping needs, and "optional" for the rest, so a new user does not think the install failed."""
+    lines, missing, optional = [], 0, 0
+    for label, ok, hint in rows:
+        if ok:
+            lines.append(f"  OK        {label}")
+        elif label in REQUIRED:
+            missing += 1
+            lines.append(f"  FIX       {label}  ->  {hint}")
+        else:
+            optional += 1
+            lines.append(f"  optional  {label}  ->  {hint}")
+    if missing:
+        lines.append(f"\n{missing} item(s) to fix before you can clip.")
+    else:
+        lines.append("\nReady to clip." + (f" The {optional} optional item(s) add features; skip any you do not need." if optional else ""))
+    return lines, missing
+
+
 def doctor(home):
     """[(label, ok, hint)] for everything the pipeline needs."""
     import importlib.util
@@ -151,7 +174,6 @@ def report(home):
         lines.append(f"Torch: {torch.__version__}, GPU: {'yes' if torch.cuda.is_available() else 'no'}")
     except Exception:
         lines.append("Torch: not installed")
-    for label, ok, hint in doctor(home):
-        lines.append(f"{'OK ' if ok else 'FIX'}  {label}" + ("" if ok else f"  ->  {hint}"))
+    lines.extend(doctor_lines(doctor(home))[0])
     return scrub("\n".join(lines), home)
 

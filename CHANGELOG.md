@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- `shortsflow doctor` now marks what clipping needs ("FIX") apart from what only some features use ("optional"), and fails only for the former.
+
 - Story look: animals and monsters are built from drawn parts: 21 animals (they can wear clothes) and snake hair, horns, fangs, glowing eyes and spread wings; the review uses these parts for a creature before it asks for a new drawing.
 
 - Story look: someone in modern clothes keeps nothing of an old tale (a halo, face paint, old weapons, a man's braid); long names are no longer cut inside a word (which made one person appear twice).

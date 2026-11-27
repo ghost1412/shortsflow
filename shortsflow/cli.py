@@ -27,12 +27,9 @@ def _init(home):
 
 
 def _doctor(home):
-    bad = 0
-    for label, ok, hint in workspace.doctor(home):
-        print(f"  {'OK ' if ok else 'FIX'}  {label}" + ("" if ok else f"  ->  {hint}"))
-        bad += not ok
-    print("\nAll good." if not bad else f"\n{bad} item(s) to fix.")
-    return 1 if bad else 0
+    lines, missing = workspace.doctor_lines(workspace.doctor(home))
+    print("\n".join(lines))
+    return 1 if missing else 0
 
 
 def _clip_parser():
