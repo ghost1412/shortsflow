@@ -187,6 +187,58 @@ def weak_opening(text):
     return first in SOFT_OPENERS and m.group(2).strip() != ""
 
 
+# opening words a clip can lose while the sentence stays whole
+LEAD_ALWAYS = {"and", "but", "because", "uh", "um", "er", "erm"}                       # because: not "because of ..."
+LEAD_WITH_COMMA = {"so", "well", "okay", "ok", "yeah", "right", "now", "like", "basically", "actually", "anyway"}   # "So I quit" stays
+LEAD_PHRASES = (("in", "that", "sense"), ("i", "mean"), ("you", "know"), ("and", "so"))   # each only as a whole, before the sentence
+MAX_LEAD_WORDS, MAX_LEAD_SECONDS = 6, 3.0
+LEAD_MIN_REST = 4                                                                      # words left of the sentence after the cut
+
+
+def lead_in_length(tokens):
+    """How many of a sentence's first words are a lead-in that can be cut. `tokens` are its words with their punctuation."""
+    bare = [re.sub(r"[^a-z']", "", str(w).lower()) for w in tokens]
+    comma = [str(w).rstrip().endswith((",", "...", "\u2026")) for w in tokens]
+    n = 0
+    while n < len(bare):
+        phrase = next((p for p in LEAD_PHRASES if tuple(bare[n:n + len(p)]) == p and comma[n + len(p) - 1]), None)
+        if phrase:
+            n += len(phrase)
+        elif bare[n] in LEAD_ALWAYS and not (bare[n] == "because" and bare[n + 1:n + 2] == ["of"]):
+            n += 1
+        elif bare[n] in LEAD_WITH_COMMA and comma[n]:
+            n += 1
+        elif n and bare[n - 1] == "and" and bare[n] in ("so", "then"):     # "And so there ..." / "And then ..."
+            n += 1
+        else:
+            break
+    sentence = next((k + 1 for k, w in enumerate(tokens) if SENTENCE_END.search(str(w)) and str(w).lower() not in NOT_END
+                     and not str(w).endswith(("...", "…"))), len(tokens))
+    if n > MAX_LEAD_WORDS or sentence - n < LEAD_MIN_REST or any(str(w).rstrip().endswith((".", "?", "!")) for w in tokens[:n]):
+        return 0
+    return n
+
+
+def trim_lead_in(clip, words, min_len):
+    """`clip` with its start moved past a leading "So, ..." / "And ..." / "Because ...", when the word timings allow it."""
+    if clip.get("user_moment") or clip.get("lead_trim") or not clip.get("snapped"):
+        return clip
+    start, end = float(clip["start"]), float(clip["end"])
+    i = next((k for k, w in enumerate(words) if w["start"] >= start - 0.05), None)
+    if i is None or words[i].get("segment") or words[i]["start"] - start > 1.0:
+        return clip
+    if i and not SENTENCE_END.search(words[i - 1]["word"]) and words[i]["start"] - words[i - 1]["end"] < PAUSE_SPLIT:
+        return clip                                        # not the start of a sentence
+    n = lead_in_length([w["word"] for w in words[i:i + MAX_LEAD_WORDS + LEAD_MIN_REST]])
+    if not n:
+        return clip
+    first = words[i + n]
+    new_start = max(words[i + n - 1]["end"], first["start"] - 0.08)
+    if first["start"] - start > MAX_LEAD_SECONDS or end - new_start < min_len:
+        return clip
+    return dict(clip, start=round(new_start, 2), lead_trim=round(new_start - start, 2))
+
+
 def _is_leadin(text, max_words):
     words = re.findall(r"[a-z']+", text.lower())
     return 0 < len(words) <= max_words and all(w in FILLER_WORDS for w in words)
@@ -205,7 +257,9 @@ def snap_clip(clip, spans, **opts):
     # --- start: a sentence start, as close as possible (earlier = keeps the whole sentence, later = skips the lead-in)
     new_start = start
     inside = next((i for i, (s, e, _) in enumerate(spans) if s - 0.05 <= start < e), None)
-    if inside is not None and abs(starts[inside] - start) > 0.05:
+    if clip.get("lead_trim"):
+        pass                                               # already cut just past its lead-in: do not go back to the sentence start
+    elif inside is not None and abs(starts[inside] - start) > 0.05:
         before = starts[inside]
         after = starts[inside + 1] if inside + 1 < len(spans) else None
         cands = [c for c in (before, after) if c is not None and abs(c - start) <= o["max_shift"] and c < end - o["min_len"]]
@@ -296,7 +350,8 @@ def snap_highlights(highlights, transcript, **opts):
     if not spans:
         return highlights
     o = {**DEFAULTS, **opts}
-    clips = [snap_clip(h, spans, **opts) for h in highlights]
+    words = _words(transcript)
+    clips = [trim_lead_in(snap_clip(h, spans, **opts), words, o["min_len"]) for h in highlights]
     return _resolve_overlaps(clips, spans, o)
 
 

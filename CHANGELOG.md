@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Shorts and highlights: a clip no longer opens on words that lean on what the viewer did not hear ("So, in that sense, …", "And so …", "Because …"). Only those words are cut, using the word timings; the sentence stays, and openings like "So I quit my job" or "Because of the war …" are left alone.
+
 - Fix: shorts: while the view shows both people stacked, animated captions sit on the line between the two halves instead of on the lower person's face. A caption height you set yourself is not moved.
 
 - Fix: speaker switching (`--layout active` / `auto`) often cut to the silent listener. One person's voice rising and falling (or the pitch tracker slipping to half the pitch) was taken for two speakers, and each face's mouth movement was scaled by its own typical movement, which hid who was talking. Voice pitch is now used only when two voices are clearly apart and both talk in stretches; otherwise mouth movement over two seconds decides. It is better, not perfect.
