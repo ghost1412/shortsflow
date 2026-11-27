@@ -102,6 +102,9 @@ def request(script, known):
         f"skin: {', '.join(story_art.SKIN)}; headgear: {', '.join(story_art.HEADGEAR)}; headgear_colour, outfit_colour, trim_colour: {', '.join(story_art.COLOURS)}; "
         f"facial_hair: {', '.join(story_art.FACIAL_HAIR)}; outfit: {', '.join(story_art.OUTFITS)}; ornaments (a list): {', '.join(story_art.ORNAMENTS)}; "
         f"mood: {', '.join(story_art.MOODS)}; weapon: {', '.join(story_art.WEAPONS)}; age: {', '.join(story_art.AGES)}.\n"
+        "Dress each person for their OWN time and job. Someone of the last two hundred years wears a suit, shirt, uniform, lab_coat, dress or spacesuit (with a hat, cap, "
+        "military_cap or glasses only if they are known for it), never the armour, robe, crown or turban of an old tale, and carries no old weapon. An astronaut wears the "
+        "spacesuit, with the space_helmet. People of an ancient or fairy tale wear none of the modern things.\n"
         "For EACH section choose the backdrop: sky: " + ", ".join(story_art.SKIES) + " (the mood of the moment: sunset or dusk for calm or sad, fire or storm for battle and "
         "danger, rays for a solemn card, night for secrets, dawn for hope; day only for a peaceful, bright scene, and vary the sky between sections) and ground: " + ", ".join(story_art.GROUNDS) + ".\n"
         "Then list the beats of each section. A beat starts at a sentence number and says what is on screen from there until the next beat. It is ONE of two kinds. "
@@ -371,7 +374,7 @@ def check_plan(reply, script, library=None):
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v14"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v15"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 

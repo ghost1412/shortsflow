@@ -11,13 +11,13 @@ import re
 
 SKIN = {"fair": "#f1c9a0", "tan": "#d9a066", "brown": "#b57a47", "dark": "#7d4d2e", "blue": "#3f6fd8", "grey": "#b9b3a8", "green": "#6fae6a", "ashen": "#d9d6cf"}
 FIGURES = ("man", "woman", "child")
-HAIR = ("short", "long", "braid", "bald")
+HAIR = ("short", "long", "braid", "bun", "bald")
 HAIR_COLOURS = {"black": "#1f1620", "brown": "#5a3a22", "white": "#e9e6e1", "red": "#9a3b1c", "blonde": "#d9ac52"}
 MARKINGS = ("none", "stripe", "paint", "scar")
-HEADGEAR = ("crown", "helmet", "turban", "topknot", "hood", "none")
+HEADGEAR = ("crown", "helmet", "turban", "topknot", "hood", "hat", "cap", "military_cap", "space_helmet", "none")
 FACIAL_HAIR = ("none", "moustache", "beard", "long_beard")
-OUTFITS = ("armour", "robe", "shawl", "simple")
-ORNAMENTS = ("halo", "feather", "tilak", "earrings", "necklace")
+OUTFITS = ("armour", "robe", "shawl", "simple", "suit", "shirt", "uniform", "lab_coat", "dress", "spacesuit")
+ORNAMENTS = ("halo", "feather", "tilak", "earrings", "necklace", "glasses")
 MOODS = ("neutral", "stern", "sad", "angry", "proud", "calm")
 WEAPONS = ("none", "bow", "spear", "staff", "sword", "twin_blades", "trident")
 AGES = ("young", "adult", "old")
@@ -86,6 +86,54 @@ def _skin(spec):
 
 # ---------------------------------------------------------------- characters (600 x 800)
 
+def _suit(base, dark, trim):
+    return [f'<path d="M214 470 L300 668 L386 470 Z" fill="#f6f3ec"/>',
+            f'<path d="M285 492 L315 492 L327 520 L316 650 L300 676 L284 650 L273 520 Z" fill="{trim}"/><path d="M285 492 L315 492 L306 516 L294 516 Z" fill="{shade(trim, 0.3)}"/>',
+            f'<path d="M214 470 L186 486 L238 570 L212 590 L300 700 L262 560 Z" fill="{dark}"/><path d="M386 470 L414 486 L362 570 L388 590 L300 700 L338 560 Z" fill="{shade(base, 0.4)}"/>',
+            f'<circle cx="300" cy="730" r="10" fill="{shade(base, 0.5)}"/><circle cx="300" cy="772" r="10" fill="{shade(base, 0.5)}"/>']
+
+
+def _shirt(base, dark, trim):
+    light = tint(base, 0.45)
+    return [f'<path d="M240 468 L300 520 L262 548 L222 484 Z" fill="{light}"/><path d="M360 468 L300 520 L338 548 L378 484 Z" fill="{light}"/>',
+            f'<path d="M300 520 L300 800" stroke="{dark}" stroke-width="7"/>'] + [f'<circle cx="314" cy="{y}" r="8" fill="{light}"/>' for y in (566, 636, 706, 776)]
+
+
+def _uniform(base, dark, trim):
+    buttons = "".join(f'<circle cx="{x}" cy="{y}" r="11" fill="{trim}"/>' for x in (258, 342) for y in (566, 632, 698))
+    return [f'<path d="M236 466 L300 512 L364 466 L364 500 L300 548 L236 500 Z" fill="{dark}"/>', buttons,
+            f'<rect x="76" y="540" width="108" height="30" rx="12" fill="{trim}" transform="rotate(-20 130 555)"/><rect x="416" y="540" width="108" height="30" rx="12" fill="{trim}" transform="rotate(20 470 555)"/>',
+            f'<rect x="378" y="610" width="76" height="14" fill="#d83a3a"/><rect x="378" y="628" width="76" height="14" fill="#f4efe6"/><rect x="378" y="646" width="76" height="14" fill="#2f5fc4"/>',
+            f'<rect x="150" y="742" width="300" height="26" fill="{dark}"/><rect x="280" y="738" width="40" height="34" rx="6" fill="{trim}"/>']
+
+
+def _lab_coat(base, dark, trim):
+    coat, fold = "#f4f2ee", "#cfcbc2"
+    return [f'<path d="M20 800 L48 610 Q70 505 190 470 L410 470 Q530 505 552 610 L580 800 Z" fill="{coat}"/><path d="M300 470 L410 470 Q530 505 552 610 L580 800 L300 800 Z" fill="{fold}" opacity="0.55"/>',
+            f'<path d="M226 470 L300 640 L374 470 Z" fill="{base}"/>',
+            f'<path d="M226 470 L196 492 L246 566 L222 584 L300 690 L272 560 Z" fill="{fold}"/><path d="M374 470 L404 492 L354 566 L378 584 L300 690 L328 560 Z" fill="{shade(fold, 0.12)}"/>',
+            f'<path d="M300 690 L300 800" stroke="{shade(fold, 0.3)}" stroke-width="6"/><rect x="386" y="680" width="92" height="82" rx="8" fill="none" stroke="{shade(fold, 0.3)}" stroke-width="6"/>',
+            f'<rect x="410" y="652" width="10" height="40" fill="{trim}"/>']
+
+
+def _dress(base, dark, trim):
+    return [f'<path d="M222 470 Q300 560 378 470 Z" fill="{shade(base, 0.45)}"/><path d="M222 470 Q300 560 378 470" stroke="{trim}" stroke-width="12" fill="none"/>',
+            f'<path d="M160 700 Q300 730 440 700 L440 726 Q300 756 160 726 Z" fill="{trim}"/><path d="M110 600 Q150 680 138 800 M490 600 Q450 680 462 800" stroke="{dark}" stroke-width="10" fill="none"/>']
+
+
+def _spacesuit(base, dark, trim):
+    suit, fold, metal = "#eeece6", "#bfbcb3", COLOURS["silver"]
+    return [f'<path d="M6 800 L30 590 Q60 480 190 456 L410 456 Q540 480 570 590 L594 800 Z" fill="{suit}"/><path d="M300 456 L410 456 Q540 480 570 590 L594 800 L300 800 Z" fill="{fold}" opacity="0.5"/>',
+            f'<ellipse cx="300" cy="476" rx="104" ry="34" fill="{metal}"/><ellipse cx="300" cy="470" rx="78" ry="22" fill="{shade(metal, 0.35)}"/>',
+            f'<path d="M96 540 Q132 660 118 800 M504 540 Q468 660 482 800" stroke="{fold}" stroke-width="14" fill="none"/>',
+            f'<rect x="216" y="590" width="168" height="112" rx="16" fill="{shade(suit, 0.14)}" stroke="{shade(fold, 0.25)}" stroke-width="6"/>',
+            '<circle cx="250" cy="626" r="15" fill="#d83a3a"/><circle cx="300" cy="626" r="15" fill="#2f5fc4"/><circle cx="350" cy="626" r="15" fill="#e9b949"/><rect x="240" y="662" width="120" height="18" rx="9" fill="#5b5964"/>',
+            f'<circle cx="448" cy="600" r="30" fill="{trim}"/><circle cx="448" cy="600" r="18" fill="none" stroke="#f6f3ec" stroke-width="5"/>']
+
+
+MODERN = {"suit": _suit, "shirt": _shirt, "uniform": _uniform, "lab_coat": _lab_coat, "dress": _dress, "spacesuit": _spacesuit}
+
+
 def _body(spec, trim):
     outfit, base = spec["outfit"], COLOURS[spec["outfit_colour"]]
     dark = shade(base, 0.28)
@@ -105,6 +153,8 @@ def _body(spec, trim):
         parts += [f'<path d="M60 640 Q300 470 540 640 L560 800 L40 800 Z" fill="{tint(base, 0.12)}"/>',
                   f'<path d="M60 640 Q300 470 540 640" stroke="{trim}" stroke-width="10" fill="none"/>',
                   f'<path d="M210 530 L390 700" stroke="{dark}" stroke-width="22" opacity="0.5"/>']
+    elif outfit in MODERN:
+        parts += MODERN[outfit](base, dark, trim)
     else:
         parts += [f'<path d="M230 470 Q300 520 370 470" fill="{dark}"/>']
     if "necklace" in spec["ornaments"] or outfit == "armour":
@@ -152,12 +202,28 @@ def _headgear(spec, skin):
         base = COLOURS[spec["outfit_colour"]]
         return (f'<path d="M170 400 Q150 120 300 78 Q450 120 430 400 Q410 250 300 214 Q190 250 170 400 Z" fill="{base}"/>'
                 f'<path d="M190 390 Q175 140 300 98" stroke="{tint(base, 0.2)}" stroke-width="6" fill="none"/>')
+    if kind == "hat":                     # a brimmed felt hat
+        return (f'<path d="M222 196 Q222 70 300 78 Q378 70 378 196 Z" fill="{base}"/><path d="M262 82 Q300 106 338 82" stroke="{dark}" stroke-width="9" fill="none"/>'
+                f'<path d="M224 166 Q300 188 376 166 L378 198 Q300 218 222 198 Z" fill="{dark}"/><ellipse cx="300" cy="202" rx="152" ry="26" fill="{base}"/>'
+                f'<path d="M152 204 Q300 238 448 204" stroke="{dark}" stroke-width="7" fill="none"/>')
+    if kind == "cap":                     # a flat cap
+        return (f'<path d="M196 206 Q192 118 300 116 Q420 114 408 204 Q300 180 196 206 Z" fill="{base}"/>'
+                f'<path d="M196 206 Q300 180 408 204 Q420 222 392 226 Q300 200 214 228 Q186 228 196 206 Z" fill="{dark}"/><circle cx="300" cy="124" r="10" fill="{dark}"/>')
+    if kind == "military_cap":
+        return (f'<path d="M188 168 Q196 92 300 90 Q404 92 412 168 Q300 140 188 168 Z" fill="{base}"/><path d="M200 168 Q300 142 400 168 L398 206 Q300 182 202 206 Z" fill="{dark}"/>'
+                f'<path d="M202 204 Q300 180 398 204 Q392 244 300 236 Q208 244 202 204 Z" fill="{COLOURS["black"]}"/><circle cx="300" cy="160" r="18" fill="{COLOURS["gold"]}"/><circle cx="300" cy="160" r="7" fill="{base}"/>')
+    if kind == "space_helmet":            # a clear bubble round the whole head, seated on the neck ring
+        metal = COLOURS["silver"]
+        return (f'<circle cx="300" cy="268" r="206" fill="#cfe6ff" opacity="0.13"/><circle cx="300" cy="268" r="206" fill="none" stroke="#eeece6" stroke-width="20"/>'
+                f'<circle cx="300" cy="268" r="190" fill="none" stroke="{metal}" stroke-width="5" opacity="0.8"/>'
+                f'<path d="M150 210 Q172 118 262 88" stroke="#ffffff" stroke-width="16" stroke-linecap="round" fill="none" opacity="0.65"/><path d="M146 262 Q146 246 148 236" stroke="#ffffff" stroke-width="14" stroke-linecap="round" fill="none" opacity="0.65"/>'
+                f'<path d="M196 440 Q300 500 404 440 L414 470 Q300 530 186 470 Z" fill="{metal}"/>')
     return ""
 
 
 def _hair_back(spec):
     """Long hair behind the head (drawn before the body, so the shoulders cover its ends)."""
-    if spec["hair"] not in ("long", "braid") or spec["headgear"] == "hood":
+    if spec["hair"] not in ("long", "braid") or spec["headgear"] in ("hood", "space_helmet"):
         return ""
     colour = HAIR_COLOURS[spec["hair_colour"]]
     return f'<path d="M300 132 C190 134 168 250 176 340 Q150 470 168 590 Q230 650 300 600 Q370 650 432 590 Q450 470 424 340 C432 250 410 134 300 132 Z" fill="{shade(colour, 0.12)}"/>'
@@ -165,7 +231,7 @@ def _hair_back(spec):
 
 def _hair_front(spec):
     """Locks that fall in front of the shoulders: two for long hair, a plait over one shoulder for a braid."""
-    if spec["headgear"] == "hood":
+    if spec["headgear"] in ("hood", "space_helmet"):
         return ""
     colour = HAIR_COLOURS[spec["hair_colour"]]
     if spec["hair"] == "long":
@@ -180,8 +246,9 @@ def _hair_front(spec):
 def _hair(spec):
     """Hair showing under bare or open headgear."""
     colour = HAIR_COLOURS[spec["hair_colour"]]
-    if spec["hair"] != "bald" and spec["headgear"] in ("none", "crown", "helmet"):
-        return f'<path d="M205 255 Q196 150 300 138 Q404 150 395 255 Q372 188 300 182 Q228 188 205 255 Z" fill="{colour}"/>'
+    if spec["hair"] != "bald" and spec["headgear"] in ("none", "crown", "helmet", "hat", "cap", "military_cap", "space_helmet"):
+        bun = f'<circle cx="300" cy="126" r="46" fill="{colour}"/>' if spec["hair"] == "bun" and spec["headgear"] == "none" else ""
+        return bun + f'<path d="M205 255 Q196 150 300 138 Q404 150 395 255 Q372 188 300 182 Q228 188 205 255 Z" fill="{colour}"/>'
     return ""
 
 
@@ -243,6 +310,10 @@ def _beard(spec):
 
 def _extras(spec):
     out = ""
+    if "glasses" in spec["ornaments"]:
+        frame = '#2a2430'
+        out += (f'<circle cx="258" cy="292" r="38" fill="#cfe6ff" fill-opacity="0.12" stroke="{frame}" stroke-width="6"/><circle cx="342" cy="292" r="38" fill="#cfe6ff" fill-opacity="0.12" stroke="{frame}" stroke-width="6"/>'
+                f'<path d="M296 288 Q300 280 304 288 M220 286 L200 300 M380 286 L400 300" stroke="{frame}" stroke-width="6" fill="none"/>')
     if "tilak" in spec["ornaments"]:
         out += '<path d="M300 200 L300 246" stroke="#f4efe6" stroke-width="8" stroke-linecap="round"/><circle cx="300" cy="258" r="6" fill="#d83a3a"/>'
     if "earrings" in spec["ornaments"]:
