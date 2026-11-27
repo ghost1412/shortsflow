@@ -74,6 +74,18 @@ No account or API key is needed to clip a video. If it saves you a subscription,
 
 Also: [explainer videos](docs/GUIDE.md#the-case-explainer-videos-written-from-your-sources) written from a web page or PDF, [talking presenters](docs/GUIDE.md#presenters-a-host-who-talks), animations, photo reels, quiz and facts shorts, and game clips.
 
+## Game clips
+
+<p align="center">
+  <img src="demos/demo_game_framing.gif" width="480" alt="The same moment of a racing game as two vertical clips: on the left cropped to fill the screen, on the right the whole picture with its speedometer and map over a blurred copy" />
+  <br/><sub>One moment, two views. <b>Left:</b> cropped to fill the screen (bigger car, no speedometer or map), <code>--game_framing crop</code>. <b>Right:</b> the whole picture, <code>--game_framing fit</code>. Left on automatic, ShortsFlow chooses between them.</sub>
+</p>
+
+```bash
+shortsflow clip gameplay.mp4 --content game                      # automatic framing
+shortsflow clip gameplay.mp4 --content game --game_framing fit   # always keep the whole picture
+```
+
 ## No command line needed
 
 <p align="center">
@@ -97,7 +109,7 @@ Without an AI key, the picker's suggestions often differ from what a person woul
 
 - Something wrong? [Open an issue](https://github.com/ghost1412/shortsflow/issues) with the output of `shortsflow doctor --report` (no keys or folder names in it).
 - [Guide](docs/GUIDE.md) · [All features and options](docs/FEATURES.md) · [Roadmap](ROADMAP.md)
-- Footage credits. Podcast demo: [Lila Rose Podcast E143](https://www.youtube.com/watch?v=VIq8L_ZeqkA) by Lila Rose, shared on YouTube under the [Creative Commons Attribution licence](https://creativecommons.org/licenses/by/3.0); cropped, re-framed and captioned (changes made). Explainer demo: made from a Wikipedia article; any stock footage in it is from [Pexels](https://www.pexels.com).
+- Footage credits. Podcast demo: [Lila Rose Podcast E143](https://www.youtube.com/watch?v=VIq8L_ZeqkA) by Lila Rose, shared on YouTube under the [Creative Commons Attribution licence](https://creativecommons.org/licenses/by/3.0); cropped, re-framed and captioned (changes made). Game demo: the author's own recording of Need for Speed Rivals; the game and its content belong to Electronic Arts, which does not endorse ShortsFlow. Explainer demo: made from a Wikipedia article; any stock footage in it is from [Pexels](https://www.pexels.com).
 
 ## License
 
