@@ -94,7 +94,7 @@ Every mode and option: **[docs/FEATURES.md](FEATURES.md)**.
 - **Picks with a reason.** Local Whisper reads the speech; clips start and end on sentences and do not overlap. Each one gets a label (strong, good, okay, weak) and the reason. It is a guide, not a promise of views.
 - **A stronger start.** `--cold_open` opens with the clip's strongest line, and `--hook_overlay` shows the hook as a big title (with `--use_remotion`).
 - **Tighter and cleaner.** `--tighten` cuts silences, `--enhance auto` corrects the picture, `--enhance_audio` masters the sound.
-- **Framing that follows.** Face-tracked 9:16 crops, a cut to whoever is speaking, and the whole picture over a blurred copy for slides and screens.
+- **Framing that follows.** Face-tracked 9:16 crops, a cut to whoever seems to be speaking (judged from mouth movement, and from voice pitch when the two voices are clearly apart; with similar voices or a turned face it can show the wrong person or both), and the whole picture over a blurred copy for slides and screens.
 - **Your look.** Animated word-by-word captions, your logo and handle, and an editor to re-cut or restyle any clip.
 
 <p align="center">

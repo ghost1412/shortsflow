@@ -169,6 +169,13 @@ def _sample_faces(video_path, start, end, sample_fps):
 
 PITCH_MIN_GAP = 0.18      # min log-Hz distance between the two voice clusters (~20 %) to trust pitch
 PITCH_MIN_VOICED = 8      # need at least this many voiced samples per voice
+PITCH_MIN_SHARE = 0.15    # ... and the rarer voice at least this share of them
+PITCH_VALLEY = 0.5        # between two real voices there are few pitches: at most this share of what lies around the rarer voice's own pitch
+MOTION_WINDOW = 2.0       # seconds of mouth movement compared at once: one sample says little
+PITCH_LONG_RUN = 1.0      # seconds: a stretch this long counts as someone talking
+PITCH_MIN_LONGEST = 1.4   # the rarer voice has at least one stretch this long ...
+PITCH_RUN_SHARE = 0.3     # ... and this share of its samples are in long stretches (a tracker's slips to half the pitch come singly)
+QUIET_NEEDED = 10         # silent samples needed to learn how much each face "moves" when nobody speaks
 
 
 def _pitch_track(video_path, start, end, sample_fps, ffmpeg_exe):
@@ -193,6 +200,19 @@ def _pitch_track(video_path, start, end, sample_fps, ffmpeg_exe):
     return np.array(f0)
 
 
+def _talks_in_stretches(rarer):
+    """Is the rarer pitch group (True per voiced sample, in order) somebody talking, rather than scattered readings?"""
+    runs, n = [], 0
+    for value in [*rarer, False]:
+        if value:
+            n += 1
+        elif n:
+            runs.append(n)
+            n = 0
+    long_ = [r for r in runs if r >= PITCH_LONG_RUN * SAMPLE_FPS]
+    return bool(runs) and max(runs) >= PITCH_MIN_LONGEST * SAMPLE_FPS and sum(long_) >= PITCH_RUN_SHARE * sum(runs)
+
+
 def diarize_by_pitch(f0, loud, visual):
     """
     Decide who is speaking from the two voices' pitch. f0: Hz per sample (NaN = unvoiced), loud: 0..1 per sample,
@@ -204,13 +224,22 @@ def diarize_by_pitch(f0, loud, visual):
     if voiced.sum() < 2 * PITCH_MIN_VOICED:
         return None
     logf = np.log(f0[voiced])
-    centers = np.array([np.percentile(logf, 20), np.percentile(logf, 80)])
+    centers = np.array([np.percentile(logf, 10), np.percentile(logf, 90)])      # a second voice heard only a fifth of the time must still seed its own group
     for _ in range(25):  # 1-D 2-means
         assign = np.abs(logf[:, None] - centers[None, :]).argmin(axis=1)
         if not (assign == 0).any() or not (assign == 1).any():
             return None
         centers = np.array([logf[assign == k].mean() for k in (0, 1)])
-    if centers[1] - centers[0] < PITCH_MIN_GAP or min((assign == 0).sum(), (assign == 1).sum()) < PITCH_MIN_VOICED:
+    gap = centers[1] - centers[0]
+    smaller = min((assign == 0).sum(), (assign == 1).sum())
+    if gap < PITCH_MIN_GAP or smaller < PITCH_MIN_VOICED or smaller < PITCH_MIN_SHARE * len(logf):
+        return None
+    # any voice split in two gives two "centres"; two voices also leave a gap between them, one voice rising and falling does not
+    near = [int((np.abs(logf - c) < gap / 6).sum()) for c in centers]
+    between = int((np.abs(logf - centers.mean()) < gap / 6).sum())
+    if between > PITCH_VALLEY * min(near):
+        return None
+    if not _talks_in_stretches(assign == int((assign == 1).sum() < (assign == 0).sum())):
         return None
     labels = np.full(len(f0), -1)
     labels[np.where(voiced)[0]] = assign  # 0 = lower voice, 1 = higher voice
@@ -251,15 +280,6 @@ def plan_speaker_shots(video_path, start, end, ffmpeg_exe=None):
 
     env = _audio_envelope(video_path, start, end, SAMPLE_FPS, ffmpeg_exe)
 
-    # Normalise each speaker by their own typical motion, so a face that always looks "busier"
-    # (angle, beard, detector jitter) doesn't win every comparison.
-    for slot in ("L", "R"):
-        vals = [s["faces"][slot] for s in samples if slot in s["faces"] and s["faces"][slot] > 0]
-        base = float(np.median(vals)) if vals else 1.0
-        for s in samples:
-            if slot in s["faces"]:
-                s["faces"][slot] /= base or 1.0
-
     # 0. Voices with clearly different pitch (e.g. a man and a woman) are told apart by audio; this beat
     #    mouth-motion on real footage (92 % vs 45 % of speaking time on a two-person interview).
     decisions = None
@@ -282,11 +302,31 @@ def plan_speaker_shots(video_path, start, end, ffmpeg_exe=None):
     return shots
 
 
+def _quiet_levels(samples, env):
+    """How much each face's mouth area changes while nobody speaks (a beard, an angle or a jittery detection makes one face look busier), or 1 for both
+    when there is too little silence to tell. Not learnt from the talking: someone who speaks all through a clip would be scaled down to a listener."""
+    levels = {"L": 1.0, "R": 1.0}
+    if env is None:
+        return levels
+    quiet = [s for i, s in enumerate(samples) if float(env[min(i, len(env) - 1)]) <= 0.15]
+    values = {slot: [s["faces"][slot] for s in quiet if s["faces"].get(slot, 0) > 0] for slot in levels}
+    if min(len(v) for v in values.values()) >= QUIET_NEEDED:
+        levels = {slot: float(np.median(v)) or 1.0 for slot, v in values.items()}
+    return levels
+
+
 def _motion_decisions(samples, env):
+    levels = _quiet_levels(samples, env)
+    half = int(MOTION_WINDOW * SAMPLE_FPS / 2)
     decisions = []
     for i, s in enumerate(samples):
         loud = float(env[min(i, len(env) - 1)]) if env is not None else 1.0
-        scores = {slot: s["faces"][slot] * loud for slot in ("L", "R") if slot in s["faces"]}
+        around = samples[max(0, i - half):i + half + 1]
+        scores = {}
+        for slot in ("L", "R"):
+            near = [other["faces"][slot] for other in around if slot in other["faces"]]
+            if slot in s["faces"] and near:
+                scores[slot] = float(np.median(near)) / levels[slot]
         # One missing detection is usually a detector miss, not the person leaving - hold the shot
         if len(scores) == 2 and loud > 0.15:
             hi, lo = sorted(scores.values(), reverse=True)

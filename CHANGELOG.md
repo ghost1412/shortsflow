@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: speaker switching (`--layout active` / `auto`) often cut to the silent listener. One person's voice rising and falling (or the pitch tracker slipping to half the pitch) was taken for two speakers, and each face's mouth movement was scaled by its own typical movement, which hid who was talking. Voice pitch is now used only when two voices are clearly apart and both talk in stretches; otherwise mouth movement over two seconds decides. It is better, not perfect.
+
 - Story look: characters planned by the model on this PC are no longer saved for later videos (its looks are often wrong), and the run says so. This also covers the case where the automatic chain ended at Ollama.
 
 - Fix: a Gemini model whose free requests for the day are used up is no longer retried (the last model was tried four times on every request), a model limited through every try rests for ten minutes, and when all models are resting the app goes straight to its fallbacks.

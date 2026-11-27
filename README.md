@@ -65,7 +65,7 @@ No account or API key is needed to clip a video. If it saves you a subscription,
 
 | | What you get | Good to know |
 |---|---|---|
-| ✂️ **Shorts** | Suggested moments from a long video as 9:16 clips framed on faces. Options: animated captions, a cut to the speaker, an opening on the strongest line, silences cut | You choose which to keep |
+| ✂️ **Shorts** | Suggested moments from a long video as 9:16 clips framed on faces. Options: animated captions, a cut to the speaker (it can still pick the wrong person), an opening on the strongest line, silences cut | You choose which to keep |
 | 🎬 **Highlights video** | One video of the strongest moments it finds, in their original order, at about the length you choose | Landscape, like the source |
 | 🌍 **Dubbing** | Your video in another language, with translated subtitles. It can give up to 4 speakers different voices, told apart by pitch | Computer voices: no voice cloning, no lip-sync. Similar voices can get mixed up |
 | 🧳 **Recaps** | Trips, weddings and events: a hook, title cards, a closing card and an itinerary, tall or wide | Can copy the pace of a reel you like |
