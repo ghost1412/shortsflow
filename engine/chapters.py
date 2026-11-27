@@ -171,6 +171,20 @@ def format_chapters(chapters):
     return "\n".join(f"{timestamp(c['start'])} {c['title']}" for c in chapters)
 
 
+def delay(chapters, seconds):
+    """The chapters of a reel that got `seconds` of teaser in front: the first still starts at 0 and takes the teaser in, the rest move later."""
+    if not seconds:
+        return chapters
+    out = []
+    for i, c in enumerate(chapters):
+        start = c["start"] + seconds if i else 0.0
+        moved = dict(c, start=round(start, 2), end=round(c["end"] + seconds, 2))
+        if "timestamp" in c:
+            moved["timestamp"] = timestamp(moved["start"])
+        out.append(moved)
+    return out
+
+
 def chapters_for_reel(highlights, transcript_segments, xf=0.25, total=None, durations=None, ask=None):
     """Titled chapters for the highlights reel as [{"start", "end", "title", "timestamp"}], or [] when it is too short."""
     chapters = build_chapters(highlights, xf=xf, total=total, durations=durations)

@@ -91,9 +91,9 @@ def build_command(ffmpeg, video, hook, output, has_audio=True):
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output]
 
 
-def apply_to_clip(video, words, hint=None, score_fn=None):
+def apply_to_clip(video, words, hint=None, score_fn=None, max_total=MAX_TOTAL):
     """Prepend the cold open to `video` in place. Returns {'start','end','duration','text'} (the teaser, on the OLD timeline),
-    or None when the clip was left untouched. Never raises."""
+    or None when the clip was left untouched. max_total: the longest the result may be (None: no limit, for a highlights video). Never raises."""
     try:
         ffmpeg = _ffmpeg()
         from engine.broll import _probe
@@ -103,8 +103,8 @@ def apply_to_clip(video, words, hint=None, score_fn=None):
             print(f"[Log] Cold open: no strong line to lead with in {os.path.basename(video)}; clip left as it was.")
             return None
         teaser = hook["end"] - hook["start"]
-        if duration + teaser > MAX_TOTAL:
-            print(f"[Log] Cold open: {os.path.basename(video)} would pass {MAX_TOTAL:.0f}s with the teaser; skipped.")
+        if max_total and duration + teaser > max_total:
+            print(f"[Log] Cold open: {os.path.basename(video)} would pass {max_total:.0f}s with the teaser; skipped.")
             return None
         banner = subprocess.run([ffmpeg, "-i", video], capture_output=True, text=True).stderr
         tmp = os.path.join(os.path.dirname(os.path.abspath(video)), f".coldopen_{os.getpid()}_{os.path.basename(video)}")

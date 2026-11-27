@@ -85,7 +85,7 @@ def sentence_spans(transcript):
     return spans
 
 
-MIC_CHECK = re.compile(r"\b(testing[, ]+(one|1)|one,? two,? three|can you hear me|check,? check|is this (thing )?on|sound check)\b", re.I)
+MIC_CHECK = re.compile(r"\b(testing[,. ]+(one|1(2(3)?)?|testing)|one,? two,? three|can you hear me|check,? check|is this (thing )?on|sound check)\b", re.I)
 # a sentence starting with one of these leans on the one before it (never a good first line)
 DEPENDENT_OPENERS = {"and", "but", "or", "because", "which", "cause", "also", "then", "anyway", "uh", "um", "er", "erm"}
 # filler only when followed by a comma or an ellipsis ("So, ...", "Well, ..."): "So I quit my job" is a real opening

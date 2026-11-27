@@ -154,7 +154,7 @@ def build_parser():
     parser.add_argument("--subject_max", type=int, default=2, help="--transitions subject: the most subject cut-outs in one recap (default 2; they only happen where ONE person is in the shot, and are spaced out). The other cuts use the other transitions.")
     parser.add_argument("--subject_color", default="auto", help="--transitions subject: colour of the outline: auto (white), white, gold, cyan, pink or #rrggbb.")
     parser.add_argument("--stat_pops", action="store_true", help="Show striking numbers (\"$200\", \"73%%\", \"10 years\") big on screen the moment they are said. Needs --use_remotion.")
-    parser.add_argument("--cold_open", action="store_true", help="Start each short with its strongest line (a 1.5-6 s teaser taken from the clip), then play the clip from its beginning. Shorts only.")
+    parser.add_argument("--cold_open", action="store_true", help="Start each short with its strongest line (a 1.5-6 s teaser taken from the clip), then play the clip from its beginning. Also works for the highlights video (--extract_mode long), not with --tighten there.")
     parser.add_argument("--no_signals", action="store_true", help="Ignore the extra scoring signals (speech-rate change, and laughter/applause with --use_audio_detect).")
     parser.add_argument("--no_rerank", action="store_true", help="Skip the second LLM pass that rates all clip candidates together with context (uses the older per-clip scoring).")
     parser.add_argument("--no_diversity", action="store_true", help="Do not skip near-duplicate clips or prefer different topics when choosing shorts.")

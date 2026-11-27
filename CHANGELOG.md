@@ -2,6 +2,14 @@
 
 Release notes for the `shortsflow` package and the Windows installer. Newest first.
 
+## Unreleased
+
+- Highlights video: `--cold_open` now works for `--extract_mode long`: a strong later line plays first, and the chapters and subtitles move with it (not with `--tighten`).
+
+- Fix: `--srt` for a highlights video wrote subtitles for its first moment only; it now covers the whole video.
+
+- Fix: a microphone check written as one number ("Testing 123") was not recognised as a weak opening line.
+
 ## 0.9.5 (2026-11-27)
 
 In short: **privacy fixes** (a chosen AI provider is now the only one your text goes to; local photo reels keep photos on your PC), a **story look as a preview** (still rough: animal stories do not work yet), picture and dubbing fixes, and a shorter README with a new guide.

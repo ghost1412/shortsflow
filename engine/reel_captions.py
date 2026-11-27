@@ -37,6 +37,36 @@ def reel_words(parts, transcript_data, xf=0.0):
     return fixed
 
 
+def reel_parts(highlights, segment_folder, seconds=None):
+    """[(source start, source end, rendered length)] of the highlights that are in the reel: those whose cut piece seg_<i>.mp4 is there."""
+    seconds = seconds or clip_seconds
+    parts = []
+    for i, hi in enumerate(highlights):
+        path = os.path.join(segment_folder, f"seg_{i}.mp4")
+        if os.path.isfile(path) and os.path.getsize(path) >= 1000:
+            length = seconds(path)
+            if length:
+                parts.append((hi["start"], hi["end"], length))
+    return parts
+
+
+def reel_cues(parts, transcript_data, xf=0.0):
+    """Subtitle cues [{start, end, text}] for the whole reel, on its own timeline: every transcript sentence part inside each moment."""
+    cues, offset = [], 0.0
+    for start, _end, duration in parts:
+        for seg in transcript_data.get("segments", []):
+            s, e = float(seg["start"]) - start, float(seg["end"]) - start
+            text = (seg.get("text") or "").strip()
+            if e <= 0 or s >= duration or not text:
+                continue
+            cues.append({"start": round(offset + max(0.0, s), 3), "end": round(offset + min(duration, e), 3), "text": text})
+        offset += duration - xf
+    cues.sort(key=lambda c: c["start"])
+    for a, b in zip(cues, cues[1:]):                       # the crossfade overlaps two moments: one cue at a time
+        a["end"] = min(a["end"], b["start"])
+    return [c for c in cues if c["end"] - c["start"] >= 0.1]
+
+
 def _ts(seconds):
     cs = int(round(seconds * 100))
     return f"{cs // 360000}:{cs // 6000 % 60:02d}:{cs // 100 % 60:02d}.{cs % 100:02d}"

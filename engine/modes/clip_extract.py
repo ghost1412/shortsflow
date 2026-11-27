@@ -7,7 +7,7 @@ from engine.media_gen import is_url, download_source_video_from_url
 from engine.pipeline import POOL_SIZE, print_clip_score_table
 
 
-def make_reel_chapters(highlights, transcript_path, reel_path, session_dir):
+def make_reel_chapters(highlights, transcript_path, reel_path, session_dir, teaser=0.0):
     """YouTube chapters for the highlights reel (also written to <session>/chapters.txt), or [] when the reel is too short
     or anything goes wrong: chapters are a bonus and must never fail the run."""
     try:
@@ -21,6 +21,8 @@ def make_reel_chapters(highlights, transcript_path, reel_path, session_dir):
         total = probe_duration(reel_path) if reel_path and os.path.exists(reel_path) else None
         chapters = chapters_for_reel(highlights, segments, total=total)
         if chapters:
+            from engine.chapters import delay
+            chapters = delay(chapters, teaser)                  # a cold open: everything after it happens that much later
             with open(os.path.join(session_dir, "chapters.txt"), "w", encoding="utf-8") as f:
                 f.write(format_chapters(chapters) + "\n")
             print(f"[Log] {len(chapters)} YouTube chapters written to chapters.txt and the description")
@@ -291,6 +293,29 @@ def cut_and_render(args, session_dir, highlights, transcript_path, spoken_transc
     return highlights, extracted_files, final_silence
 
 
+def cold_open_reel(args, session_dir, highlights, reel_file, transcript_path):
+    """--cold_open for the highlights video: one strong later sentence first, then the whole reel. The info of the teaser, or None."""
+    from engine import cold_open, reel_captions
+    earlier = cold_open.load_applied(reel_file)                 # --use_cache gives back a reel that already has its teaser
+    if earlier:
+        return earlier
+    if args.tighten:
+        print("[Warning] Cold open is skipped for a highlights video made with --tighten: its word times would be off.")
+        return None
+    parts = reel_captions.reel_parts(highlights, os.path.join(session_dir, "temp_segments"))
+    try:
+        with open(transcript_path, "r", encoding="utf-8") as f:
+            transcript = json.load(f)
+    except (OSError, ValueError):
+        transcript = {}
+    timed = reel_captions.reel_words(parts, transcript, 0.25 if len(parts) > 1 else 0.0)
+    words = [{"word": text, "start": start, "end": end} for start, end, text in timed]
+    info = cold_open.apply_to_clip(reel_file, words, max_total=None)
+    if info:
+        cold_open.save_applied(reel_file, info)
+    return info
+
+
 def finish_clips(args, session_dir, highlights, extracted_files, transcript_path, spoken_transcript_path, final_silence, brand_kit):
     """B-roll, audio clean-up, cold open, auto-edit sound effects and the brand kit, applied to the finished clips.
     Returns (cold_infos, edit_logs): what the cold open and the auto-edit did per clip, for the SRT export and results.json."""
@@ -338,8 +363,12 @@ def finish_clips(args, session_dir, highlights, extracted_files, transcript_path
     # Cold open: the strongest line first, then the clip from its start (built from the finished clip, so captions come along)
     cold_infos = {}
     if getattr(args, "cold_open", False) and extracted_files:
-        if args.extract_mode == "long" or getattr(args, "mashup", False):
-            print("[Log] Cold open applies to short clips; skipped for the highlights video.")
+        if getattr(args, "mashup", False):
+            print("[Log] Cold open is not made for a mashup; skipped.")
+        elif args.extract_mode == "long":
+            info = cold_open_reel(args, session_dir, highlights, extracted_files[0], transcript_path)
+            if info:
+                cold_infos[extracted_files[0]] = info
         else:
             from engine.broll import clip_words
             from engine.cold_open import apply_to_clip as apply_cold_open, load_applied, save_applied
@@ -552,7 +581,9 @@ def write_outputs(args, session_dir, highlights, extracted_files, transcript_pat
             "tags": meta.get('tags', [])
         }
         if not getattr(args, "mashup", False):
-            reel_chapters = make_reel_chapters(highlights, transcript_path, extracted_files[0] if extracted_files else None, session_dir)
+            reel_file = extracted_files[0] if extracted_files else None
+            reel_chapters = make_reel_chapters(highlights, transcript_path, reel_file, session_dir,
+                                               teaser=(cold_infos.get(reel_file) or {}).get("duration", 0.0))
             if reel_chapters:
                 from engine.chapters import format_chapters
                 block = format_chapters(reel_chapters)
@@ -811,7 +842,16 @@ def run(args, target_bitrate, target_preset):
         try:
             with open(transcript_path, 'r', encoding='utf-8') as f:
                 t_data = json.load(f)
+            whole_reel = args.extract_mode == "long" and not getattr(args, "mashup", False)
             for i, clip_file in enumerate(extracted_files):
+                if whole_reel:                          # one file, many moments: cues for all of them (not only the first one's)
+                    from engine import reel_captions
+                    from engine.cold_open import shift_cues
+                    from engine.pipeline import export_srt
+                    parts = reel_captions.reel_parts(highlights, os.path.join(session_dir, "temp_segments"))
+                    cues = reel_captions.reel_cues(parts, t_data, 0.25 if len(parts) > 1 else 0.0)
+                    export_srt({'segments': shift_cues(cues, cold_infos.get(clip_file))}, clip_file.rsplit('.', 1)[0] + ".srt")
+                    break
                 if i < len(highlights):
                     hi = highlights[i]
                     # Copies: one transcript serves every clip, so one clip's offsets must not leak into the next
