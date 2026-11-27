@@ -19,7 +19,10 @@ def make_reel_chapters(highlights, transcript_path, reel_path, session_dir, teas
         except (OSError, ValueError, TypeError):
             segments = []
         total = probe_duration(reel_path) if reel_path and os.path.exists(reel_path) else None
-        chapters = chapters_for_reel(highlights, segments, total=total)
+        from engine.reel_captions import reel_parts
+        parts = reel_parts(highlights, os.path.join(session_dir, "temp_segments"))      # real lengths: cut pauses shorten moments unevenly
+        durations = [p[2] for p in parts] if len(parts) == len(highlights) else None
+        chapters = chapters_for_reel(highlights, segments, total=total, durations=durations)
         if chapters:
             from engine.chapters import delay
             chapters = delay(chapters, teaser)                  # a cold open: everything after it happens that much later
@@ -299,9 +302,6 @@ def cold_open_reel(args, session_dir, highlights, reel_file, transcript_path):
     earlier = cold_open.load_applied(reel_file)                 # --use_cache gives back a reel that already has its teaser
     if earlier:
         return earlier
-    if args.tighten:
-        print("[Warning] Cold open is skipped for a highlights video made with --tighten: its word times would be off.")
-        return None
     parts = reel_captions.reel_parts(highlights, os.path.join(session_dir, "temp_segments"))
     try:
         with open(transcript_path, "r", encoding="utf-8") as f:

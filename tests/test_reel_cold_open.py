@@ -60,7 +60,7 @@ def test_the_reel_gets_its_teaser_from_its_own_words_and_is_not_held_under_a_min
     assert info["duration"] == 2.0 and seen["max_total"] is None
     first = seen["words"][0]
     assert first["word"] == "First" and first["start"] == 1.0 and round(first["end"], 2) == 1.4
-    assert clip_extract.cold_open_reel(argparse.Namespace(tighten=True), str(tmp_path), HIGHLIGHTS, "reel.mp4", str(path)) is None
+    assert clip_extract.cold_open_reel(argparse.Namespace(tighten=True), str(tmp_path), HIGHLIGHTS, "reel.mp4", str(path))      # cut pauses no longer rule it out
 
 
 def test_a_mic_check_written_as_one_number_is_still_a_mic_check():

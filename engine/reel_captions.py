@@ -3,6 +3,7 @@
 The MoviePy path composited one image layer per word on every frame (24 minutes for a 4 minute reel). Here the words are
 written to an ASS subtitle file and burned in with a single FFmpeg pass, which takes seconds.
 """
+import json
 import os
 import re
 import shutil
@@ -11,17 +12,31 @@ import subprocess
 from engine.script_fonts import ARABIC_FONT, SUBSET_DIR, cjk_language, cjk_subset, has_arabic, subset_files_for
 
 
+def _kept_times(a, b, keeps):
+    """Where the stretch a..b (seconds into a moment) lands once only the `keeps` pieces are left, or None when all of it was cut."""
+    if keeps is None:
+        return a, b
+    if not any(min(b, y) - max(a, x) > 0 for x, y in keeps):
+        return None
+    return tuple(sum(max(0.0, min(t, y) - x) for x, y in keeps) for t in (a, b))
+
+
 def reel_words(parts, transcript_data, xf=0.0):
     """Words on the REEL timeline. `parts` = [(start, end, duration)] for each segment in play order (source seconds and
-    the rendered segment length); consecutive segments overlap by `xf` seconds (the crossfade)."""
+    the rendered segment length), with a fourth item, the kept pieces, for a segment whose pauses were cut; consecutive
+    segments overlap by `xf` seconds (the crossfade)."""
     words, offset = [], 0.0
-    for start, _end, duration in parts:
+    for start, _end, duration, *kept in parts:
+        keeps = kept[0] if kept else None
         for seg in transcript_data.get("segments", []):
             for w in seg.get("words") or []:
                 text = (w.get("word") or "").strip()
                 if not text or "start" not in w or "end" not in w:
                     continue
-                ws, we = float(w["start"]) - start, float(w["end"]) - start
+                moved = _kept_times(float(w["start"]) - start, float(w["end"]) - start, keeps)
+                if moved is None:
+                    continue
+                ws, we = moved
                 if we <= 0 or ws >= duration:
                     continue
                 words.append((offset + max(0.0, ws), offset + min(duration, max(we, ws + 0.12)), text))
@@ -37,6 +52,33 @@ def reel_words(parts, transcript_data, xf=0.0):
     return fixed
 
 
+def kept_file(segment_folder, i):
+    return os.path.join(segment_folder, f"seg_{i}.keeps.json")
+
+
+def save_kept(segment_folder, i, video=None, keeps=None):
+    """Note that moment i is in the reel as `video` with only `keeps` left of it (nothing noted: as it was cut)."""
+    note = {"video": os.path.basename(video), "keeps": [list(k) for k in keeps]} if video and keeps else {}
+    try:
+        with open(kept_file(segment_folder, i), "w", encoding="utf-8") as f:
+            json.dump(note, f)
+    except OSError as e:
+        print(f"[Warning] Could not note the cut pauses of moment {i + 1}: {e}")
+
+
+def load_kept(segment_folder, i):
+    """(path, keeps) of moment i's tightened piece, or (None, None)."""
+    try:
+        with open(kept_file(segment_folder, i), encoding="utf-8") as f:
+            note = json.load(f)
+        path = os.path.join(segment_folder, note["video"])
+        if os.path.isfile(path):
+            return path, note["keeps"]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None, None
+
+
 def reel_parts(highlights, segment_folder, seconds=None):
     """[(source start, source end, rendered length)] of the highlights that are in the reel: those whose cut piece seg_<i>.mp4 is there."""
     seconds = seconds or clip_seconds
@@ -44,18 +86,23 @@ def reel_parts(highlights, segment_folder, seconds=None):
     for i, hi in enumerate(highlights):
         path = os.path.join(segment_folder, f"seg_{i}.mp4")
         if os.path.isfile(path) and os.path.getsize(path) >= 1000:
-            length = seconds(path)
+            tight, keeps = load_kept(segment_folder, i)
+            length = seconds(tight or path)
             if length:
-                parts.append((hi["start"], hi["end"], length))
+                parts.append((hi["start"], hi["end"], length, keeps) if tight else (hi["start"], hi["end"], length))
     return parts
 
 
 def reel_cues(parts, transcript_data, xf=0.0):
     """Subtitle cues [{start, end, text}] for the whole reel, on its own timeline: every transcript sentence part inside each moment."""
     cues, offset = [], 0.0
-    for start, _end, duration in parts:
+    for start, _end, duration, *kept in parts:
+        keeps = kept[0] if kept else None
         for seg in transcript_data.get("segments", []):
-            s, e = float(seg["start"]) - start, float(seg["end"]) - start
+            moved = _kept_times(float(seg["start"]) - start, float(seg["end"]) - start, keeps)
+            if moved is None:
+                continue
+            s, e = moved
             text = (seg.get("text") or "").strip()
             if e <= 0 or s >= duration or not text:
                 continue

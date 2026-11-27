@@ -15,3 +15,10 @@ def test_a_heading_about_something_never_said_is_not():
 def test_invented_numbers_and_invented_names_in_a_sentence_are_still_refused():
     assert not ch.grounded_title("Eye Issues After 9 Months", SAID)
     assert not ch.grounded_title("What happens to eyes in Houston", SAID)
+
+
+def test_an_unreadable_reply_is_asked_again_and_then_said_out_loud(capsys):
+    replies = ["not json", {"titles": ["Eye Health Issues"]}]
+    assert ch.llm_titles([SAID], ask=lambda p: replies.pop(0)) == ["Eye Health Issues"]
+    assert ch.llm_titles([SAID], ask=lambda p: "still not json") is None
+    assert "using keywords" in capsys.readouterr().out

@@ -4,6 +4,10 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Highlights video from the command line: the default length is now 3 minutes (it was 30 seconds, the default meant for Shorts), and an unreadable chapter-title reply is asked once more instead of silently giving keyword titles. `--cold_open` now works together with `--tighten`.
+
+- Fix: `--tighten` and `--remove_fillers` did nothing for the highlights video. Long pauses are now cut there too (gentler than in Shorts: only pauses over about a second), and its captions, subtitles, cold open and chapter times follow the cuts.
+
 - Fix: highlights chapters: good titles such as "Eye Health Issues" were thrown away because their capitals looked like invented names, and a list of keywords was shown instead.
 
 - Shorts and highlights: a clip no longer opens on words that lean on what the viewer did not hear ("So, in that sense, …", "And so …", "Because …"). Only those words are cut, using the word timings; the sentence stays, and openings like "So I quit my job" or "Because of the war …" are left alone.

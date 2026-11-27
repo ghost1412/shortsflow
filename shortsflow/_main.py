@@ -144,7 +144,7 @@ def build_parser():
     parser.add_argument("--source_video", help="Path to long-form source video for AI extraction")
     parser.add_argument("--extract_mode", choices=["shorts", "long"], default="shorts", help="With --source_video: shorts (default) = several vertical clips; long = one compiled highlights video.")
     parser.add_argument("--clip_count", type=int, default=5, help="How many shorts to make (default 5).")
-    parser.add_argument("--target_duration", type=int, default=30, help="Target length of each short in seconds (default 30); with --extract_mode long, the length of the highlights video.")
+    parser.add_argument("--target_duration", type=int, default=None, help="Target length of each short in seconds (default 30); with --extract_mode long, the length of the highlights video (default 180).")
     from engine import auto_edit as _auto_edit
     from engine import transitions as _transitions
     parser.add_argument("--auto_edit", choices=_auto_edit.preset_names() + ["auto"], help="auto = choose the template from the file name and --user_context (and the video length), print why and the runner-up. Edit like an editor (a template; add your own as JSON files, see docs/TEMPLATES.md): one choice turns on the right mix of pause/um cuts, captions, zooms, cutaways, teaser opening, colour and sound effects for this kind of video. Your own flags still win. Writes edit_plan.json.")
@@ -336,6 +336,8 @@ def build_parser():
 def parse_args():
     parser = build_parser()
     args = parser.parse_args()
+    if args.target_duration is None:      # a highlights video of 30 seconds is not a highlights video
+        args.target_duration = 180 if args.extract_mode == "long" else 30
     if getattr(args, "recap_like", None):
         if str(getattr(args, "mode", "") or "").upper() != "TRIP":
             parser.error("--recap_like is for --mode TRIP (a recap of your trip videos).")

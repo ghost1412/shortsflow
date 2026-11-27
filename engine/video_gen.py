@@ -96,6 +96,11 @@ FIT_CAPTION_Y = 1320       # Remotion caption top edge for --layout fit: just be
 PLAIN_CAPTION_Y = 1400
 
 
+# A long video takes gentler cuts than a short: only pauses over about 1.2 s go, and 0.3 s stays on each side of speech
+REEL_PAUSE_CUTS = {"padding": 0.3, "min_gap": 0.6}
+REEL_FILLER_CUTS = {"padding": 0.02, "min_gap": 0.06}
+
+
 def _spans_file(segment):
     return os.path.splitext(segment)[0] + ".split.json"
 
@@ -3085,10 +3090,25 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
         for i, hi in enumerate(highlights):
             task_path = os.path.join(output_dir, "temp_segments", f"seg_{i}.mp4")
             if not os.path.exists(task_path) or os.path.getsize(task_path) < 1000: continue
+            from engine.reel_captions import save_kept
+            segment_folder = os.path.dirname(task_path)
+            keeps = None
+            if silence_intervals:  # --tighten / --remove_fillers: cut this moment's pauses; captions follow the kept pieces
+                try:
+                    from engine.transcript_edit import tighten_segment
+                    info = {}
+                    tight = tighten_segment(task_path, hi, silence_intervals, transcript_data, segment_folder, i, info=info,
+                                            **(REEL_FILLER_CUTS if remove_fillers else REEL_PAUSE_CUTS))
+                    if tight:
+                        print(f"[Log] Tightened moment {i+1}: {hi['end'] - hi['start']:.1f}s -> {tight[2]:.1f}s")
+                        task_path, keeps = tight[0], info["keeps"]
+                except Exception as e:
+                    print(f"[Warning] Could not tighten moment {i+1} ({e}); using it as it was cut.")
+            save_kept(segment_folder, i, task_path if keeps else None, keeps)
             try:
                 clip = VideoFileClip(task_path)
                 clips.append(clip)
-                parts.append((hi['start'], hi['end'], clip.duration))
+                parts.append((hi['start'], hi['end'], clip.duration, keeps) if keeps else (hi['start'], hi['end'], clip.duration))
                 seg_paths.append(task_path)
             except Exception as e:
                 print(f"[Warning] Segment {i+1} could not be loaded for the reel: {e}")

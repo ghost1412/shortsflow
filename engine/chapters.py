@@ -128,15 +128,17 @@ def llm_titles(texts, ask=None):
         f"{listing}\n"
         f'Return ONLY JSON: {{"titles": ["...", ...]}} with exactly {len(texts)} titles in order.'
     )
-    try:
-        data = ask(prompt)
-    except Exception as e:
-        print(f"[Warning] Chapter titles from the LLM failed ({e}); using keywords.")
-        return None
-    titles = data.get("titles") if isinstance(data, dict) else data
-    if not isinstance(titles, list) or len(titles) != len(texts):
-        return None
-    return [_clean_title(t) for t in titles]
+    for attempt in (1, 2):                      # a small local model now and then answers with something unreadable
+        try:
+            data = ask(prompt)
+        except Exception as e:
+            print(f"[Warning] Chapter titles from the LLM failed ({e}); using keywords.")
+            return None
+        titles = data.get("titles") if isinstance(data, dict) else data
+        if isinstance(titles, list) and len(titles) == len(texts):
+            return [_clean_title(t) for t in titles]
+    print("[Warning] The LLM did not give one readable title per chapter (asked twice); using keywords.")
+    return None
 
 
 def _is_heading(title):
