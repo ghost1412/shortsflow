@@ -372,7 +372,8 @@ def get_llm_response(
 
         # A model that just said "too many requests" is left alone for a minute (every call used to wait through four tries of it first)
         rested = [m for m in gemini_models if _GEMINI_COOLDOWN.get(m, 0) <= time.time() or m == target_model]
-        gemini_models = rested or gemini_models
+        # with every model resting, only those that come back within a minute are asked: one out of quota for longer goes straight to the fallbacks
+        gemini_models = rested or [m for m in gemini_models if _GEMINI_COOLDOWN[m] - time.time() <= 60]
 
         timeouts_in_a_row = 0
         for g_model in gemini_models:
@@ -410,6 +411,11 @@ def get_llm_response(
                     if response.status_code == 429:
                         spent = "PerDay" in str(getattr(response, "text", ""))         # the day's free requests are used up: not worth asking again for an hour
                         _GEMINI_COOLDOWN[g_model] = time.time() + (3600 if spent else 60)
+                        if spent:                              # also for the last or the only model: trying again today cannot help
+                            print(f"[Warning] Gemini API ({g_model}): the free requests for today are used up; it is left alone for an hour.")
+                            break
+                        if attempt == max_attempts - 1:        # limited through every try: a minute is not enough rest
+                            _GEMINI_COOLDOWN[g_model] = time.time() + 600
                         if g_model != target_model and g_model != gemini_models[-1]:
                             print(f"[Warning] Gemini API ({g_model}) is rate limited (free-tier limit); using the next Gemini model.")
                             break
