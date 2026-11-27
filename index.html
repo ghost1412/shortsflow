@@ -109,7 +109,7 @@
       <p class="sub">Three steps, no account needed to clip a video.</p>
       <div class="grid steps">
         <div class="card step"><h3>Add a video</h3><p>Paste a YouTube link or upload a file from your computer, in the browser app or from the command line.</p></div>
-        <div class="card step"><h3>It finds the moments</h3><p>Local speech recognition reads what is said, an AI scores the hooks, and every clip comes with the reason it was picked.</p></div>
+        <div class="card step"><h3>It finds the moments</h3><p>Local speech recognition reads what is said, ShortsFlow scores them (an AI model improves this if you add one), and every clip comes with the reason it was picked.</p></div>
         <div class="card step"><h3>Review and export</h3><p>Preview each short, change the caption style, trim it, add your logo and handle, then download the vertical video.</p></div>
       </div>
     </section>
@@ -120,10 +120,9 @@
       <div class="demos">
         <figure><img loading="lazy" src="demos/demo_case_9x16.gif" alt="An explainer made from one web page: an animated diagram over stock footage with a source chip and captions"><figcaption>Explainer written from one web page, with an animated diagram</figcaption></figure>
         <figure><img loading="lazy" src="demos/demo_podcast_cuts.gif" alt="Podcast clip with speaker cuts and captions"><figcaption>Podcast clipping with active-speaker cuts</figcaption></figure>
-        <figure><img loading="lazy" src="demos/demo_spot_the_lie.gif" alt="A spot-the-lie short with three facts"><figcaption>"Spot the lie" quiz short, made from an idea</figcaption></figure>
-        <figure><img loading="lazy" src="demos/demo_facts.gif" alt="An animated facts short"><figcaption>Animated facts short</figcaption></figure>
         <figure><img loading="lazy" src="demos/demo_recap.gif" alt="A recap video with title cards and fast cuts made from six clips"><figcaption>Recap: six clips become one video</figcaption></figure>
       </div>
+      <figure style="max-width:720px;margin:24px auto 0"><img loading="lazy" src="demos/presenters.png" alt="Ten ready-made presenters: six people, two cats, a dog and a robot" style="width:100%;height:auto"><figcaption>Presenters that talk through your explainers. Pick one or build your own.</figcaption></figure>
     </section>
 
     <section id="app">
@@ -151,11 +150,12 @@ shortsflow clip my_video.mp4</pre></div>
 
     <section id="local">
       <h2>What stays on your PC, and what can leave it</h2>
-      <p class="sub">Local by default. Here is exactly where data can go. (Explainers also send the text of your sources to the AI provider, short footage search phrases to Pexels, and narration text to the voice service.)</p>
+      <p class="sub">Clipping runs on your PC with no key. Other things can leave it, depending on what you use.</p>
       <div class="note">
-        <p style="margin:0 0 8px"><strong>Stays on your PC:</strong> your video files, the speech recognition, the cropping, the captions and the rendering.</p>
-        <p style="margin:0 0 8px"><strong>Fetched from the internet:</strong> a YouTube link is downloaded from YouTube to your PC when you paste one.</p>
-        <p style="margin:0 0 8px"><strong>Can leave your PC, only if you use it:</strong> the transcript text goes to the AI provider you choose (Gemini, Groq and others) for titles and translations; small video frames go to Gemini if you turn on picture descriptions; text for computer voices goes to Microsoft's Edge voice service (or ElevenLabs, if you set it up) in the dub and idea-to-video modes; a Google Drive upload sends the finished video to your Drive; trip recaps send rounded GPS to the free OpenStreetMap service for place names. Picking Ollama keeps the AI text on your PC.</p>
+        <p style="margin:0 0 8px"><strong>Stays on your PC when you clip:</strong> your video files, the speech recognition, the cropping, the captions and the rendering.</p>
+        <p style="margin:0 0 8px"><strong>Fetched from the internet:</strong> a pasted YouTube link is downloaded to your PC; explainer sources are fetched from their pages.</p>
+        <p style="margin:0 0 8px"><strong>Can leave your PC:</strong> text to the AI model you choose (Automatic tries the providers you have keys for); pictures or small video frames to Gemini for picture descriptions, smart photo reels and story drawing checks, when you have a Gemini key; prompts for generated pictures; the text to be spoken to Microsoft's online Edge voice (the default for narration) or ElevenLabs; short search phrases to Pexels; rounded GPS to OpenStreetMap for trip recaps; the finished video to Google Drive or Upload-Post when you upload or publish.</p>
+        <p style="margin:0 0 8px">Ollama for writing and <code>SHORTSFLOW_VISION=ollama</code> for looking at pictures keep those two on your PC (since version 0.9.5). <a href="https://github.com/ghost1412/shortsflow/blob/main/docs/GUIDE.md#privacy-what-leaves-your-pc">Full privacy list</a>.</p>
         <p style="margin:0">Honest limits: speech recognition is slow without an NVIDIA graphics card, and the quality of titles depends on the AI model you use.</p>
       </div>
     </section>
@@ -163,11 +163,11 @@ shortsflow clip my_video.mp4</pre></div>
     <section>
       <h2>And more</h2>
       <div class="grid">
-        <div class="card"><h3>Explainers from sources</h3><p>A web page, PDF, arXiv paper or YouTube video in; a narrated video out, written only from what the source says, with Mermaid and Manim animation.</p></div>
+        <div class="card"><h3>Explainers from sources</h3><p>A web page, PDF, arXiv paper or YouTube video in; a narrated video out with diagrams and animation. Sentences with numbers or names your sources never mention are removed. Check the facts: meaning is not verified.</p></div>
         <div class="card"><h3>Recaps and photo reels</h3><p>Trip, wedding or event footage into one story; photos into a reel with music.</p></div>
-        <div class="card"><h3>Publish and schedule</h3><p>YouTube, TikTok, Instagram, X and more, from the app, now or later.</p></div>
+        <div class="card"><h3>Publish and schedule</h3><p>Straight to your own YouTube channel, now or later. Other platforms go through Upload-Post, not yet tested with a live account.</p></div>
         <div class="card"><h3>30+ formats</h3><p>Facts quizzes, explainers, top-5 lists, stories and more, from just an idea.</p></div>
-        <div class="card"><h3>Highlights video</h3><p>A long video cut to one video of its best moments, in story order, so the whole story is still told.</p></div>
+        <div class="card"><h3>Highlights video</h3><p>A long video cut to one video of its best moments, in their original order, at the length you choose.</p></div>
         <div class="card"><h3>Dubbing</h3><p>Translate a video's speech and re-voice it, with a choice of tone and voice speed.</p></div>
         <div class="card"><h3>Game footage</h3><p>Finds story and action moments, even silent fights, and picks the framing.</p></div>
         <div class="card"><h3>For agents</h3><p>An MCP server and a REST API, so other tools can drive it.</p></div>
