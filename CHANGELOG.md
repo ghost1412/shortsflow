@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Shorts and highlights: a cold open no longer starts on a line about someone not yet heard of ("They've now called it ..."), and an opening like "So in that sense, ..." is trimmed even without a comma after "So".
+
 - Fix: storyteller and voice-server narration: when the recogniser wrote the speech another way (Hindi came back in Urdu letters), captions were spread evenly and ran more than a second off. Its word times are now used by position.
 
 - New: `--case narrator=gemini`, a storyteller voice that acts the narration (Gemini speech preview; also in the browser app). Online and optional: the narration text goes to Google with your Gemini key, and the free quota is small. If it cannot finish, the whole video uses the standard voice. `--case gemini_voice=NAME` picks the voice.

@@ -208,6 +208,8 @@ def lead_in_length(tokens):
             n += 1
         elif bare[n] in LEAD_WITH_COMMA and comma[n]:
             n += 1
+        elif bare[n] in LEAD_WITH_COMMA and any(tuple(bare[n + 1:n + 1 + len(p)]) == p and comma[n + len(p)] for p in LEAD_PHRASES):
+            n += 1                                           # "So in that sense, ...": the phrase that follows marks the "So" as filler
         elif n and bare[n - 1] == "and" and bare[n] in ("so", "then"):     # "And so there ..." / "And then ..."
             n += 1
         else:

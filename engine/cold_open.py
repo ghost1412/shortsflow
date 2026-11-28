@@ -34,6 +34,15 @@ def _default_score(text):
         return 0.0
 
 
+# a line that starts with one of these is about somebody or something named earlier ("They've now called it ...")
+POINTS_BACK = {"it", "they", "he", "she", "them", "it's", "he's", "she's", "they're", "they've", "they'll", "they'd", "it'll"}
+
+
+def _points_back(text):
+    first = str(text).split()[0].lower().replace("\u2019", "'").strip(",.!?\"'") if str(text).split() else ""
+    return first in POINTS_BACK
+
+
 def pick_hook(words, duration, hint=None, score_fn=None, min_clip=MIN_CLIP, min_teaser=MIN_TEASER, max_teaser=MAX_TEASER):
     """{'start', 'end', 'text'} on the clip's timeline for the sentence to show first, or None.
 
@@ -55,6 +64,8 @@ def pick_hook(words, duration, hint=None, score_fn=None, min_clip=MIN_CLIP, min_
             continue
         if len(text.split()) < 4 or _is_leadin(text, 6):
             continue
+        if _points_back(text):
+            continue                                      # the first thing heard cannot lean on something the viewer has not heard
         opening = [w for w in words if s - 0.01 <= float(w["start"]) <= e][:FIRST_WORDS]
         if any(float(w["end"]) - float(w["start"]) < NO_LENGTH or " " in str(w["word"]).strip() for w in opening):    # or words reel_words joined
             continue                                      # the cut would start part-way through the line

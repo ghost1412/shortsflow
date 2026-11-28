@@ -15,6 +15,8 @@ from engine import highlight_quality as hq
     ("So, yes. That is the whole story", 0),                     # never past the end of a sentence
     ("And then we left.", 4 * 0 + 0),                            # too little would be left
     ("There are three reasons this fails", 0),
+    ("So in that sense, there are interesting movements", 4),
+    ("So in that case we all went home", 0),
     ("And so there needs to be a recognition", 2),
 ])
 def test_which_words_are_cut(line, cut):
