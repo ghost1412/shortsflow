@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Explainer: the numbers on a picture and its list now follow the process. A label such as "Indoor coil" was tied to the first "coils" in the narration and jumped ahead of the step before it. A label also appears where most of its words are said, not at the first single word it shares with an earlier sentence.
+
 - Highlights chapters: when one title goes beyond what is said, it is asked for once more before a keyword title is used, and the log says which.
 
 - Shorts and highlights: a cold open no longer starts on a line about someone not yet heard of ("They've now called it ..."), and an opening like "So in that sense, ..." is trimmed even without a comma after "So".

@@ -73,6 +73,22 @@ def test_attach_clips_only_for_the_asked_scenes_and_sets_the_rate(tmp_path):
     assert "clip" not in props["sections"][1]
 
 
+def test_a_word_shared_with_a_later_step_does_not_move_that_step_ahead():
+    text = "Liquid refrigerant flows through coils outside. The compressor squeezes this gas. That warmed gas then flows indoors and cools."
+    words = [{"word": w, "start": i * 0.4, "end": i * 0.4 + 0.3} for i, w in enumerate(text.split())]
+    labels, cues = cr.spoken_order(["Refrigerant", "Compressor", "Indoor coil"], words, duration=12)
+    assert labels == ["Refrigerant", "Compressor", "Indoor coil"] and cues == sorted(cues)
+    assert cr.spoken_order(["Compressor", "Indoor coil"], words[:6] + words[6:9], duration=8)[0] == ["Indoor coil", "Compressor"]   # said nowhere later: the only match counts
+    said_whole = [{"word": w, "start": i * 0.4, "end": i * 0.4 + 0.3} for i, w in enumerate("the indoor coil warms before the compressor".split())]
+    assert cr.spoken_order(["Compressor", "Indoor coil"], said_whole, duration=6)[0] == ["Indoor coil", "Compressor"]       # the narrator's order still wins
+
+
+def test_a_label_belongs_where_most_of_its_words_are_said():
+    text = "Ground source heat pumps use steady temperatures. More data sharing from heat meters could help."
+    words = [{"word": w, "start": i * 0.4, "end": i * 0.4 + 0.3} for i, w in enumerate(text.split())]
+    assert words[cr._first_spoken("Share heat meter data", words)]["word"] == "data"
+
+
 def test_spoken_order_sorts_labels_by_when_they_are_said_and_starts_early():
     words = [{"word": w, "start": 6 + i * 0.5, "end": 6.4 + i * 0.5} for i, w in enumerate("Oil prices rose then flights were cancelled worldwide".split())]
     labels, cues = cr.spoken_order(["Flights cancelled", "Oil prices", "Never said here"], words, duration=20)

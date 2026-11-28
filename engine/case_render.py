@@ -130,17 +130,29 @@ def label_cues(labels, words, duration=None, min_gap=0.8):
     return cues
 
 
-def _first_spoken(label, words):
-    """Index of the first word that matches a content word of `label` (numbers match by digits), None when none does."""
+def _first_spoken(label, words, after=-1):
+    """Index of the word where `label` is spoken (numbers match by digits), None when no content word of it is. It is the place where the
+    most content words of the label are said close together: "Share heat meter data" belongs at "data sharing from heat meters", not at an
+    earlier lone "heat". When only a part of the label is said and several places say as much of it ("Indoor coil": "coils" ... "indoors"),
+    the first one later than word `after` (where the label before it in the script is spoken) is taken, so a shared word does not move a
+    step of a process ahead of the step before it."""
     import re
     tokens = [re.sub(r"\W+", "", x.lower()) for x in re.findall(r"[\w$.,]+", label)]
     tokens = [x for x in tokens if len(x) >= 4 or x.isdigit()]
+    hits = []                                       # (word index, which content words of the label that word is)
     for i, w in enumerate(words):
         key, digits = re.sub(r"\W+", "", (w["word"] or "").lower()), re.sub(r"\D", "", w["word"] or "")
-        for tok in tokens:
-            if tok and ((tok.isdigit() and digits == tok) or (not tok.isdigit() and _word_matches(tok, key))):
-                return i
-    return None
+        same = {n for n, tok in enumerate(tokens) if tok and ((tok.isdigit() and digits == tok) or (not tok.isdigit() and _word_matches(tok, key)))}
+        if same:
+            hits.append((i, same))
+    if not hits:
+        return None
+    near = [(i, len(set().union(*(same for j, same in hits if 0 <= j - i <= len(tokens) + 1)))) for i, _ in hits]
+    most = max(n for _, n in near)
+    best = [i for i, n in near if n == most]
+    if most == len(tokens):
+        return best[0]
+    return next((i for i in best if i > after), best[0])
 
 
 ORDERED_SCENES = ("compare", "chart", "quote")      # their labels keep the order the script gave; the others follow the narration
@@ -161,7 +173,11 @@ def spoken_order(labels, words, duration=None, first_by=1.5, gap=0.8):
     """(labels, cues): the labels in the order the narrator reaches them, each with the second it is spoken. A label the narrator
     never says follows the last one. The first cue is at most `first_by` seconds in, so a scene is never empty while the narrator
     talks about something else first; cues are `gap` apart at least and stay inside `duration`."""
-    found = [(_first_spoken(label, words), n, label) for n, label in enumerate(labels)]
+    found, last = [], -1
+    for n, label in enumerate(labels):
+        at = _first_spoken(label, words, after=last)
+        found.append((at, n, label))
+        last = last if at is None else at
     spoken = sorted([f for f in found if f[0] is not None], key=lambda f: (f[0], f[1]))
     silent = [f for f in found if f[0] is None]
     cues, ordered, prev = [], [], None
