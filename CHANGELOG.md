@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: voice server narration: when the timing of the captions broke down part-way through a section (seen in Hindi: captions up to 3.5 s late, then a burst of words), the audio is now listened to again.
+
 - Story look, Hindi: when the plan names people in English ("Akbar"), the story's own Hindi spelling is used, so the same person is no longer added twice with two faces. With the voice server, a section without a mood now gets one from its place and wording instead of every section being spoken at the same strength.
 
 - Hindi (and other non-Latin-script) narration in explainer and story videos: the standard voice is now one of that language, not the English default; with `narrator=voice_server` the server is told the language, copies a sample spoken in it, and the captions are timed by listening in it.

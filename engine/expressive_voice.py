@@ -157,6 +157,34 @@ def align(script_text, heard):
     return [{"word": w, "start": round(t[0], 3), "end": round(max(t[1], t[0] + 0.04), 3)} for w, t in zip(words, times)]
 
 
+RUSHED_GAP, RUSHED_RUN = 0.16, 5      # five words in a row, each under 0.16 s after the one before, is not speech
+
+
+def rushed(words):
+    """True when timed words are crammed together somewhere: the timing broke down there, and the words before them wait seconds too long."""
+    run = 0
+    for a, b in zip(words, words[1:]):
+        run = run + 1 if float(b["start"]) - float(a["start"]) < RUSHED_GAP else 0
+        if run >= RUSHED_RUN:
+            return True
+    return False
+
+
+def timed(text, audio, listen):
+    """The script's words with times. A rushed result is listened to again (the recogniser gives another answer on another pass);
+    if every pass is rushed, the words are spread over the speech by their length, which is never seconds out in one place."""
+    heard = []
+    for _ in range(3):
+        heard = listen(audio, text)
+        words = align(text, heard)
+        if not rushed(words):
+            return words
+    if not heard:
+        return []
+    start, end = float(heard[0]["start"]), float(heard[-1]["end"])
+    return align(text, [{"word": "", "start": start, "end": end}])
+
+
 _WHISPER = {}
 
 
@@ -221,7 +249,7 @@ def speak(text, out_audio, out_subs, sample=None, mood=None, first=False, url=No
         os.remove(raw)
     except OSError:
         pass
-    words = align(text, (listen or hear)(out_audio, text))
+    words = timed(text, out_audio, listen or hear)
     with open(out_subs, "w", encoding="utf-8") as f:
         json.dump(words, f)
     return out_audio, out_subs
