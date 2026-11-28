@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Hindi (and other non-Latin-script) narration in explainer and story videos: the standard voice is now one of that language, not the English default; with `narrator=voice_server` the server is told the language, copies a sample spoken in it, and the captions are timed by listening in it.
+
 - Fix: videos from sources in Hindi (and other non-English scripts): in the story look two people could be drawn with one face, because Hindi names all got the same file name; the Hindi full stop (।) now ends a sentence, so pictures and captions change with the sentences; a Hindi opening line is accepted; and the end card no longer says names were checked against the sources when only figures could be.
 
 - Fix: recaps made without picture descriptions could show "Day 1: No Descriptions" as a title: the model had copied the note in its instructions.

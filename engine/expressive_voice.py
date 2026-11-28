@@ -15,6 +15,7 @@ import json
 import os
 import re
 import subprocess
+import unicodedata
 import urllib.request
 
 DEFAULT_URL = "http://127.0.0.1:8080"
@@ -42,7 +43,62 @@ def mood_strength(mood, first=False):
 
 
 def _norm(word):
-    return re.sub(r"[^a-z0-9]", "", word.lower())
+    """A word for matching: letters, vowel signs and digits of any alphabet (only a-z used to be kept, so no Hindi word ever matched)."""
+    return "".join(c for c in word.lower() if unicodedata.category(c)[0] in "LMN")
+
+
+# languages told apart by the letters they are written in (the ones the multilingual voice model speaks). Latin-script languages
+# cannot be told apart this way and are read as English.
+SCRIPT_LANGUAGES = (("hi", ((0x0900, 0x097F),)), ("ar", ((0x0600, 0x06FF),)), ("he", ((0x0590, 0x05FF),)), ("el", ((0x0370, 0x03FF),)),
+                    ("ru", ((0x0400, 0x04FF),)), ("ko", ((0xAC00, 0xD7AF), (0x1100, 0x11FF))), ("ja", ((0x3040, 0x30FF),)),
+                    ("zh", ((0x4E00, 0x9FFF),)))
+# what a voice is asked to say to make the sample the server copies, in its own language (an English sample gave Hindi an English accent)
+SAMPLE_LINES = {
+    "hi": "\u0928\u092e\u0938\u094d\u0924\u0947\u0964\u0020\u0906\u091c\u0020\u092e\u0948\u0902\u0020\u0906\u092a\u0915\u094b\u0020\u090f\u0915\u0020\u092c\u0939\u0941\u0924\u0020\u0926\u093f\u0932\u091a\u0938\u094d\u092a\u0020\u0915\u0939\u093e\u0928\u0940\u0020\u0938\u0941\u0928\u093e\u0928\u0947\u0020\u0935\u093e\u0932\u093e\u0020\u0939\u0942\u0901\u0964\u0020\u0927\u094d\u092f\u093e\u0928\u0020\u0938\u0947\u0020\u0938\u0941\u0928\u093f\u090f\u002c\u0020\u0915\u094d\u092f\u094b\u0902\u0915\u093f\u0020\u0906\u0917\u0947\u0020\u091c\u094b\u0020\u0939\u0941\u0906\u002c\u0020\u0909\u0938\u0928\u0947\u0020\u0938\u092c\u0915\u094b\u0020\u091a\u094c\u0902\u0915\u093e\u0020\u0926\u093f\u092f\u093e\u0021",
+}
+
+
+def language_of(text):
+    """"hi", "ar", "ru" ... for text mostly written in that script, else "en"."""
+    letters = [ord(c) for c in str(text or "") if c.isalpha()]
+    if not letters:
+        return "en"
+    counts = {code: sum(any(a <= n <= b for a, b in ranges) for n in letters) for code, ranges in SCRIPT_LANGUAGES}
+    if counts["ja"]:                                      # Japanese mixes its own letters with Chinese ones
+        counts["ja"] += counts.pop("zh")
+    code, most = max(counts.items(), key=lambda kv: kv[1])
+    return code if most > len(letters) / 2 else "en"
+
+
+def standard_voice(language):
+    """The online Edge voice that speaks `language`, None for English or a language without one."""
+    from engine.dubbing import EDGE_VOICES
+    return EDGE_VOICES.get(language) if language != "en" else None
+
+
+def language_sample(language, folder, make=None):
+    """A WAV of an Edge voice speaking `language`, for the voice server to copy (None when it cannot be made). The line goes to
+    Microsoft's online voice service. `make(text, mp3, subs, voice)` replaces it (tests)."""
+    voice, line = standard_voice(language), SAMPLE_LINES.get(language)
+    if not voice or not line:
+        return None
+    os.makedirs(folder, exist_ok=True)
+    wav = os.path.join(folder, f"sample_{language}.wav")
+    if os.path.isfile(wav):
+        return wav
+    mp3 = os.path.join(folder, f"sample_{language}.mp3")
+    try:
+        if make:
+            make(line, mp3, mp3 + ".json", voice)
+        else:
+            from engine.voice_gen import generate_voice
+            generate_voice(line, mp3, mp3 + ".json", voice_name=voice, rate="+0%", add_cta=False, style="narration", provider="edge")
+    except Exception as e:
+        print(f"[Warning] No {language} voice sample could be made ({str(e)[:100]}).")
+        return None
+    if subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", mp3, "-ac", "1", "-ar", "24000", wav]).returncode != 0:
+        return None
+    return wav
 
 
 def align(script_text, heard):
@@ -104,7 +160,7 @@ def covers(heard, text):
     return bool(heard) and len(heard) >= 0.7 * len(text.split()) and float(heard[0]["start"]) <= 1.5 and sane(heard)
 
 
-def hear(audio, text):
+def hear(audio, text, language=None):
     """Whisper's word timings for `audio` (CPU, the 'base' model, the script as a hint). When the words do not cover the script (see `covers`) it listens again
     without the hint, which the matching of heard words to script words does not need."""
     import whisper
@@ -112,7 +168,7 @@ def hear(audio, text):
         _WHISPER["m"] = whisper.load_model(os.getenv("SHORTSFLOW_ALIGN_MODEL", "base"), device="cpu")
 
     def listen(**kw):
-        result = _WHISPER["m"].transcribe(audio, language="en", word_timestamps=True, fp16=False, **kw)
+        result = _WHISPER["m"].transcribe(audio, language=language or language_of(text), word_timestamps=True, fp16=False, **kw)
         return [{"word": w["word"].strip(), "start": w["start"], "end": w["end"]} for seg in result.get("segments", []) for w in seg.get("words", [])]
     heard = listen(initial_prompt=text[:800])
     if covers(heard, text):
@@ -126,6 +182,8 @@ def speak(text, out_audio, out_subs, sample=None, mood=None, first=False, url=No
     Raises RuntimeError when the server fails. `post(url, body) -> wav bytes` and `listen(audio, text) -> heard words` replace the network
     and Whisper (tests)."""
     body = {"input": text, "exaggeration": mood_strength(mood, first)}
+    if language_of(text) != "en":
+        body["language"] = language_of(text)              # the server then uses its multilingual voice model
     if sample and os.path.isfile(sample):
         with open(sample, "rb") as f:
             body["sample_audio_b64"] = base64.b64encode(f.read()).decode()

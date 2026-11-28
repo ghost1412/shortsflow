@@ -75,7 +75,7 @@ def _make_script(args, session_dir, opts):
     return script
 
 
-def _narrator_tag(narrator, voice_sample, avatar, voice=None):
+def _narrator_tag(narrator, voice_sample, avatar, voice=None, language="en"):
     """What the narration is spoken with, as kept in voice_cache.json, so a redo with another narrator, another recording or another presenter
     voice speaks it again: "standard", "voice_server:own_<hash>.wav" (a person's recording) or "voice_server:voice_<edge voice>.wav"."""
     if narrator != "voice_server":
@@ -84,6 +84,8 @@ def _narrator_tag(narrator, voice_sample, avatar, voice=None):
         import hashlib
         with open(voice_sample, "rb") as f:
             return "voice_server:own_" + hashlib.sha1(f.read()).hexdigest()[:12] + ".wav"
+    if language != "en":
+        return f"voice_server:sample_{language}.wav"
     from engine import avatars
     from engine.case_render import NARRATOR_VOICE
     copy = voice if voice in avatars.VOICES else (avatars.voice_for(avatar)[0] if avatar else NARRATOR_VOICE)
@@ -94,7 +96,7 @@ def _narration(args, script, session_dir, resumed, avatar=None, narrator="standa
     """([audio], [words]): the saved narration of a resumed session, else newly spoken (ElevenLabs when its key is set)."""
     from engine import case_render as cr
     if resumed:
-        cached = cr.cached_voice(script, session_dir, _narrator_tag(narrator, voice_sample, avatar, getattr(args, "voice", None)))
+        cached = cr.cached_voice(script, session_dir, _narrator_tag(narrator, voice_sample, avatar, getattr(args, "voice", None), _language(script)))
         if cached:
             print("[Log] Reusing the saved narration (no new voice is made).")
             return cached
@@ -104,6 +106,11 @@ def _narration(args, script, session_dir, resumed, avatar=None, narrator="standa
     from engine import expressive_voice as ev, voice_server
     with voice_server.while_needed(ev.server_url()):              # started here when it must be, and stopped again before the render
         return _speak(args, script, session_dir, avatar, narrator, voice_sample)
+
+
+def _language(script):
+    from engine.expressive_voice import language_of
+    return language_of(" ".join(str(s.get("narration") or "") for s in script["sections"]))
 
 
 def _speak(args, script, session_dir, avatar, narrator, voice_sample):
@@ -126,13 +133,18 @@ def _speak(args, script, session_dir, avatar, narrator, voice_sample):
         if ev.available():
             from engine import avatars
             from engine.case_render import NARRATOR_VOICE
-            sample, tag = None, _narrator_tag(narrator, voice_sample, avatar, getattr(args, "voice", None))
+            language = _language(script)
+            sample, tag = None, _narrator_tag(narrator, voice_sample, avatar, getattr(args, "voice", None), language)
             if voice_sample:
                 try:
                     sample, copy = ev.own_sample(voice_sample, os.path.join(session_dir, "voice_samples")), "your recording"
                 except RuntimeError as e:
                     print(f"[Warning] Your voice recording is not used ({e}); the presenter's voice is copied instead.")
-            if not sample:
+            if not sample and language != "en":
+                sample = ev.language_sample(language, os.path.join(session_dir, "voice_samples"))
+                copy = f"a {language} sample"
+                tag = f"voice_server:sample_{language}.wav"
+            if not sample and language == "en":
                 copy = edge_voice or (avatars.voice_for(avatar)[0] if avatar else NARRATOR_VOICE)
                 sample = ev.sample_for(copy, os.path.join(session_dir, "voice_samples"))
                 tag = f"voice_server:voice_{copy}.wav"

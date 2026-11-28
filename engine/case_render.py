@@ -441,7 +441,9 @@ def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=N
                 kwargs["clone_voice"] = clone_voice
             if generate_is_default:
                 kwargs.update(style="narration", rate="+0%")            # told at a natural pace, not the fast shorts style
-                kwargs.setdefault("voice_name", NARRATOR_VOICE)
+                from engine.expressive_voice import language_of, standard_voice
+                own = standard_voice(language_of(" ".join(str(s.get("narration") or "") for s in sections)))
+                kwargs.setdefault("voice_name", own or NARRATOR_VOICE)          # Hindi is read by a Hindi voice, not the English default
             result_audio, result_subs = generate(sec["narration"], **kwargs)
         if not result_audio or not os.path.exists(result_audio):
             raise RuntimeError(f"No voice was produced for section '{sec['title']}'.")
