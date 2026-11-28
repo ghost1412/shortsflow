@@ -7,6 +7,14 @@ from engine.media_gen import is_url, download_source_video_from_url
 from engine.pipeline import POOL_SIZE, print_clip_score_table
 
 
+def gentle_pauses(keeps, total):
+    """A highlights video's pause cuts, softened BEFORE the filler words are cut out: the fillers need precise cuts, and with those
+    the short breaths between words would be cut too, which makes a long video jump."""
+    from engine.transcript_edit import plan_keeps
+    from engine.video_gen import REEL_PAUSE_CUTS
+    return plan_keeps(keeps, total, **REEL_PAUSE_CUTS)
+
+
 def make_reel_chapters(highlights, transcript_path, reel_path, session_dir, teaser=0.0):
     """YouTube chapters for the highlights reel (also written to <session>/chapters.txt), or [] when the reel is too short
     or anything goes wrong: chapters are a bonus and must never fail the run."""
@@ -240,7 +248,10 @@ def cut_and_render(args, session_dir, highlights, transcript_path, spoken_transc
             rms = librosa.feature.rms(y=audio, frame_length=640, hop_length=160)[0]
         except Exception as e:
             print(f"[Warning] Could not refine filler cuts from audio ({e}); using Whisper timestamps.")
-        final_silence, n_fillers = remove_fillers(silence_intervals if args.tighten else [], t_segments, total, rms=rms)
+        pauses = silence_intervals if args.tighten else []
+        if pauses and args.extract_mode == "long":
+            pauses = gentle_pauses(pauses, total)
+        final_silence, n_fillers = remove_fillers(pauses, t_segments, total, rms=rms)
         print(f"[Log] Removing {n_fillers} filler word(s) (um/uh/er...)")
     
     if not highlights:

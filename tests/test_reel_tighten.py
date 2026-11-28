@@ -27,3 +27,15 @@ def test_the_cut_piece_is_what_later_steps_measure_and_a_new_render_forgets_it(t
     assert rc.reel_parts(moments, str(tmp_path), seconds=seconds) == [(10.0, 17.0, 2.0, [[0.0, 1.0], [6.0, 7.0]])]
     rc.save_kept(str(tmp_path), 0)                                     # rendered again without --tighten
     assert rc.reel_parts(moments, str(tmp_path), seconds=seconds) == [(10.0, 17.0, 7.0)]
+
+
+def test_with_filler_removal_too_a_long_video_still_keeps_its_short_breaths():
+    from engine.fillers import carve
+    from engine.modes.clip_extract import gentle_pauses
+    from engine.transcript_edit import plan_keeps
+    from engine.video_gen import REEL_FILLER_CUTS
+    speech = [(0, 2.0), (2.4, 4.0), (4.4, 6.0), (9.0, 11.0), (11.4, 13.0)]       # 0.4 s breaths and one 3 s silence
+    keeps = carve(gentle_pauses(speech, 13.0), [(5.0, 5.5)])                      # and one "um"
+    pieces = plan_keeps(keeps, 13.0, **REEL_FILLER_CUTS)
+    gaps = [round(b[0] - a[1], 1) for a, b in zip(pieces, pieces[1:])]
+    assert len(pieces) == 3 and max(gaps) > 2.0 and 0.3 < min(gaps) < 0.6          # only the long silence and the "um" are cut
