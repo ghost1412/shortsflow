@@ -25,3 +25,17 @@ def test_the_stretches_stay_with_the_cut_piece_and_a_new_cut_forgets_old_ones(tm
     assert video_gen._load_split_spans(piece) == [[4.0, 9.0]]
     video_gen._save_split_spans(piece, [])
     assert video_gen._load_split_spans(piece) == []
+
+
+class Layer:
+    def __init__(self, start, duration, pos="center"):
+        self.start, self.duration, self.pos = start, duration, pos
+
+    def with_position(self, pos):
+        return Layer(self.start, self.duration, pos)
+
+
+def test_plain_captions_move_up_only_while_both_people_are_shown():
+    moves = [{"from": 4.0, "to": 9.0, "y": cl.SEAM_Y}]
+    got = video_gen.move_captions([Layer(1.0, 0.4), Layer(5.0, 0.4), Layer(9.2, 0.4)], moves, 1400)
+    assert [c.pos for c in got] == ["center", (0, cl.SEAM_Y - 1400), "center"]

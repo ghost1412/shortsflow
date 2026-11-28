@@ -123,6 +123,16 @@ def _load_split_spans(segment):
         return []
 
 
+def move_captions(clips, moves, usual_y, scale=lambda y: y):
+    """Full-frame caption layers shown during one of the `moves` stretches are shifted so their words sit at that height."""
+    out = []
+    for clip in clips:
+        middle = clip.start + (clip.duration or 0) / 2
+        move = next((m for m in moves if m["from"] <= middle < m["to"]), None)
+        out.append(clip.with_position((0, int(scale(move["y"]) - usual_y))) if move else clip)
+    return out
+
+
 def plain_caption_y(requested):
     """Top edge of the plain (non-Remotion) clip captions. They used to sit in the exact middle (960), on a close-up speaker's
     eyes; the default height now puts them in the lower third (1400, still above the app's bottom bar). An explicit
@@ -3253,13 +3263,14 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
             loop_clips = []
             cap_data, cap_start, cap_end = transcript_data, hi['start'], hi['end']
             cut_done = False
+            spans, tight_info = _load_split_spans(task_path), {}
             if silence_intervals and tighten_mode == "cut":
                 # Cut the segment first and retime the captions to the shortened clip (same step as the Remotion path)
                 try:
                     from engine.transcript_edit import tighten_segment
                     fine = {"padding": 0.02, "min_gap": 0.06} if remove_fillers else {}
                     tight = tighten_segment(task_path, hi, silence_intervals, transcript_data,
-                                            os.path.join(output_dir, "temp_segments"), i, **fine)
+                                            os.path.join(output_dir, "temp_segments"), i, info=tight_info, **fine)
                     if tight:
                         task_path = tight[0]
                         with open(tight[1], 'r', encoding='utf-8') as f:
@@ -3288,6 +3299,7 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
                     speed = 5.0 if tighten_mode == "speed" else None
                     speed_plan = plan_tighten(sub.duration, local_silence, tighten_mode, speed, **fine)
                     sub = tighten_clip(sub, local_silence, mode=tighten_mode, speed=speed, **fine)
+                    spans = []      # this tighten moves times in a way the two-person stretches are not mapped through
                     if speed_plan and tighten_mode == "speed":
                         # the sped-up silences made the clip shorter: move every caption word to where it now is
                         cap_data, retimed_end = retime_transcript(cap_data, cap_start, cap_end, speed_plan)
@@ -3310,6 +3322,9 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
                 # Simple word overlays (Default)
                 subs = apply_influencer_subtitles(sub, cap_data, cap_start, cap_end, size=(w, h), y_pos=_aspect.scale_y(plain_caption_y(subtitle_y_pos), h))
             
+            from engine.caption_layout import seam_moves
+            subs = move_captions(subs, seam_moves(spans, subtitle_y_pos, tight_info.get("keeps")),
+                                 _aspect.scale_y(plain_caption_y(subtitle_y_pos), h), lambda y: _aspect.scale_y(y, h))
             overlays = subs
             
             # --- CONTEXT-AWARE STYLE ENHANCEMENTS ---
