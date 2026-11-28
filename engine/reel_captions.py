@@ -12,6 +12,18 @@ import subprocess
 from engine.script_fonts import ARABIC_FONT, SUBSET_DIR, cjk_language, cjk_subset, has_arabic, subset_files_for
 
 
+def join_same_moment(words):
+    """[{word, start, end}] with the words Whisper put at the very same moment ("there something that") joined into one, so none is
+    hidden by the next: a word with no length of its own is never on screen."""
+    out = []
+    for w in words:
+        if out and w["start"] - out[-1]["start"] < 0.04:
+            out[-1] = dict(out[-1], word=f"{out[-1]['word']} {w['word']}", end=max(out[-1]["end"], w["end"]))
+        else:
+            out.append(dict(w))
+    return out
+
+
 def _kept_times(a, b, keeps):
     """Where the stretch a..b (seconds into a moment) lands once only the `keeps` pieces are left, or None when all of it was cut."""
     if keeps is None:
@@ -42,15 +54,8 @@ def reel_words(parts, transcript_data, xf=0.0):
                 words.append((offset + max(0.0, ws), offset + min(duration, max(we, ws + 0.12)), text))
         offset += duration - xf
     words.sort(key=lambda t: t[0])
-    # words Whisper put at the very same moment ("there something that") are shown together, not dropped
-    together = []
-    for s, e, t in words:
-        if together and s - together[-1][0] < 0.04:
-            s0, e0, t0 = together[-1]
-            together[-1] = (s0, max(e0, e), f"{t0} {t}")
-        else:
-            together.append((s, e, t))
-    words = together
+    # words Whisper put at the very same moment are shown together, not dropped
+    words = [(w["start"], w["end"], w["word"]) for w in join_same_moment([{"start": s, "end": e, "word": t} for s, e, t in words])]
     # never show two words at once: a word ends when the next begins
     fixed = []
     for i, (s, e, t) in enumerate(words):

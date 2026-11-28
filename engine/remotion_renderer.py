@@ -322,7 +322,8 @@ def render_with_remotion(
                 duration = 30.0  # default fallback
                 
         # Filter words to only those starting before video ends
-        words = [w for w in words if w['start'] < duration]
+        from engine.reel_captions import join_same_moment
+        words = join_same_moment([w for w in words if w['start'] < duration])
                 
         # CJK captions: write a per-render bold subset of Noto Sans CJK next to the other temp assets (Arabic is bundled)
         extra_font = None

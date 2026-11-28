@@ -23,3 +23,9 @@ def test_a_line_whose_first_words_have_no_timing_is_not_used_as_the_cold_open():
     assert "secret" not in (cold_open.pick_hook(broken, 24.0, score_fn=score) or {}).get("text", "")
     joined = [dict(w, word="would anyone hide") if w["word"] == "would" else w for w in sound if w["word"] not in ("anyone", "hide")]
     assert "secret" not in (cold_open.pick_hook(joined, 24.0, score_fn=score) or {}).get("text", "")
+
+
+def test_animated_captions_get_no_word_that_could_never_be_on_screen():
+    got = rc.join_same_moment([{"word": w, "start": s, "end": e} for w, s, e in WORDS])
+    assert [w["word"] for w in got] == ["Is", "there something that", "people"]
+    assert all(w["end"] > w["start"] for w in got)
