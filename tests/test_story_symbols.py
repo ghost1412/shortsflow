@@ -47,5 +47,7 @@ def test_the_check_runs_only_for_a_plan_made_on_this_pc(monkeypatch):
 
 def test_a_card_with_nobody_to_give_the_screen_to_keeps_its_title_without_the_symbol():
     plan = {"characters": {}, "sections": [{"beats": [beat(1, name="Oven", emblem="wings")]}]}
-    sr.drop_unrelated_symbols(plan, {})
+    report = {}
+    sr.drop_unrelated_symbols(plan, report)
     assert plan["sections"][0]["beats"][0]["emblem"] == "" and plan["sections"][0]["beats"][0]["name"] == "Oven"
+    assert report["symbols"][0]["was"] == "wings"                                       # the report still names the symbol that was taken off

@@ -502,8 +502,9 @@ def drop_unrelated_symbols(plan, report):
             title = str(b.get("name") or "")
             if b.get("character") or not b.get("emblem") or b.get("big") or not title or _fits_symbol(b["emblem"], title):
                 continue
+            was = str(b["emblem"])                                   # read before the card is changed: with nobody to give the screen to, its symbol is emptied in place
             _remove(plan, {"where": "card", "section": si, "beat": b, "emblem": b["emblem"]})
-            gone.append({"name": title, "was": str(b["emblem"]), "section": si + 1, "sentence": b.get("sentence")})
+            gone.append({"name": title, "was": was, "section": si + 1, "sentence": b.get("sentence")})
 
 
 def drop_stand_ins(plan, report):
