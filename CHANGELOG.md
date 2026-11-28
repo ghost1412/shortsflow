@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: recaps made without picture descriptions could show "Day 1: No Descriptions" as a title: the model had copied the note in its instructions.
+
 - Shorts and highlights: when a speaker runs on so long that no sentence ends near the cut, the clip now stops after the nearest comma or breath instead of on whatever word came last ("... a lot of development on the").
 
 - Fix: story look: no second copy of a person who is already in the cast under a near name, and no snakes for hair unless the story speaks of snakes.

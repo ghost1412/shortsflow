@@ -879,6 +879,16 @@ def fallback_itinerary(trip_name, days, stops=None, kind="trip"):
                       "captions": ["" for _ in d["moments"]]} for i, d in enumerate(days, 1)]}
 
 
+# a small model can put the prompt's own note that a moment was not described on screen ("Day 1: No Descriptions")
+ABOUT_NOTHING = re.compile(r"\b(?:no|without|missing)\s+(?:descriptions?|captions?)\b|\bnot\s+described\b|\bdescriptions?\s+(?:is\s+|are\s+)?missing\b", re.I)
+
+
+def said(text):
+    """The model's words, or "" when they only speak of what it was not told."""
+    text = str(text or "").strip()
+    return "" if ABOUT_NOTHING.search(text) else text
+
+
 def write_itinerary(trip_name, note, days, ask=None, stops=None, kind="trip"):
     """The itinerary dict {title, days:[{title, summary, captions}]}; never fails (falls back to plain 'Day N' / 'Part N')."""
     K = get_kind(kind)
@@ -895,14 +905,14 @@ def write_itinerary(trip_name, note, days, ask=None, stops=None, kind="trip"):
         rows = data.get("days") if isinstance(data, dict) else None
         if not isinstance(rows, list) or not rows:
             return fb
-        out = {"title": (trip_name or str(data.get("title") or fb["title"]))[:60], "hook": str(data.get("hook") or "").strip()[:70], "days": []}
+        out = {"title": (trip_name or said(data.get("title")) or fb["title"])[:60], "hook": said(data.get("hook"))[:70], "days": []}
         for i, d in enumerate(days):
             row = rows[i] if i < len(rows) and isinstance(rows[i], dict) else {}
             caps = row.get("captions") if isinstance(row.get("captions"), list) else []
-            caps = [str(c)[:60] if isinstance(c, (str, int, float)) and not isinstance(c, bool) else "" for c in caps]      # a null keeps its place
+            caps = [said(c)[:60] if isinstance(c, (str, int, float)) and not isinstance(c, bool) else "" for c in caps]      # a null keeps its place
             caps += [""] * (len(d["moments"]) - len(caps))
-            title = stops[i] if stops and i < len(stops) else str(row.get("title") or f"{K['unit']} {i + 1}")
-            out["days"].append({"title": title[:50], "summary": str(row.get("summary") or "")[:160],
+            title = stops[i] if stops and i < len(stops) else (said(row.get("title")) or f"{K['unit']} {i + 1}")
+            out["days"].append({"title": title[:50], "summary": said(row.get("summary"))[:160],
                                 "captions": caps[:len(d["moments"])]})
         return out
     except Exception as e:
