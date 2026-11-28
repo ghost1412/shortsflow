@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Story look: a card that loses its picture hands the screen to the nearest character in the whole video, not a lone title on an empty backdrop; and when the model on this PC gives an unusable answer to a drawing request it is asked again after 2 seconds, not 35 (the long wait stays for a busy or rate-limited cloud model).
+
 - Story look: a card keeps a built-in symbol only when its title has something to do with it (wings for a beanstalk, a crown for a house, a spear for a harp are taken off and the character stays on screen); a small local model had picked all five of its symbols at random.
 
 - Story look (found on a small local model): 'a poor country boy' is a child; a creature the model gave no species for is read from its name (an ogre gets fangs, a hen is a bird; the ogre's wife stays a woman); and a card named after a thing that could not be drawn no longer keeps the planner's stand-in symbol (wings for a beanstalk, a crown for a house).

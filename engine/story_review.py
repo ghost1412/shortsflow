@@ -34,7 +34,8 @@ def _json(reply):
 
 def _ask_rows(ask, prompt, key):
     """The list under `key` in the model's JSON answer (a bare list counts), or None when there is no usable answer after a few tries."""
-    return story_objects.patiently(lambda: story_objects.rows_of(_json(ask(prompt)), key), "text model (review)")
+    return story_objects.patiently(lambda: story_objects.rows_of(_json(ask(prompt)), key), "text model (review)",
+                                   local=lambda: getattr(ask, "last_source", None) == "local")
 
 
 def _sentences(script):
@@ -208,8 +209,22 @@ def _pictures(plan, script, drawn):
     return out
 
 
+def _nearest_face(plan, si, i, skip=None):
+    """The beat of the character nearest to beat `i` of section `si`: one before it in that section, one after it, then the last in an earlier section, then the
+    first in a later one. `skip` is a name that must not be chosen. None when no character is on screen anywhere."""
+    def ok(b):
+        return b.get("character") and b["character"] != skip
+    beats = plan["sections"][si]["beats"]
+    found = next((b for b in reversed(beats[:i]) if ok(b)), None) or next((b for b in beats[i + 1:] if ok(b)), None)
+    for row in reversed(plan["sections"][:si]):
+        found = found or next((b for b in reversed(row["beats"]) if ok(b)), None)
+    for row in plan["sections"][si + 1:]:
+        found = found or next((b for b in row["beats"] if ok(b)), None)
+    return found
+
+
 def _remove(plan, item):
-    """Takes a picture off the screen: an object beside a speaker goes; a card with it gives the screen back to the face before it."""
+    """Takes a picture off the screen: an object beside a speaker goes; a card with it gives the screen to the nearest face (the one before it, else any in the video)."""
     beat = item["beat"]
     if item["where"] == "aside":
         beat["asides"] = [a for a in beat["asides"] if not (a["emblem"] == item["emblem"] and a["sentence"] == item["k"])]
@@ -218,7 +233,7 @@ def _remove(plan, item):
         return
     beats = plan["sections"][item["section"]]["beats"]
     i = beats.index(beat)
-    face = next((b for b in reversed(beats[:i]) if b.get("character")), None) or next((b for b in beats[i + 1:] if b.get("character")), None)
+    face = _nearest_face(plan, item["section"], i)
     if face:
         beats[i] = dict(face, sentence=beat["sentence"], asides=[])
         beats[i].pop("asides")

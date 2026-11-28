@@ -44,19 +44,26 @@ def rows_of(data, key):
     return None
 
 
-def patiently(call, label):
-    """call() until it gives something usable: a model that raises or answers nothing is asked again after a wait. None when it never does."""
+LOCAL_WAIT = 2               # the model on this PC that gave an unusable answer is not busy or rate-limited: asking again at once costs nothing
+
+
+def patiently(call, label, local=None):
+    """call() until it gives something usable: a model that raises or answers nothing is asked again after a wait. None when it never does.
+    `local()` says whether the model that just answered runs on this PC: its unusable answer (not an error) is asked again after LOCAL_WAIT seconds, not BUSY_WAIT."""
     for attempt in range(BUSY_TRIES):
+        wait = BUSY_WAIT
         try:
             got = call()
             if got is not None:
                 return got
             why = "no usable answer"
+            if local and local():
+                wait = min(BUSY_WAIT, LOCAL_WAIT)
         except Exception as e:
             why = " ".join(str(e).split())[:90]
         if attempt + 1 < BUSY_TRIES:
-            print(f"[Log] The {label} did not answer ({why}); trying again in {BUSY_WAIT} s.")
-            time.sleep(BUSY_WAIT)
+            print(f"[Log] The {label} did not answer ({why}); trying again in {wait} s.")
+            time.sleep(wait)
     print(f"[Warning] The {label} gave nothing usable after {BUSY_TRIES} tries ({why}).")
     return None
 
@@ -227,7 +234,8 @@ def make(names, ask, folder, vision=None, render=None, directory=None, setting="
     for round_ in range(ROUNDS):
         drawn = []
         for name in todo:
-            markup = patiently(lambda: _draw(name, ask, again=round_ > 0, setting=setting, feedback=feedback, tone=tone), f"text model (drawing '{name}')") if ask else None
+            markup = patiently(lambda: _draw(name, ask, again=round_ > 0, setting=setting, feedback=feedback, tone=tone), f"text model (drawing '{name}')",
+                              local=lambda: getattr(ask, "last_source", None) == "local") if ask else None
             if markup:
                 drawn.append((name, svg_doc(markup)))
             else:
