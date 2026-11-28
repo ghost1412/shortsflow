@@ -4,6 +4,12 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Story look: a card titled with a creature that is drawn in the video ("Wolf") shows that creature and not a symbol the planner picked (a spear for a wolf).
+
+- Story look: a child is drawn with a much bigger head on narrower shoulders (the scene enlarges every figure to the frame, so the old proportions read as a small adult).
+
+- Story look: a character or creature is drawn again in every section whose narration names them (a wolf was shown only at its first mention, never when it kills the sheep), without taking over a sentence that already shows something.
+
 - Review cards in the browser app show what ShortsFlow noticed about a clip ("Worth a look"), and a thumbs-down can say what was wrong (weak opening, wrong person, wrong cut, captions, boring, title); a reason that keeps coming up turns into plain advice with the option to try.
 
 - Subtitle files (`--srt`): a clip's cues hold only the words inside the clip (an "And" cut off its front is no longer there), and a clip cut by `--tighten` gets cues on its tightened timeline instead of the original one.

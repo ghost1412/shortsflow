@@ -59,7 +59,9 @@ def test_women_children_bald_heads_and_markings_are_drawn_and_a_woman_has_long_h
     for weapon in sa.WEAPONS:
         xml.dom.minidom.parseString(sa.character_svg({"weapon": weapon}))
     child, grown = sa.character_svg({"figure": "child"}), sa.character_svg({})
-    assert "scale(0.7 0.7)" in child and "scale(0.9 0.84)" in child and "#e8686a" in child and "scale(0.7 0.7)" not in grown      # small shoulders, a large round head, cheeks
+    body, head = f"scale({sa.CHILD_BODY} {sa.CHILD_BODY})", f"scale({sa.CHILD_HEAD[0]} {sa.CHILD_HEAD[1]})"
+    assert body in child and head in child and "#e8686a" in child and body not in grown      # small shoulders, a large round head, cheeks
+    assert sa.CHILD_HEAD[0] / sa.CHILD_BODY >= 1.6                     # the scene enlarges any figure to the frame: only a head this big on shoulders this narrow reads as a child
     assert "scale(0.8)" in sa.character_svg({"figure": "child", "species": "lion"})                                              # an animal's young is the animal, smaller
 
 

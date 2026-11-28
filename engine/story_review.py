@@ -440,6 +440,44 @@ def review_coverage(plan, script, ask, folder, drawn, vision, render, report):
     note_lost(plan, wanted, report)
 
 
+def creatures_as_figures(plan, report):
+    """A card titled with a creature that is drawn in this video ("Wolf") shows that creature, not a symbol the planner picked for it (a spear for a wolf).
+    Decided from the names alone, so it does not depend on a model judging the picture."""
+    beasts = [n for n, spec in plan["characters"].items() if story_art.is_beast(spec)]
+    fixed = report.setdefault("figures", [])
+    for si, row in enumerate(plan["sections"]):
+        for b in row["beats"]:
+            if b.get("character") or not b.get("emblem") or b.get("big"):
+                continue
+            who = next((n for n in beasts if _same(n, str(b.get("name") or ""))), None)
+            if who:
+                fixed.append({"name": who, "was": str(b["emblem"]).replace("custom:", ""), "section": si + 1, "sentence": b.get("sentence")})
+                b["character"], b["emblem"] = who, ""
+
+
+MAX_AGAIN = 6        # most extra appearances one video gets from show_again
+
+
+def show_again(plan, script, report):
+    """A person or creature of the cast comes back on screen in every section whose narration names them. The review above lists each one ONCE, at the
+    first sentence that names it, so a wolf that is only named at the start is never drawn when it kills the sheep, or when "the real wolf appeared".
+    Reads the narration only (no model). It takes the sentence where the character is the subject ("The wolf killed the sheep") over an earlier one that only
+    mentions them ("the boy cried wolf"). A section of one sentence is left alone (its only picture would be lost to somebody else), and a sentence that
+    already shows a thing, or the only time another character is seen, is never taken over."""
+    sents = _sentences(script)
+    again = report.setdefault("again", [])
+    for name in list(plan["characters"]):
+        if len(again) >= MAX_AGAIN:
+            break
+        for si, row in enumerate(plan["sections"]):
+            if len(sents[si]) < 2 or any(b.get("character") == name for b in row["beats"]):
+                continue
+            named = [j for j, s in enumerate(sents[si], 1) if _named(name, s)]
+            k = next((j for j in named if _named(name, " ".join(sents[si][j - 1].split()[:4]))), named[0] if named else None)
+            if k and len(again) < MAX_AGAIN and _put_on_screen(plan, {"section": si, "sentence": k, "count": len(sents[si])}, name):
+                again.append({"name": name, "section": si + 1, "sentence": k})
+
+
 def note_lost(plan, wanted, report):
     """The last look: a needed person or creature that no beat shows is reported, whatever took it off the screen (it may have been there before the review)."""
     told = {x["name"] for x in report["left"]}
@@ -459,6 +497,8 @@ def run(plan, script, ask, folder, drawn, vision=None, render=None):
         return report
     review_pictures(plan, script, ask, folder, drawn, vision, render, report)
     review_coverage(plan, script, ask, folder, drawn, vision, render, report)
+    creatures_as_figures(plan, report)
+    show_again(plan, script, report)
     return report
 
 
@@ -468,6 +508,8 @@ def summary(report):
     lines += [f"- replaced: {r['was']} -> {r['now']} ({r['why']})" for r in report.get("replaced", [])]
     lines += [f"- removed: {r['was']} ({r['why']}; {r['no replacement because']})" for r in report.get("removed", [])]
     lines += [f"- added, it was missing: {r['name']} ({r['kind']})" for r in report.get("added", [])]
+    lines += [f"- a card for {r['name']} showed a {r['was']}: the drawn {r['name']} is shown instead (section {r['section']}, sentence {r['sentence']})" for r in report.get("figures", [])]
+    lines += [f"- shown again where the narration names them: {r['name']} (section {r['section']}, sentence {r['sentence']})" for r in report.get("again", [])]
     lines += [f"- STILL MISSING: {r['name']} ({r['kind']}): {r['why']}" for r in report.get("left", [])]
     lines += [f"- note: {n}" for n in report.get("notes", [])]
     if not report.get("left"):

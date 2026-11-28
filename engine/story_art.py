@@ -393,6 +393,12 @@ def _halo(spec):
             f'<defs><radialGradient id="halo"><stop offset="0.55" stop-color="{tint(gold, 0.4)}" stop-opacity="0.95"/><stop offset="1" stop-color="{gold}" stop-opacity="0.15"/></radialGradient></defs>')
 
 
+# A child is drawn with a big head on narrow shoulders (the scene enlarges any figure to fill the frame, so only the proportions say "child")
+CHILD_BODY = 0.58
+CHILD_HEAD = (1.0, 0.9)
+SHOULDERS = 330           # from the shoulder line down to the bottom edge of an adult figure (800 - 470)
+
+
 def character_svg(spec):
     """The bust as an SVG document (viewBox 0 0 600 800, transparent background) for a character spec (`clean_spec`)."""
     spec = clean_spec(spec)
@@ -415,8 +421,9 @@ def character_svg(spec):
     head = story_beasts.horns(spec) + ears + face + _hair(spec) + features + monster + _beard(spec) + _extras(spec) + _headgear(spec, skin) + _hair_front(spec)
     if spec["figure"] != "child":
         return _document(spec, behind + held + hair_behind + trunk + head)
-    body = lambda part: _scaled(part, 0.7, 0.7, (300, 800))                      # noqa: E731
-    top = lambda part: _scaled(part, 0.9, 0.84, (300, 424), to=(300, 546))       # noqa: E731  (the chin sits on the small shoulders)
+    body = lambda part: _scaled(part, CHILD_BODY, CHILD_BODY, (300, 800))                                                  # noqa: E731
+    chin = 800 - SHOULDERS * CHILD_BODY - 23                                      # the chin sits on the small shoulders, wherever the body is scaled to
+    top = lambda part: _scaled(part, CHILD_HEAD[0], CHILD_HEAD[1], (300, 424), to=(300, chin))                              # noqa: E731
     return _document(spec, top(behind) + body(held) + top(hair_behind) + body(trunk) + top(head), drawn_small=True)
 
 
