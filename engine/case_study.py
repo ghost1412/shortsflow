@@ -52,16 +52,16 @@ PRESETS = {
     ],
     # a story told as drawn scenes: who is named is who is on screen (the story look, engine/case_story.py); no on-screen labels, the narration carries it
     "story": [
-        {"id": "moment", "title": "The moment", "scene": "story", "sentences": "2-3",
-         "question": "What is the most dramatic or surprising moment of this story? Say it in the first sentence, then who is involved."},
-        {"id": "who", "title": "Who they are", "scene": "story", "sentences": "3-4",
-         "question": "Who are the people, and what stands between them or drives them?"},
-        {"id": "turn", "title": "What happened", "scene": "story", "sentences": "4-5",
-         "question": "What happened, step by step, in the order it happened? Name who acts or speaks in each sentence."},
-        {"id": "answer", "title": "The answer", "scene": "story", "sentences": "3-4",
-         "question": "What was said or done in answer, and by whom?"},
+        {"id": "opening", "title": "How it began", "scene": "story", "sentences": "2-3",
+         "question": "Where does the story begin? Open with the main person and the problem or wish that sets everything moving. Nothing that happens later."},
+        {"id": "trouble", "title": "The trouble", "scene": "story", "sentences": "3-4",
+         "question": "What happens first, and what goes wrong? A new person comes in only when they do something."},
+        {"id": "turn", "title": "What happened next", "scene": "story", "sentences": "4-5",
+         "question": "What happens next, step by step, in the order it happens? Name who acts or speaks in each sentence."},
+        {"id": "climax", "title": "The turning point", "scene": "story", "sentences": "3-4",
+         "question": "What is the most dangerous, clever or surprising moment, and what does the person do? Do not tell the ending yet."},
         {"id": "end", "title": "How it ended", "scene": "story", "sentences": "2-3",
-         "question": "How did it end, and what did it leave behind?"},
+         "question": "How does it end? Only what has not been told yet."},
     ],
     "history": [
         {"id": "context", "title": "The situation", "question": "What was the situation before it began?", "scene": "timeline"},
@@ -289,35 +289,53 @@ DIAGRAM_CHOICE = ("Choose the diagram type by the story: parties talking back an
 LENGTHS = {"short": "2-3", "standard": "4-6", "long": "6-8"}       # spoken sentences per section: about 45, 80 and 110 seconds for four sections
 
 
+# how a told story differs from an explainer: no research-style hook, no figures, no facts ABOUT the tale, and the ending comes last
+STORY_VOICE = (
+    "STORY: this video TELLS a story with drawn characters, and the picture follows who is named. It must sound like a person telling it to a listener, never like "
+    "someone reading a summary, a lesson or an article.\n"
+    "- Tell it in the order it happens. Nothing from later may be told early: not who wins, not how it ends. Each thing is told once.\n"
+    "- Only what happens INSIDE the story. Nothing about the story itself: no age, origin, author, collector, scholar, version, book or film, and no 'this is the story of'.\n"
+    "- No introductions or biographies ('X was famous for ...'). A person is shown by what they do, say or want.\n"
+    "- Short spoken sentences in everyday words, in the natural spoken form of the language (for Hindi, the Hindi people speak at home, not textbook Hindi).\n"
+    "- Make the listener wonder what comes next: now and then end on 'but then ...' or on a question the next sentences answer.\n"
+    "- Where the sources say that someone said, asked, ordered or answered something, give it as that person's own words in quotation marks, keeping the meaning. "
+    "Do not invent talk, events, feelings or motives the sources do not give.\n"
+    "- Name the person who acts or speaks in each sentence (their name, not only 'he').")
+STORY_HOOK = (
+    "HOOK: give a top-level \"hook\": ONE line of 12 words or fewer, in the language of the narration, that makes a listener want to hear what happens: the danger, the "
+    "puzzle or the strange thing the story starts with, often as a question. Never a fact about the tale and never how it ends. The first sentence of the first "
+    "section must start inside the story and must not repeat the hook word for word.")
+
+
 def build_prompt(topic, template, sources, layouts="auto", length="standard"):
-    parts = [f"Write an explainer video script about: {topic}", ""]
+    story = any(s.get("scene") == "story" for s in template)
+    parts = [f"Write {'a told story video' if story else 'an explainer video'} script about: {topic}", ""]
     if sources:
         parts.append("Use ONLY the facts in these sources. If a source does not say it, do not say it.")
         for s in sources:
             parts.append(f"[{s['id']}] ({s['ref']})\n{s['text']}")
     else:
         parts.append("No sources were given. Use only well-known facts you are certain about, and leave out numbers you are unsure of.")
-    parts += ["", "Every section needs several specific sentences with the real names, dates and figures from the sources, not a summary of a summary. "
-              "A section about results, impact or why it matters states what the sources report was found, measured or changed (the outcomes), "
-              "not how the work was set up; if the sources hold no such outcomes, say what they do claim. "
-              "HOOK: the viewer decides in two seconds whether to keep watching. Give a top-level \"hook\": ONE line of 12 words or fewer, the most surprising or "
-              "highest-stakes fact the sources report, or a sharp question they answer; no greeting, no \"in this video\", no clickbait the sources do not back. "
-              "A definition (\"X is ...\") is not a hook, and a hook uses words a newcomer knows. "
-              "The first sentence of the first section's narration must also open with that kind of fact, not with background, and not repeat the hook word for word. "
-              "When the work is a paper, name the institution or lab at most once and never read out a list of author names. "
-              "Advice in the last section may be general, but must not add facts. "
-              "Never use funding, grant numbers, journal names, publication dates or the list of institutions as an on-screen label or as the substance of a section: "
-              "they say nothing about the subject itself. "
-              "VOICE: the narration is SPOKEN by a narrator talking to one viewer, not read from a report. Write the way a good presenter talks: short "
-              "sentences of 8 to 16 words, one idea each; contractions (it's, didn't, that's); speak to the viewer as \"you\" now and then (only the viewer: never a country, company or person in the story; do not open sections or sentence after sentence with \"You\"); "
-              "at most once in the whole video turn a surprising point into a quick question and answer it, and never open a section by restating its question; say what a term means the first time in plain words "
-              "instead of stacking jargon; link the sentences (but, then, and) so it flows as a story. Never start two sentences in a row the "
-              "same way, and no bullet-point phrasing. Use a cause word (that's why, because, so) ONLY when the sources state that very cause, and never add a "
-              "consequence, motive or comparison the sources do not give.", "", "One section per question, in this order:"]
-    if any(s.get("scene") == "story" for s in template):
-        parts += ["", "STORY: this video tells a story with drawn characters, and the picture follows who is named. Tell it as a storyteller would, in the order things happened, in "
-                  "short vivid sentences; name the person who acts or speaks in each sentence (use their name, not only \"he\"); a line of speech is allowed only when the sources "
-                  "give it. Do not explain like a lecture, do not add feelings, motives or events the sources do not state. The set-up and the ending may be in the sources' own words."]
+    if story:
+        parts += ["", STORY_HOOK + " " + STORY_VOICE, "", "One section per question, in this order:"]
+    else:
+        parts += ["", "Every section needs several specific sentences with the real names, dates and figures from the sources, not a summary of a summary. "
+                  "A section about results, impact or why it matters states what the sources report was found, measured or changed (the outcomes), "
+                  "not how the work was set up; if the sources hold no such outcomes, say what they do claim. "
+                  "HOOK: the viewer decides in two seconds whether to keep watching. Give a top-level \"hook\": ONE line of 12 words or fewer, the most surprising or "
+                  "highest-stakes fact the sources report, or a sharp question they answer; no greeting, no \"in this video\", no clickbait the sources do not back. "
+                  "A definition (\"X is ...\") is not a hook, and a hook uses words a newcomer knows. "
+                  "The first sentence of the first section's narration must also open with that kind of fact, not with background, and not repeat the hook word for word. "
+                  "When the work is a paper, name the institution or lab at most once and never read out a list of author names. "
+                  "Advice in the last section may be general, but must not add facts. "
+                  "Never use funding, grant numbers, journal names, publication dates or the list of institutions as an on-screen label or as the substance of a section: "
+                  "they say nothing about the subject itself. "
+                  "VOICE: the narration is SPOKEN by a narrator talking to one viewer, not read from a report. Write the way a good presenter talks: short "
+                  "sentences of 8 to 16 words, one idea each; contractions (it's, didn't, that's); speak to the viewer as \"you\" now and then (only the viewer: never a country, company or person in the story; do not open sections or sentence after sentence with \"You\"); "
+                  "at most once in the whole video turn a surprising point into a quick question and answer it, and never open a section by restating its question; say what a term means the first time in plain words "
+                  "instead of stacking jargon; link the sentences (but, then, and) so it flows as a story. Never start two sentences in a row the "
+                  "same way, and no bullet-point phrasing. Use a cause word (that's why, because, so) ONLY when the sources state that very cause, and never add a "
+                  "consequence, motive or comparison the sources do not give.", "", "One section per question, in this order:"]
     for s in template:
         parts.append(f"- id \"{s['id']}\" ({s['title']}): {s['question']}  " + (f"Default layout: {s['scene']}" if layouts == "auto" else f"Scene kind: {s['scene']}")
                      + (f"  Narration length: {s['sentences']} short sentences." if s.get("sentences") else ""))
@@ -334,7 +352,7 @@ def build_prompt(topic, template, sources, layouts="auto", length="standard"):
                      "sentence, a number or a verb phrase. Each must be something you could SEE and point at in a drawing (an object, a device, a material, a person, a "
                      "place), not an idea or a process: \"Compressor\" and \"Cold air\" yes; \"Heat transfer\", \"External environment\" and \"Vapor compression cycle\" no.")
     parts += ["", "Return raw JSON only:",
-              '{"title": "<plain title, no emoji>", "hook": "<12 words or fewer>", "sections": [{"id": "<section id>", "narration": "<' + LENGTHS.get(length, LENGTHS["standard"]) + ' short spoken sentences, told like a presenter talking (see VOICE), concrete: who, what, when, how many, in order>", '
+              '{"title": "<plain title, no emoji>", "hook": "<12 words or fewer>", "sections": [{"id": "<section id>", "narration": "<' + LENGTHS.get(length, LENGTHS["standard"]) + ' short spoken sentences, ' + ("told as a story to a listener (see STORY): who does what, and what happens next>" if story else "told like a presenter talking (see VOICE), concrete: who, what, when, how many, in order>") + '", '
               '"scene": "<the layout you chose for this section>", "mood": "<how the narrator should sound here: tense, excited, serious, warm or calm>", '
               '"on_screen": ["<3-5 short labels, steps or figures shown on screen, never empty>"], "cites": ["S1"], '
               '"footage": ["<3 or 4 different searches for stock video, 2-4 plain words each, one per step of this section: things a camera can film, no brand, person or place names>"], "diagram": "<Mermaid source, only when the layout is diagram>"}]}',

@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Story videos are now asked for as a told story: in order, with the ending last (it used to be told first and then again), without facts about the tale itself or character biographies, in everyday spoken language.
+
 - Fix: story look: an animal named by its colour ("white dove") is drawn in that colour when the plan gives none.
 
 - Fix: voice server narration: when the timing of the captions broke down part-way through a section (seen in Hindi: captions up to 3.5 s late, then a burst of words), the audio is now listened to again.
