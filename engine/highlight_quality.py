@@ -219,6 +219,11 @@ def lead_in_length(tokens):
     return n
 
 
+def _only_needs_trimming(sentence):
+    """A weak first line that is fine once its lead-in words are gone (and is not a mic check or housekeeping talk)."""
+    return bool(lead_in_length(str(sentence).split())) and not MIC_CHECK.search(sentence) and not boilerplate_hits(sentence)
+
+
 def trim_lead_in(clip, words, min_len):
     """`clip` with its start moved past a leading "So, ..." / "And ..." / "Because ...", when the word timings allow it."""
     if clip.get("user_moment") or clip.get("lead_trim") or not clip.get("snapped"):
@@ -443,23 +448,28 @@ def clean_reel_openings(moments, spans, min_len=REEL_MIN_MOMENT, skip_shift=20.0
         if m.get("user_moment") or not spans:
             out.append(m)
             continue
-        origin = float(m["start"])
+        origin = float(m["start"]) - float(m.get("lead_trim") or 0.0)      # where the trimmed sentence begins
         i = next((k for k, (s, _, _) in enumerate(spans) if s >= origin - 0.05), None)
         for _ in range(3):
-            if i is None or i + 1 >= len(spans) or not bad_opener(spans[i][2]):
+            if i is None or i + 1 >= len(spans) or not bad_opener(spans[i][2]) or _clean_once_trimmed(m, spans[i][2]):
                 break
             cand = starts[i + 1]
             if cand - origin > skip_shift or float(m["end"]) - cand < min_len:
                 break
             i += 1
             m["start"] = round(cand, 2)
+            m.pop("lead_trim", None)
         out.append(m)
     keep = [m for m in out if m.get("user_moment") or not boilerplate_hits(_first_sentence(m, spans))]
     return keep if len(keep) >= 2 or len(out) < 2 else out
 
 
+def _clean_once_trimmed(moment, sentence):
+    return bool(moment.get("lead_trim")) and _only_needs_trimming(sentence) and disfluency(sentence) <= 0.35
+
+
 def _first_sentence(m, spans):
-    s = float(m["start"])
+    s = float(m["start"]) - float(m.get("lead_trim") or 0.0)
     return next((t for a, _, t in spans if a >= s - 0.05), "")
 
 
