@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: story look: when the text model left people's looks blank, children and an "Old Woman" were all drawn as the same grown man. A person's name and plain statements in the narration ("... are the young children of ...") now decide child or woman, and two people are never drawn exactly alike. Children also have a child's proportions now (a larger round head, small shoulders, bigger eyes), not a shrunken grown-up's.
+
 - Fix: with a local model (Ollama), titles and descriptions were often missing for most clips of a run. They are asked for at the same time, the model answers one at a time, and the ones waiting ran out of their 12 seconds. They now take turns.
 
 - Fix: words the transcriber gives no length (a few per hundred) were missing from captions (Shorts and highlights), and a cold open could start part-way through its line because of them. They are now shown with the next word, and such a line is not used as the teaser.

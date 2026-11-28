@@ -76,6 +76,80 @@ def clearly_named(name, text):
     return re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text) is not None
 
 
+# words in a person's NAME that settle how they are drawn ("Old Woman" is not a bearded man, whatever the plan says)
+WOMAN_NAMES = frozenset("woman lady mother stepmother grandmother godmother mom queen princess empress goddess witch sister wife daughter maiden aunt widow bride girl mrs miss".split())
+CHILD_NAMES = frozenset("girl boy child baby".split())
+GROUP_CHILDREN = r"(?:children|kids|little ones)"
+
+
+def facts_from(name, text):
+    """What a person's name and the narration say outright about how they look: {"figure": "child" | "woman", "age": ..., "girl": bool}.
+    Only plain statements count ("Hansel and Gretel are the young children of ...", "a little girl called Mira", "his sister Ana")."""
+    words = set(re.findall(r"[a-z]+", name.lower()))
+    facts = {}
+    if words & CHILD_NAMES:
+        facts.update(figure="child", age="young", girl="girl" in words)
+    elif words & WOMAN_NAMES:
+        facts.update(figure="woman")
+    if words & {"old", "elderly", "grandmother", "grandfather"}:
+        facts["age"] = "old"
+    n = rf"(?<!\w){re.escape(name)}(?!\w)"
+    other = r"[A-Z][\w'-]+"
+    small = r"(?:(?:two|the|a|an|young|little|small|poor|twin)\s+)*"
+    child = (rf"{n}(?:\s+and\s+{other})?\s+(?:is|are|was|were)\s+{small}(?:{GROUP_CHILDREN}|child|boy|girl)\b",
+             rf"\b{other}\s+and\s+{n}\s+(?:are|were)\s+{small}{GROUP_CHILDREN}\b",
+             rf"\b(?:little|young|small)\s+(?:boy|girl|child)\s*(?:,|named|called)\s*{n}",
+             rf"{n},\s+(?:a|the)\s+(?:little|young|small)\s+(?:boy|girl|child)\b",
+             rf"\b{GROUP_CHILDREN},\s+(?:{other}\s+and\s+{n}|{n}\s+and\s+{other})")
+    if any(re.search(p, text) for p in child):
+        facts.update(figure="child", age="young")
+    if re.search(rf"\b(?:girl|sister|daughter)\s*(?:,|named|called)?\s*{n}|{n},\s+(?:(?:a|the|his|her)\s+)?(?:(?:little|young|small)\s+)?(?:girl|sister)\b", text):
+        facts["girl"] = True
+        if facts.get("figure") != "child":
+            facts["figure"] = "woman"
+    return facts
+
+
+def apply_facts(spec, facts):
+    """`spec` changed to agree with `facts`."""
+    if spec.get("species", "human") != "human" or not facts:
+        return spec
+    out = dict(spec)
+    if facts.get("figure"):
+        out["figure"] = facts["figure"]
+        if out["figure"] != "man":
+            out["facial_hair"] = "none"
+        if out["hair"] == "short" and (out["figure"] == "woman" or facts.get("girl")):
+            out["hair"] = "long"
+    if facts.get("age"):
+        out["age"] = facts["age"]
+        if out["age"] == "old":
+            out["hair_colour"] = "white"
+    return out
+
+
+LOOK_KEYS = ("species", "figure", "age", "skin", "hair", "hair_colour", "headgear", "facial_hair", "outfit", "outfit_colour", "coat_colour")
+SPARE_COLOURS = ("blue", "green", "saffron", "teal", "purple", "brown", "red", "maroon")
+
+
+def tell_apart(chars, fixed=()):
+    """Two people drawn exactly alike look like one person twice: give the later one another outfit colour (and hair, for a person).
+    `fixed` names (saved looks) are never changed."""
+    seen, out = [], {}
+    for name, spec in chars.items():
+        spec = dict(spec)
+        if name not in fixed:
+            for colour in SPARE_COLOURS:
+                if not any(all(spec.get(k) == s.get(k) for k in LOOK_KEYS) for s in seen):
+                    break
+                spec["outfit_colour"] = colour
+                if spec.get("species", "human") == "human" and spec.get("age") != "old":
+                    spec["hair_colour"] = "brown" if spec.get("hair_colour") == "black" else "black"
+        seen.append(spec)
+        out[name] = spec
+    return out
+
+
 def named_here(known, script):
     """The saved people this story names. Only they are mentioned to the model and carried over: given the whole library, it took it for the cast and drew
     none of the story's own people."""
@@ -329,6 +403,9 @@ def check_plan(reply, script, library=None):
         name = _clip(name, MAX_NAME)
         if name and (name in chars or len(chars) < MAX_CHARACTERS):
             chars[name] = library.get(name) or story_art.clean_spec(spec)
+    told = " ".join(str(s.get("narration") or "") for s in script["sections"])
+    chars = {name: spec if name in library else apply_facts(spec, facts_from(name, told)) for name, spec in chars.items()}
+    chars = tell_apart(chars, fixed=library)
     raw_sections = data.get("sections") if isinstance(data.get("sections"), list) else []
     out_sections = []
     for si, sec in enumerate(script["sections"]):
@@ -382,7 +459,7 @@ def check_plan(reply, script, library=None):
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v17"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v18"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 

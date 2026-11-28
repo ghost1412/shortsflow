@@ -283,23 +283,36 @@ def _marking(spec):
     return ""
 
 
+def _scaled(body, sx, sy, at, to=None):
+    """`body` scaled by (sx, sy) about the point `at`, which then sits at `to` (default: stays where it was)."""
+    tx, ty = to or at
+    return f'<g transform="translate({tx} {ty}) scale({sx} {sy}) translate({-at[0]} {-at[1]})">{body}</g>'
+
+
 def _face(spec, skin):
     dark = shade(skin, 0.18)
     mood = spec["mood"]
+    child = spec["figure"] == "child"
+    brow_width = 6 if child else 9
     brow_colour = HAIR_COLOURS["white" if spec["age"] == "old" else spec["hair_colour"]]
     tilt = {"neutral": (0, 0), "stern": (6, 0), "sad": (-7, 2), "angry": (11, -2), "proud": (-2, -5), "calm": (-1, -2)}[mood]
     # brows: an inner end lower (angry/stern) or higher (sad)
-    bl = f'<path d="M232 {268 + tilt[1]} Q258 {258 + tilt[1]} 282 {268 + tilt[1] + tilt[0]}" stroke="{brow_colour}" stroke-width="9" fill="none" stroke-linecap="round"/>'
-    br = f'<path d="M368 {268 + tilt[1]} Q342 {258 + tilt[1]} 318 {268 + tilt[1] + tilt[0]}" stroke="{brow_colour}" stroke-width="9" fill="none" stroke-linecap="round"/>'
+    bl = f'<path d="M232 {268 + tilt[1]} Q258 {258 + tilt[1]} 282 {268 + tilt[1] + tilt[0]}" stroke="{brow_colour}" stroke-width="{brow_width}" fill="none" stroke-linecap="round"/>'
+    br = f'<path d="M368 {268 + tilt[1]} Q342 {258 + tilt[1]} 318 {268 + tilt[1] + tilt[0]}" stroke="{brow_colour}" stroke-width="{brow_width}" fill="none" stroke-linecap="round"/>'
     lid = 8 if mood in ("calm", "sad") else 0
     eyes = ""
     for cx in (258, 342):
-        eyes += (f'<path d="M{cx - 27} 292 Q{cx} {272 + lid} {cx + 27} 292 Q{cx} {308} {cx - 27} 292 Z" fill="#fbf7f0"/>'
-                 f'<circle cx="{cx}" cy="291" r="10" fill="#1d1218"/><circle cx="{cx + 3}" cy="288" r="3" fill="#ffffff"/>'
-                 f'<path d="M{cx - 29} 292 Q{cx} {270 + lid} {cx + 29} 292" stroke="#1d1218" stroke-width="5" fill="none"/>')
+        eye = (f'<path d="M{cx - 27} 292 Q{cx} {272 + lid} {cx + 27} 292 Q{cx} {308} {cx - 27} 292 Z" fill="#fbf7f0"/>'
+               f'<circle cx="{cx}" cy="291" r="{12 if child else 10}" fill="#1d1218"/><circle cx="{cx + 3}" cy="288" r="{4 if child else 3}" fill="#ffffff"/>'
+               f'<path d="M{cx - 29} 292 Q{cx} {270 + lid} {cx + 29} 292" stroke="#1d1218" stroke-width="{4 if child else 5}" fill="none"/>')
+        eyes += _scaled(eye, 1.12, 1.3, (cx, 292)) if child else eye
     mouth = {"neutral": "M270 372 Q300 378 330 372", "stern": "M272 374 L328 374", "sad": "M272 380 Q300 366 328 380",
              "angry": "M274 378 Q300 368 326 378", "proud": "M268 370 Q300 388 332 370", "calm": "M270 370 Q300 384 330 370"}[mood]
     nose = f'<path d="M300 292 Q288 340 276 346 Q300 358 324 346 Q312 340 300 292" fill="{dark}" opacity="0.55"/>'
+    cheeks = ""
+    if child:
+        nose = _scaled(nose, 0.7, 0.65, (300, 340))
+        cheeks = '<ellipse cx="236" cy="346" rx="24" ry="15" fill="#e8686a" opacity="0.28"/><ellipse cx="364" cy="346" rx="24" ry="15" fill="#e8686a" opacity="0.28"/>'
     face = (f'<path d="M300 140 C200 140 188 250 204 322 C220 392 262 424 300 424 C338 424 380 392 396 322 C412 250 400 140 300 140 Z" fill="{skin}"/>'
             f'<path d="M300 140 C400 140 412 250 396 322 C380 392 338 424 300 424 Z" fill="{dark}" opacity="0.28"/>')
     ears = (f'<ellipse cx="198" cy="312" rx="19" ry="34" fill="{skin}"/><ellipse cx="402" cy="312" rx="19" ry="34" fill="{dark}"/>')
@@ -311,7 +324,7 @@ def _face(spec, skin):
     wrinkles = ""
     if spec["age"] == "old":
         wrinkles = f'<path d="M236 236 L264 232 M336 232 L364 236 M260 330 Q246 346 262 358 M340 330 Q354 346 338 358" stroke="{dark}" stroke-width="4" fill="none" opacity="0.7"/>'
-    return ears, face + _marking(spec), bl + br + eyes + nose + f'<path d="{mouth}" stroke="{lips}" stroke-width="{10 if spec["figure"] == "woman" else 7}" fill="none" stroke-linecap="round"/>' + wrinkles
+    return ears, face + _marking(spec) + cheeks, bl + br + eyes + nose + f'<path d="{mouth}" stroke="{lips}" stroke-width="{10 if spec["figure"] == "woman" else 7}" fill="none" stroke-linecap="round"/>' + wrinkles
 
 
 def _beard(spec):
@@ -395,9 +408,16 @@ def character_svg(spec):
     neck = f'<path d="M258 400 L258 480 Q300 520 342 480 L342 400 Z" fill="{shade(skin, 0.22)}"/>'
     snakes = spec["hair"] == "snakes" and spec["headgear"] not in ("hood", "space_helmet")
     monster = ((story_beasts.human_glow() if "glowing_eyes" in spec["ornaments"] else "") + (story_beasts.human_fangs() if "fangs" in spec["ornaments"] else ""))
-    body = (_halo(spec) + story_beasts.wings(spec) + _weapon(spec) + _hair_back(spec) + (story_beasts.snake_hair() if snakes else "") + neck + _body(spec, trim)
-            + story_beasts.horns(spec) + ears + face + _hair(spec) + features + monster + _beard(spec) + _extras(spec) + _headgear(spec, skin) + _hair_front(spec))
-    return _document(spec, body)
+    behind = _halo(spec) + story_beasts.wings(spec)
+    held = _weapon(spec)
+    hair_behind = _hair_back(spec) + (story_beasts.snake_hair() if snakes else "")
+    trunk = neck + _body(spec, trim)
+    head = story_beasts.horns(spec) + ears + face + _hair(spec) + features + monster + _beard(spec) + _extras(spec) + _headgear(spec, skin) + _hair_front(spec)
+    if spec["figure"] != "child":
+        return _document(spec, behind + held + hair_behind + trunk + head)
+    body = lambda part: _scaled(part, 0.7, 0.7, (300, 800))                      # noqa: E731
+    top = lambda part: _scaled(part, 0.9, 0.84, (300, 424), to=(300, 546))       # noqa: E731  (the chin sits on the small shoulders)
+    return _document(spec, top(behind) + body(held) + top(hair_behind) + body(trunk) + top(head), drawn_small=True)
 
 
 def is_beast(spec):
@@ -406,8 +426,8 @@ def is_beast(spec):
                 or any(f in (spec.get("ornaments") or []) for f in story_beasts.FEATURES))
 
 
-def _document(spec, body):
-    if spec["figure"] == "child":                      # smaller, still standing on the bottom edge
+def _document(spec, body, drawn_small=False):
+    if spec["figure"] == "child" and not drawn_small:      # an animal's young: smaller, still standing on the bottom edge
         body = f'<g transform="translate(60 160) scale(0.8)">{body}</g>'
 
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 800" width="600" height="800">{body}</svg>'
