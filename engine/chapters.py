@@ -165,6 +165,13 @@ def title_chapters(chapters, highlights, transcript_segments, ask=None):
     """Add "title" to every chapter: LLM title when it is grounded in the chapter's speech, otherwise a keyword title."""
     texts = [chapter_text(c, highlights, transcript_segments) for c in chapters]
     from_llm = llm_titles(texts, ask=ask) or [""] * len(chapters)
+    refused = [i for i, t in enumerate(from_llm) if t and not grounded_title(t, texts[i])]
+    if refused:                                  # one title that goes beyond what is said: ask once more before using keywords
+        print("[Log] Chapter title(s) not supported by what is said, asking again: " + "; ".join(repr(from_llm[i]) for i in refused))
+        second = llm_titles(texts, ask=ask) or [""] * len(chapters)
+        for i in refused:
+            if grounded_title(second[i], texts[i]):
+                from_llm[i] = second[i]
     for i, c in enumerate(chapters):
         t = from_llm[i]
         if not grounded_title(t, texts[i]):

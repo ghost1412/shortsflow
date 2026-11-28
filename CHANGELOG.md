@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Highlights chapters: when one title goes beyond what is said, it is asked for once more before a keyword title is used, and the log says which.
+
 - Shorts and highlights: a cold open no longer starts on a line about someone not yet heard of ("They've now called it ..."), and an opening like "So in that sense, ..." is trimmed even without a comma after "So".
 
 - Fix: storyteller and voice-server narration: when the recogniser wrote the speech another way (Hindi came back in Urdu letters), captions were spread evenly and ran more than a second off. Its word times are now used by position.
