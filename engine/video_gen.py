@@ -3096,6 +3096,8 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
         print(f"[Log] Merging {len(highlights)} clips into Highlight Reel...")
         clips = []
         parts = []  # (source start, source end, rendered length) of every segment that made it into the reel
+        if silence_intervals and tighten_mode == "speed":
+            print("[Warning] --tighten_mode speed is for Shorts: in the highlights video the pauses are cut.")
         seg_paths = []
         for i, hi in enumerate(highlights):
             task_path = os.path.join(output_dir, "temp_segments", f"seg_{i}.mp4")
