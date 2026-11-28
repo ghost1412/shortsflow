@@ -65,6 +65,29 @@ def _person_role(item):
     return role if role and species in ("", "human", "other") and not item.get("features") else None
 
 
+# when the model names a creature but gives no species or features, its LAST word (the noun: "Ogre", "golden hen", not "Ogre's wife") says what to draw
+ANIMAL_NOUNS = {"hen": "bird", "chicken": "bird", "rooster": "bird", "cock": "bird", "crow": "bird", "dove": "bird", "eagle": "bird", "sparrow": "bird", "parrot": "bird",
+                "goose": "duck", "ox": "cow", "bull": "cow", "calf": "cow", "lamb": "sheep", "ram": "sheep", "rabbit": "hare", "bunny": "hare", "kitten": "cat",
+                "puppy": "dog", "piglet": "pig", "boar": "pig", "pony": "horse", "donkey": "horse", "stallion": "horse", "mare": "horse", "cobra": "snake",
+                "serpent": "snake", "viper": "snake", "toad": "frog", "turtle": "tortoise", "ape": "monkey"}
+MONSTER_NOUNS = {"ogre": ["fangs"], "troll": ["fangs"], "goblin": ["fangs"], "orc": ["fangs"], "monster": ["fangs"], "vampire": ["fangs"],
+                 "ghoul": ["fangs", "glowing_eyes"], "demon": ["horns", "glowing_eyes"], "devil": ["horns"]}
+
+
+def _read_from_name(name, species, features):
+    """(species, features) with what the name says added where the model gave none."""
+    words = re.findall(r"[a-z]+", str(name).lower())
+    head = words[-1] if words else ""
+    if species in ("", "human", "other") and not features:
+        if head in story_art.story_beasts.ANIMALS:
+            return head, features
+        if head in ANIMAL_NOUNS:
+            return ANIMAL_NOUNS[head], features
+        if head in MONSTER_NOUNS:
+            return "human", list(MONSTER_NOUNS[head])
+    return species, features
+
+
 def needed_question(script):
     lines = [f"{si}.{k} {s}" for si, sents in enumerate(_sentences(script), 1) for k, s in enumerate(sents, 1)]
     return ("This is the narration of a short story video, each sentence numbered section.sentence:\n" + "\n".join(lines) + "\n\n"
@@ -101,9 +124,12 @@ def needed(script, ask):
         also = [" ".join(str(a).split())[:30] for a in (r.get("also") if isinstance(r.get("also"), list) else []) if str(a).strip()][:4]
         if all(not any(_same(x, y) for x in [name, *also] for y in [o["name"], *o["also"]]) for o in out):
             tone = str(r.get("tone") or "").lower()
+            species, features = str(r.get("species") or "").strip().lower(), r.get("features") if isinstance(r.get("features"), list) else []
+            if kind == "creature":
+                species, features = _read_from_name(name, species, features)
             out.append({"name": name, "also": also, "kind": kind, "section": si, "sentence": k, "looks": " ".join(str(r.get("looks") or "").split())[:80],
                         "tone": tone if tone in story_objects.TONES else ("threatening" if kind == "creature" else ""),
-                        "species": str(r.get("species") or "").strip().lower(), "features": r.get("features") if isinstance(r.get("features"), list) else []})
+                        "species": species, "features": features})
     return out[:MAX_NEEDED]
 
 
@@ -440,6 +466,64 @@ def review_coverage(plan, script, ask, folder, drawn, vision, render, report):
     note_lost(plan, wanted, report)
 
 
+# what each built-in symbol can honestly stand for on a card (the card's title must name one of these things, or a theme of them)
+EMBLEM_MEANS = {
+    "wheel": "wheel cart chariot wagon cycle turn fate time journey mill gear",
+    "spear": "spear lance harpoon javelin hunt hunter weapon throw",
+    "arrow": "arrow arrows shoot shot aim archer target hit dart",
+    "bow": "bow archer archery hunt shoot hunter",
+    "sun": "sun sunrise sunset dawn morning noon day light hope victory summer new warm bright",
+    "crown": "crown king queen throne royal rule kingdom prince princess empire crowned reign power palace",
+    "sword": "sword blade war battle duel fight fought attack revenge betray betrayal knife dagger conflict clash combat",
+    "fire": "fire flame burn burning blaze torch destroy destruction anger rage inferno ash",
+    "lightning": "lightning thunder storm bolt strike wrath power sudden electric god",
+    "box": "box chest treasure gift casket secret trap mystery jar vault",
+    "skull": "skull death dead die kill killed doom danger curse poison grave bones fatal murder",
+    "mountain": "mountain hill peak cliff summit volcano climb journey obstacle quest height",
+    "wings": "wings wing fly flying flight escape freedom bird angel swift dove butterfly feather eagle soar",
+}
+
+
+def _fits_symbol(emblem, title):
+    """Does a built-in symbol fit a card's title? True when a word of the title (or its first five letters) is one the symbol stands for."""
+    means = EMBLEM_MEANS.get(str(emblem))
+    if means is None:
+        return True                                              # a drawn picture ("custom:...") or a symbol this table does not know: not judged here
+    known = set(means.split())
+    return any(w in known or w[:5] in {k[:5] for k in known} for w in re.findall(r"[a-z]+", str(title).lower()) if len(w) >= 3)
+
+
+def drop_unrelated_symbols(plan, report):
+    """A card whose built-in symbol has nothing to do with its title (wings for a beanstalk, a crown for a house, a spear for a harp) says something false: the
+    planner picks the nearest of a fixed list, and a small model picks at random. The card gives the screen back to the character before it."""
+    gone = report.setdefault("symbols", [])
+    for si, row in enumerate(plan["sections"]):
+        for b in list(row["beats"]):
+            title = str(b.get("name") or "")
+            if b.get("character") or not b.get("emblem") or b.get("big") or not title or _fits_symbol(b["emblem"], title):
+                continue
+            _remove(plan, {"where": "card", "section": si, "beat": b, "emblem": b["emblem"]})
+            gone.append({"name": title, "was": str(b["emblem"]), "section": si + 1, "sentence": b.get("sentence")})
+
+
+def drop_stand_ins(plan, report):
+    """A thing the review could not draw ("Beanstalk", "Harp") may still have a card titled with it and a symbol the planner picked as the nearest one (wings for
+    a beanstalk, a crown for a house). That symbol says something else, so the card gives the screen back to the character before it, as for a rejected picture."""
+    gone = report.setdefault("stand_ins", [])
+    for item in report.get("left", []):
+        if item.get("kind") != "thing":
+            continue
+        for si, row in enumerate(plan["sections"]):
+            for b in list(row["beats"]):
+                title = str(b.get("name") or "")
+                if b.get("character") or not b.get("emblem") or b.get("big") or not title:
+                    continue
+                if _same(title, item["name"]) or _named(item["name"], title):
+                    shown = str(b["emblem"]).replace("custom:", "")
+                    _remove(plan, {"where": "card", "section": si, "beat": b, "emblem": b["emblem"]})
+                    gone.append({"name": item["name"], "was": shown, "section": si + 1, "sentence": b.get("sentence")})
+
+
 def creatures_as_figures(plan, report):
     """A card titled with a creature that is drawn in this video ("Wolf") shows that creature, not a symbol the planner picked for it (a spear for a wolf).
     Decided from the names alone, so it does not depend on a model judging the picture."""
@@ -497,6 +581,9 @@ def run(plan, script, ask, folder, drawn, vision=None, render=None):
         return report
     review_pictures(plan, script, ask, folder, drawn, vision, render, report)
     review_coverage(plan, script, ask, folder, drawn, vision, render, report)
+    drop_stand_ins(plan, report)
+    if plan.get("planned_locally"):              # a small model picks its symbols almost at random; a cloud model's are mostly apt, so those are left as they are
+        drop_unrelated_symbols(plan, report)
     creatures_as_figures(plan, report)
     show_again(plan, script, report)
     return report
@@ -508,6 +595,8 @@ def summary(report):
     lines += [f"- replaced: {r['was']} -> {r['now']} ({r['why']})" for r in report.get("replaced", [])]
     lines += [f"- removed: {r['was']} ({r['why']}; {r['no replacement because']})" for r in report.get("removed", [])]
     lines += [f"- added, it was missing: {r['name']} ({r['kind']})" for r in report.get("added", [])]
+    lines += [f"- the card '{r['name']}' showed a {r['was']}, which has nothing to do with it, so the symbol was taken off (section {r['section']}, sentence {r['sentence']})" for r in report.get("symbols", [])]
+    lines += [f"- the card for {r['name']} could not be drawn, so the {r['was']} the planner chose for it was taken off (section {r['section']}, sentence {r['sentence']})" for r in report.get("stand_ins", [])]
     lines += [f"- a card for {r['name']} showed a {r['was']}: the drawn {r['name']} is shown instead (section {r['section']}, sentence {r['sentence']})" for r in report.get("figures", [])]
     lines += [f"- shown again where the narration names them: {r['name']} (section {r['section']}, sentence {r['sentence']})" for r in report.get("again", [])]
     lines += [f"- STILL MISSING: {r['name']} ({r['kind']}): {r['why']}" for r in report.get("left", [])]

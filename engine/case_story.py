@@ -100,7 +100,8 @@ def facts_from(name, text):
         facts["age"] = "old"
     n = rf"(?<!\w){re.escape(name)}(?!\w)"
     other = r"[A-Z][\w'-]+"
-    small = r"(?:(?:two|the|a|an|young|little|small|poor|twin)\s+)*"
+    small = (r"(?:(?:two|the|a|an|young|little|small|poor|twin)\s+)*"
+             r"(?:(?!(?:than|of|to|with|for|from|by|as|in|on|at|near|and|or|but|that|who|which|the|a|an)\b)[a-z]+\s+){0,3}")
     child = (rf"{n}(?:\s+and\s+{other})?\s+(?:is|are|was|were)\s+{small}(?:{GROUP_CHILDREN}|child|boy|girl)\b",
              rf"\b{other}\s+and\s+{n}\s+(?:are|were)\s+{small}{GROUP_CHILDREN}\b",
              rf"\b(?:little|young|small)\s+(?:boy|girl|child)\s*(?:,|named|called)\s*{n}",
@@ -582,6 +583,7 @@ def plan(script, ask, session_dir, aspect="9:16", library=None):
                                     "on the beats where they act or speak")
         if plan_:
             if getattr(ask, "last_source", None) == "local":          # a small model's looks are often wrong: do not hand them to later videos
+                plan_["planned_locally"] = True                       # kept with the plan: the review is stricter about its symbols (engine/story_review.py)
                 print("[Warning] The story's pictures were planned by the model on this PC, which often gets people wrong (age, man or woman, who is missing). "
                       "Check the video; these characters are not saved for later ones.")
             else:
