@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Shorts and highlights: when a speaker runs on so long that no sentence ends near the cut, the clip now stops after the nearest comma or breath instead of on whatever word came last ("... a lot of development on the").
+
 - Fix: story look: no second copy of a person who is already in the cast under a near name, and no snakes for hair unless the story speaks of snakes.
 
 - Fix: story look: a witch, wizard or sorceress the story review listed as a "creature" went missing when no image model could check a drawing. With no monster features they are drawn as people.

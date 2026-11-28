@@ -301,7 +301,9 @@ def snap_clip(clip, spans, **opts):
     # --- end: after the sentence the clip stops in (finish the thought), else back to the last complete sentence
     new_end = end
     inside_e = next((i for i, (s, e, _) in enumerate(spans) if s < end <= e + 0.05), None)
-    if inside_e is not None and abs(ends[inside_e] - end) > 0.05:
+    if clip.get("clause_end"):
+        pass                                               # already placed at a comma or breath of a long sentence
+    elif inside_e is not None and abs(ends[inside_e] - end) > 0.05:
         forward = ends[inside_e]
         back = ends[inside_e - 1] if inside_e > 0 else None
         cands = [c for c in (forward, back) if c is not None and abs(c - end) <= o["max_shift"] and c > new_start + o["min_len"]]
@@ -330,11 +332,12 @@ def snap_clip(clip, spans, **opts):
             new_end = ends[last - 1]
 
     # --- a short tail so the clip does not stop dead on the last word, but never into the next sentence
-    nxt = [s for s in starts if s > new_end + 0.01]
-    tail_end = new_end + o["tail"]
-    if nxt:
-        tail_end = min(tail_end, nxt[0] - 0.05)
-    new_end = max(new_end, tail_end)
+    if not clip.get("clause_end"):
+        nxt = [s for s in starts if s > new_end + 0.01]
+        tail_end = new_end + o["tail"]
+        if nxt:
+            tail_end = min(tail_end, nxt[0] - 0.05)
+        new_end = max(new_end, tail_end)
 
     # --- keep it a short: too long -> end at the last sentence that fits; too short -> leave the clip as it was
     if new_end - new_start > o["max_len"]:
@@ -349,6 +352,37 @@ def snap_clip(clip, spans, **opts):
     return out
 
 
+CLAUSE_PAUSE = 0.35                       # a breath this long inside a sentence is a place a clip can stop
+CLAUSE_BACK, CLAUSE_ON = 10.0, 6.0        # how far before / after the cut to look for one
+
+
+def end_at_a_clause(clip, words, ends, min_len, max_len, tail=0.4):
+    """For a clip that still stops part-way through a sentence (no sentence ends anywhere near: a speaker who runs on): stop after the
+    nearest comma or breath instead of on whatever word the cut fell on. A clip that ends with a sentence is left alone."""
+    if clip.get("user_moment") or not clip.get("snapped") or clip.get("clause_end"):
+        return clip
+    start, end = float(clip["start"]), float(clip["end"])
+    inside = [w for w in words if w["start"] < end - 0.05]
+    if not inside or inside[-1].get("segment") or any(inside[-1]["end"] - 0.05 <= e <= end + 0.05 for e in ends):
+        return clip
+    places = []
+    for i, w in enumerate(words[:-1]):
+        stop = w["end"]
+        if not (start + min_len <= stop <= min(end + CLAUSE_ON, start + max_len - tail) and stop >= end - CLAUSE_BACK):
+            continue
+        comma = w["word"].rstrip("\"')]").endswith((",", ";", ":"))
+        if not (comma or words[i + 1]["start"] - stop >= CLAUSE_PAUSE):
+            continue
+        bare = re.sub(r"[^a-z']", "", w["word"].lower())
+        if bare in DANGLING_ENDINGS:                      # "... on the [breath]" is not a place to stop
+            continue
+        places.append((abs(stop - end) - (1.0 if comma else 0.0), stop, words[i + 1]["start"]))
+    if not places:
+        return clip
+    _, stop, following = min(places)
+    return dict(clip, end=round(max(stop, min(stop + tail, following - 0.05)), 2), clause_end=True)
+
+
 def snap_highlights(highlights, transcript, **opts):
     """Snap every highlight; clips never overlap their neighbours afterwards (the earlier one is shortened)."""
     spans = sentence_spans(transcript)
@@ -356,7 +390,9 @@ def snap_highlights(highlights, transcript, **opts):
         return highlights
     o = {**DEFAULTS, **opts}
     words = _words(transcript)
+    ends = [e for _, e, _ in spans]
     clips = [trim_lead_in(snap_clip(h, spans, **opts), words, o["min_len"]) for h in highlights]
+    clips = [end_at_a_clause(c, words, ends, o["min_len"], o["max_len"], o["tail"]) for c in clips]
     return _resolve_overlaps(clips, spans, o)
 
 
