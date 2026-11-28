@@ -165,6 +165,49 @@ def tell_apart(chars, fixed=()):
     return out
 
 
+# Devanagari consonants as the sounds an English spelling of the same name has
+_SOUNDS = {
+    "\u0915": "k", "\u0916": "k", "\u0917": "g", "\u0918": "g", "\u0919": "n", "\u091a": "c", "\u091b": "c", "\u091c": "j", "\u091d": "j",
+    "\u091e": "n", "\u091f": "t", "\u0920": "t", "\u0921": "d", "\u0922": "d", "\u0923": "n", "\u0924": "t", "\u0925": "t", "\u0926": "d",
+    "\u0927": "d", "\u0928": "n", "\u092a": "p", "\u092b": "f", "\u092c": "b", "\u092d": "b", "\u092e": "m", "\u092f": "y", "\u0930": "r",
+    "\u0932": "l", "\u0935": "v", "\u0936": "s", "\u0937": "s", "\u0938": "s", "\u0939": "h", "\u0933": "l", "\u0902": "n", "\u0901": "n"}
+_VOWEL_LETTERS = "\u0905\u0906\u0907\u0908\u0909\u090a\u090b\u090f\u0910\u0913\u0914\u0911"
+
+
+def name_sound(word):
+    """(starts with a vowel, consonant sounds) of a name in Devanagari or English letters: the same for "Akbar" and its Hindi spelling,
+    different for Kabir (which starts with a consonant). None for other alphabets or fewer than two consonants."""
+    word = str(word).strip().lower()
+    if not word:
+        return None
+    if any("\u0900" <= c <= "\u097f" for c in word):
+        starts, sounds = word[0] in _VOWEL_LETTERS, "".join(_SOUNDS.get(c, "") for c in word)
+    elif re.fullmatch(r"[a-z]+", word):
+        plain = word
+        for pair, one in (("kh", "k"), ("gh", "g"), ("chh", "c"), ("ch", "c"), ("jh", "j"), ("th", "t"), ("dh", "d"), ("ph", "f"),
+                          ("bh", "b"), ("sh", "s"), ("w", "v"), ("z", "j"), ("q", "k"), ("x", "ks")):
+            plain = plain.replace(pair, one)
+        starts, sounds = word[0] in "aeiou", "".join(c for i, c in enumerate(plain) if c not in "aeiou" and (c != "y" or i == 0))
+    else:
+        return None
+    sounds = re.sub(r"(.)\1+", r"\1", sounds)
+    return (starts, sounds) if len(sounds) >= 2 else None
+
+
+# everyday Hindi words that sound like some English word or name: never taken for a person ("Man" once matched the word for "in")
+_HINDI_EVERYDAY = frozenset("\u092e\u0947\u0902 \u092e\u0948\u0902 \u092e\u0928 \u092e\u093e\u0928 \u0924\u092c \u0915\u092c \u091c\u092c \u0905\u092c \u0938\u092c \u092a\u0930 \u092a\u0942\u0930\u0940 \u092a\u0942\u0930\u093e \u092c\u093e\u0924 \u0930\u093e\u0924 \u0938\u093e\u0925 \u0915\u0939\u093e \u0930\u0939\u093e \u0928\u0939\u0940\u0902 \u0932\u0947\u0915\u093f\u0928 \u0924\u094b \u0924\u0925\u093e \u0924\u0915 \u0925\u093e \u0925\u0940 \u0925\u0947 \u0939\u092e \u0924\u0941\u092e \u0906\u092a \u0935\u0939 \u092f\u0939 \u0909\u0938 \u0907\u0938 \u0915\u0930 \u0915\u0930\u0928\u0947 \u0915\u093f\u092f\u093e".split())
+
+
+def narrations_spelling(name, narration):
+    """For an English-lettered name in a Hindi narration: the narration's own word for it, else None."""
+    if not re.fullmatch(r"[A-Za-z]+", str(name)) or str(name).lower() in ROLE_WORDS | {"people", "crowd", "stranger", "poor", "old", "young"}:
+        return None
+    sound = name_sound(name)
+    if not sound or re.search(rf"(?i)\b{re.escape(name)}\b", narration):
+        return None
+    return next((w for w in re.findall(r"[\u0900-\u0963\u0971-\u097f]+", narration) if w not in _HINDI_EVERYDAY and name_sound(w) == sound), None)
+
+
 def named_here(known, script):
     """The saved people this story names. Only they are mentioned to the model and carried over: given the whole library, it took it for the cast and drew
     none of the story's own people."""
@@ -420,6 +463,12 @@ def check_plan(reply, script, library=None):
         if name and (name in chars or len(chars) < MAX_CHARACTERS):
             chars[name] = library.get(name) or story_art.clean_spec(spec)
     told = " ".join(str(s.get("narration") or "") for s in script["sections"])
+    spelt = {name: narrations_spelling(name, told) for name in chars}          # "Akbar" in a Hindi story is the story's own word for him
+    spelt = {old: new for old, new in spelt.items() if new}
+    renamed = {}
+    for name, spec in chars.items():
+        renamed.setdefault(spelt.get(name, name), spec)
+    chars = renamed
     chars = {name: spec if name in library else no_stray_snakes(name, apply_facts(spec, facts_from(name, told)), told) for name, spec in chars.items()}
     chars = tell_apart(chars, fixed=library)
     raw_sections = data.get("sections") if isinstance(data.get("sections"), list) else []
@@ -441,6 +490,9 @@ def check_plan(reply, script, library=None):
                 continue
             seen.add(k)
             who = _clip(b.get("character"), MAX_NAME) if b.get("character") else ""
+            if who in spelt:                                   # the beat, and its name plate, use the story's spelling too
+                b = dict(b, name=spelt[who] if str(b.get("name") or who) == who else b.get("name"))
+                who = spelt[who]
             who = who if who in chars else (next((n for n in chars if n.lower() == who.lower()), "") if who else "")
             big = _clip(b.get("big"), 8)
             if big and re.sub(r"\D", "", big) not in said_numbers:
@@ -475,7 +527,7 @@ def check_plan(reply, script, library=None):
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v20"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v21"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 

@@ -42,6 +42,21 @@ def mood_strength(mood, first=False):
     return max(value, MOODS["tense"]) if first else value
 
 
+def mood_for(mood, text, index, count):
+    """The section's own mood; without one, a mood from where it stands and how it is written, so a story is not told at one strength
+    throughout: a question is tense, an exclamation excited, the last section warm, the others turn between serious and tense."""
+    if str(mood or "").lower() in MOODS:
+        return str(mood).lower()
+    text = str(text or "")
+    if "!" in text:
+        return "excited"
+    if index == count - 1 and count > 1:
+        return "warm"
+    if "?" in text:
+        return "tense"
+    return ("serious", "calm", "tense")[(index - 1) % 3] if index else "tense"
+
+
 def _norm(word):
     """A word for matching: letters, vowel signs and digits of any alphabet (only a-z used to be kept, so no Hindi word ever matched)."""
     return "".join(c for c in word.lower() if unicodedata.category(c)[0] in "LMN")

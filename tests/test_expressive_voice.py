@@ -61,7 +61,7 @@ def test_the_case_narration_uses_the_server_and_falls_back_for_the_rest(tmp_path
         json.dump([{"word": text, "start": 0, "end": 0.5}], open(kw["output_subs"], "w"))
         return kw["output_audio"], kw["output_subs"]
     case_render.speak_sections(script, str(tmp_path), generate=gen, expressive={"speak": speak, "sample": None})
-    assert spoken == [("One.", "tense", True), ("Two.", None, False)] and edge == ["Two.", "Three."]
+    assert spoken == [("One.", "tense", True), ("Two.", "serious", False)] and edge == ["Two.", "Three."]
     cache = json.load(open(tmp_path / "voice_cache.json"))
     assert cache["narrator"] == "standard"                                    # it fell back: a redo with the server speaks it again
     assert case_render.cached_voice(script, str(tmp_path), "voice_server") is None

@@ -412,7 +412,9 @@ def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=N
         result_audio = result_subs = None
         if expressive:               # {"speak": fn, "sample": wav}: the local voice server, each section in its mood
             try:
-                result_audio, result_subs = expressive["speak"](sec["narration"], audio, subs, sample=expressive.get("sample"), mood=sec.get("mood"),
+                from engine.expressive_voice import mood_for
+                mood = mood_for(sec.get("mood"), sec["narration"], i - 1, len(sections))
+                result_audio, result_subs = expressive["speak"](sec["narration"], audio, subs, sample=expressive.get("sample"), mood=mood,
                                                                 first=i == 1)
             except Exception as e:
                 expressive, narrator_used = None, "standard"            # a redo with narrator=voice_server speaks it again
