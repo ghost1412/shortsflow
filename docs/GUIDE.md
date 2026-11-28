@@ -21,7 +21,7 @@ Cloud keys are optional. The local choices:
 | Transcribing | Whisper | the default for clipping |
 | Picking moments, titles, writing | [Ollama](https://ollama.com) | `--llm_provider ollama` (or `LLM_PROVIDER=ollama` in `.env`); explainers: `--case llm=local` |
 | Looking at pictures (story-aware picking, recaps, checking story drawings) | An Ollama vision model, such as `gemma3` | `SHORTSFLOW_VISION=ollama` |
-| Narration | Kokoro (`pip install "shortsflow[local-voice]"`), or your own voice server | `--tts_provider kokoro`. Its word timings are estimates. The default is Microsoft's online Edge voice |
+| Narration | Kokoro (`pip install "shortsflow[local-voice]"`), or your own voice server | `--tts_provider kokoro`. Its word timings are estimates. The default is Microsoft's online Edge voice. Explainers and stories also offer an online storyteller, `--case narrator=gemini` (`gemini_voice=Algieba` a grandfather, `Sulafat` a grandmother): it acts the story, uses your Gemini key, and its free preview quota is small; if it cannot finish, the whole video uses the standard voice |
 | Pictures | Drawn by code | explainers: `--case background=none` uses no stock footage |
 | Rendering | FFmpeg, Remotion, Manim | always on your PC |
 
@@ -267,6 +267,7 @@ Everything runs locally by default. What can leave is optional.
 | GPS positions from your footage | OpenStreetMap, for place names | Trip recaps. `--recap_no_geocode` turns it off |
 | The text to speak (and a presenter's voice sample line) | Microsoft's Edge voice service or ElevenLabs | Narrated and dubbed videos. A local voice option, where a mode has one, stays on your PC |
 | Short stock-footage search phrases | Pexels | When stock footage or photos are used |
+| The narration text and how to tell it | Gemini (Google) | Only with `--case narrator=gemini` (the "Storyteller" narrator in the app) |
 | A presenter's photo | Google, only if you choose Gemini to suggest a look from it | Otherwise it stays on your PC |
 | The video and its title | Google Drive, or Upload-Post for YouTube, TikTok and the rest | Only when you press upload or publish, or switch on auto-publish (off by default) |
 
