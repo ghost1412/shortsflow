@@ -298,9 +298,10 @@ STORY_VOICE = (
     "- No introductions or biographies ('X was famous for ...'). A person is shown by what they do, say or want.\n"
     "- Short spoken sentences in everyday words, in the natural spoken form of the language (for Hindi, the Hindi people speak at home, not textbook Hindi).\n"
     "- Make the listener wonder what comes next: now and then end on 'but then ...' or on a question the next sentences answer.\n"
-    "- Where the sources say that someone said, asked, ordered or answered something, give it as that person's own words in quotation marks, keeping the meaning. "
-    "Do not invent talk, events, feelings or motives the sources do not give.\n"
-    "- Name the person who acts or speaks in each sentence (their name, not only 'he').")
+    "- Where the sources say that someone said, asked, ordered or answered something, SAY IT AS DIRECT SPEECH: who speaks, then their words in quotation marks "
+    "(Maya said, \"I will stay all night.\"), never 'Maya said that she would ...'. Keep the meaning. Do not invent talk, events, feelings or motives the sources do not give.\n"
+    "- Name a person when they come in and whenever someone else starts acting; in the next sentence say 'he' or 'she' or leave it out, as people do when they talk. "
+    "Do not begin two sentences in a row with the same name.")
 STORY_HOOK = (
     "HOOK: give a top-level \"hook\": ONE line of 12 words or fewer, in the language of the narration, that makes a listener want to hear what happens: the danger, the "
     "puzzle or the strange thing the story starts with, often as a question. Never a fact about the tale and never how it ends. The first sentence of the first "

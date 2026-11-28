@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: story videos in Hindi (and other non-English alphabets) never showed any object: every one the planner asked for was dropped because its English name was not in the sentence. The sentence's own word for it is now checked instead. Story narration also asks for direct speech and stops repeating a name in every sentence.
+
 - Story videos are now asked for as a told story: in order, with the ending last (it used to be told first and then again), without facts about the tale itself or character biographies, in everyday spoken language.
 
 - Fix: story look: an animal named by its colour ("white dove") is drawn in that colour when the plan gives none.

@@ -30,6 +30,16 @@ def test_a_hindi_opening_line_is_accepted_and_a_stray_bracket_is_still_not():
     assert not case_study.check_hook("{")[0] and not case_study.check_hook("7 8 9")[0]
 
 
+def test_a_thing_in_a_hindi_sentence_is_kept_when_the_sentences_own_word_for_it_is_given():
+    told = "अकबर ने देखा। बीरबल ने बाँस पर हाँडी लटका रखी है।"
+    cast = {"अकबर": {}, "बीरबल": {}}
+    ask = [{"sentence": 2, "object": "hanging pot", "word": "हाँडी"}, {"sentence": 2, "object": "lamp", "word": "दीपक"},      # not in that sentence
+           {"sentence": 2, "object": "minister", "word": "बीरबल"}, {"sentence": 1, "object": "pot", "word": "pot"}]           # a person; not the story's alphabet
+    assert case_story.check_props(ask, told, cast) == [{"sentence": 2, "object": "hanging pot"}]
+    english = "Birbal hung a pot on a pole."
+    assert case_story.check_props([{"sentence": 1, "object": "golden harp", "word": "pole"}], english, {}) == []      # English: the name itself must be said
+
+
 def test_the_end_card_only_claims_a_name_check_it_could_make():
     assert case_render.names_can_be_checked({"sections": [{"narration": "Akbar offered a reward."}]})
     assert not case_render.names_can_be_checked({"sections": [{"narration": HINDI}]})

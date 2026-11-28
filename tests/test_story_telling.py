@@ -14,6 +14,12 @@ def test_the_story_is_asked_for_as_a_told_story():
     assert "Return raw JSON only:" in prompt and "told as a story to a listener" in prompt and "in this order:" in prompt
 
 
+def test_the_story_asks_for_direct_speech_and_not_a_name_in_every_sentence():
+    prompt = cs.build_prompt("The cold lake", cs.PRESETS["story"], SOURCES)
+    assert "SAY IT AS DIRECT SPEECH" in prompt and "Do not begin two sentences in a row with the same name" in prompt
+    assert "Name the person who acts or speaks in each sentence (" not in prompt
+
+
 def test_an_explainer_is_asked_for_as_before():
     other = next(k for k in cs.PRESETS if k != "story" and not any(s.get("scene") == "story" for s in cs.PRESETS[k]))
     prompt = cs.build_prompt("Heat pumps", cs.PRESETS[other], SOURCES)

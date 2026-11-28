@@ -260,11 +260,12 @@ def request(script, known):
         "have \"big\" (the number exactly as the narration says it) and \"label\" (at most 4 words). Use a new beat when the person on screen should change, about every "
         "one or two sentences, and always a beat at sentence 1 of every section. Never invent facts: only what the narration says.\n"
         f"Also list for each section \"props\": up to {MAX_PROPS} things a viewer should SEE that a sentence mentions, such as an object, an animal, a vehicle or a building "
-        "(never a person), each as {\"sentence\": its number, \"object\": one to three plain words, like \"wooden horse\" or \"golden apple\"}. Prefer the thing the "
+        "(never a person), each as {\"sentence\": its number, \"object\": one to three plain ENGLISH words, like \"wooden horse\" or \"golden apple\", "
+        "\"word\": the word or words in that sentence that name it, copied exactly as written there}. Prefer the thing the "
         "moment turns on. Leave the list empty when the section names no such thing.\n\n"
         "Reply with raw JSON only:\n"
         "Also give \"setting\": the time and world of the story in at most 12 words (like \"an ancient Persian fantasy\").\n"
-        "{\"setting\": \"...\", \"characters\": {\"Name\": {\"skin\": \"...\", \"headgear\": \"...\", ...}}, \"sections\": [{\"sky\": \"...\", \"ground\": \"...\", \"props\": [{\"sentence\": 2, \"object\": \"...\"}], \"beats\": "
+        "{\"setting\": \"...\", \"characters\": {\"Name\": {\"skin\": \"...\", \"headgear\": \"...\", ...}}, \"sections\": [{\"sky\": \"...\", \"ground\": \"...\", \"props\": [{\"sentence\": 2, \"object\": \"...\", \"word\": \"...\"}], \"beats\": "
         "[{\"sentence\": 1, \"character\": \"Name\" or null, \"name\": \"...\", \"role\": \"...\", \"emblem\": \"\", \"big\": \"\", \"label\": \"\"}]}]}")
 
 
@@ -303,6 +304,20 @@ def kit_emblem(name):
     return next(((e, title) for pattern, e, title in OBJECT_WORDS if re.fullmatch(rf"(?:(?:the|a|an)\s+)?(?:{pattern})", str(name).strip(), re.I)), None)
 
 
+def _in_other_alphabet(sentence, word, characters):
+    """For a sentence not written in English letters, the English object name cannot be in it: the model gives the sentence's own
+    word for the thing instead, which must be there exactly and must not be a person's name."""
+    letters = [c for c in str(sentence) if c.isalpha()]
+    if not letters or sum(c < "\u0250" for c in letters) > len(letters) / 2:
+        return False
+    word = " ".join(str(word or "").split())
+    if len(word) < 2 or not any(c.isalpha() and c >= "\u0250" for c in word):
+        return False
+    if any(word in c or c in word for c in characters):
+        return False
+    return re.search(rf"(?<![^\s\"'\u201c(]){re.escape(word)}", str(sentence)) is not None
+
+
 def check_props(raw, narration, characters):
     """The things the model wants shown, as [{"sentence", "object"}]: one to three plain words, never a person of the story, and the sentence has to mention it."""
     sents = sentences(narration)
@@ -321,7 +336,8 @@ def check_props(raw, narration, characters):
         if any(name == c.lower() or name in c.lower().split() for c in characters):
             continue
         said = sents[k - 1].lower()
-        if not any(len(w) >= 3 and re.search(rf"\b{re.escape(w[:max(3, len(w) - 1)])}", said) for w in name.split()):
+        if not (_in_other_alphabet(sents[k - 1], row.get("word"), characters)
+                or any(len(w) >= 3 and re.search(rf"\b{re.escape(w[:max(3, len(w) - 1)])}", said) for w in name.split())):
             continue                                       # only what the narration says
         if all(name != o["object"] for o in out):
             out.append({"sentence": k, "object": name})
@@ -537,7 +553,7 @@ def check_plan(reply, script, library=None):
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v22"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v23"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
