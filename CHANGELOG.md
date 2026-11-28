@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: with a local model (Ollama), titles and descriptions were often missing for most clips of a run. They are asked for at the same time, the model answers one at a time, and the ones waiting ran out of their 12 seconds. They now take turns.
+
 - Fix: words the transcriber gives no length (a few per hundred) were missing from captions (Shorts and highlights), and a cold open could start part-way through its line because of them. They are now shown with the next word, and such a line is not used as the teaser.
 
 - Highlights video from the command line: the default length is now 3 minutes (it was 30 seconds, the default meant for Shorts), and an unreadable chapter-title reply is asked once more instead of silently giving keyword titles. `--cold_open` now works together with `--tighten`.

@@ -3,6 +3,7 @@ import json
 import re
 import random
 import os
+import threading
 import time
 from dotenv import load_dotenv
 
@@ -10,6 +11,7 @@ load_dotenv()
 
 HF_API_KEY = os.getenv("HF_API_KEY")
 LOCAL_LLM_URL = os.getenv("LOCAL_LLM_URL", "http://localhost:11434/api/chat")
+_LOCAL_TURN = threading.Lock()
 LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen2.5:7b")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -510,7 +512,8 @@ def get_llm_response(
 
             # in the automatic chain a silent Ollama is skipped quickly; the one the user chose gets time to load its model
             ollama_timeout = max(timeout or 0, 600) if target_provider == "ollama" else (min(timeout, 12) if timeout else 12)
-            response = requests.post(LOCAL_LLM_URL, json=payload, timeout=ollama_timeout)
+            with _LOCAL_TURN:                # Ollama answers one at a time: wait here, not against the time limit
+                response = requests.post(LOCAL_LLM_URL, json=payload, timeout=ollama_timeout)
             response.raise_for_status()
 
             try:
