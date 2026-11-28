@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: story look: no second copy of a person who is already in the cast under a near name, and no snakes for hair unless the story speaks of snakes.
+
 - Fix: story look: a witch, wizard or sorceress the story review listed as a "creature" went missing when no image model could check a drawing. With no monster features they are drawn as people.
 
 - Fix: story look: when the text model left people's looks blank, children and an "Old Woman" were all drawn as the same grown man. A person's name and plain statements in the narration ("... are the young children of ...") now decide child or woman, and two people are never drawn exactly alike. Children also have a child's proportions now (a larger round head, small shoulders, bigger eyes), not a shrunken grown-up's.

@@ -374,6 +374,10 @@ def review_coverage(plan, script, ask, folder, drawn, vision, render, report):
     sents = _sentences(script)
     wanted = [dict(w, kind="person") if w["kind"] == "creature" and _person_role(w) else w for w in wanted]
     missing = [dict(w, count=len(sents[w["section"]])) for w in wanted if not shown_as(plan, w)]
+    for m in missing:       # already in the cast under a near name ("Witch" for "the witch") but not on screen: show that one, do not add a twin
+        twin = next((n for n in plan["characters"] if m["kind"] == "person" and any(_same(n, other) for other in [m["name"], *m.get("also", [])])), None)
+        if twin:
+            m["name"] = twin
     people = [m for m in missing if m["kind"] == "person"][:MAX_NEW_PEOPLE]
     unknown = [m["name"] for m in people if m["name"] not in plan["characters"]]
     specs = _describe_people(unknown, script, ask) if unknown else {}

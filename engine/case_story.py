@@ -132,6 +132,16 @@ LOOK_KEYS = ("species", "figure", "age", "skin", "hair", "hair_colour", "headgea
 SPARE_COLOURS = ("blue", "green", "saffron", "teal", "purple", "brown", "red", "maroon")
 
 
+SNAKY = re.compile(r"\b(snakes?|serpents?|medusa|gorgons?)\b", re.I)
+
+
+def no_stray_snakes(name, spec, narration):
+    """Snakes for hair only when the story speaks of them (a small model gave them to a witch)."""
+    if spec.get("hair") == "snakes" and not SNAKY.search(f"{name} {narration}"):
+        return dict(spec, hair="long")
+    return spec
+
+
 def tell_apart(chars, fixed=()):
     """Two people drawn exactly alike look like one person twice: give the later one another outfit colour (and hair, for a person).
     `fixed` names (saved looks) are never changed."""
@@ -404,7 +414,7 @@ def check_plan(reply, script, library=None):
         if name and (name in chars or len(chars) < MAX_CHARACTERS):
             chars[name] = library.get(name) or story_art.clean_spec(spec)
     told = " ".join(str(s.get("narration") or "") for s in script["sections"])
-    chars = {name: spec if name in library else apply_facts(spec, facts_from(name, told)) for name, spec in chars.items()}
+    chars = {name: spec if name in library else no_stray_snakes(name, apply_facts(spec, facts_from(name, told)), told) for name, spec in chars.items()}
     chars = tell_apart(chars, fixed=library)
     raw_sections = data.get("sections") if isinstance(data.get("sections"), list) else []
     out_sections = []
@@ -459,7 +469,7 @@ def check_plan(reply, script, library=None):
 
 
 def _key(script, aspect):
-    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v18"])
+    raw = "|".join([str(script.get("title", "")), *[str(s.get("narration", "")) for s in script["sections"]], aspect, "story-v19"])
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
