@@ -101,6 +101,8 @@ def _narration(args, script, session_dir, resumed, avatar=None, narrator="standa
         cached = cr.cached_voice(script, session_dir, _narrator_tag(narrator, voice_sample, avatar, _spoken_by(args, narrator), _language(script)))
         if cached:
             print("[Log] Reusing the saved narration (no new voice is made).")
+            if narrator in ("gemini", "voice_server"):          # their word times were worked out here: work them out again from the same audio
+                return cached[0], _retimed(script, session_dir, cached[0])
             return cached
         print("[Warning] The saved narration is missing, incomplete or was spoken another way; making it again.")
     if narrator != "voice_server":
@@ -108,6 +110,21 @@ def _narration(args, script, session_dir, resumed, avatar=None, narrator="standa
     from engine import expressive_voice as ev, voice_server
     with voice_server.while_needed(ev.server_url()):              # started here when it must be, and stopped again before the render
         return _speak(args, script, session_dir, avatar, narrator, voice_sample)
+
+
+def _retimed(script, session_dir, audios):
+    """The saved narration's captions timed again (no new voice, no quota): a better timing step then reaches a run that is rendered again."""
+    from engine import case_render as cr, expressive_voice as ev
+    print("[Log] Timing the captions again from the saved audio.")
+    words = []
+    for i, (sec, audio) in enumerate(zip(script["sections"], audios), 1):
+        subs = os.path.join(session_dir, f"subs_{i:02d}.json")
+        timed = ev.timed(sec["narration"], audio, ev.hear)
+        if timed:
+            with open(subs, "w", encoding="utf-8") as f:
+                json.dump(timed, f)
+        words.append(cr.read_words(subs))
+    return words
 
 
 def _spoken_by(args, narrator):

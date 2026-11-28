@@ -42,3 +42,16 @@ def test_the_browser_app_offers_both_storytellers():
     grandmother = web_args.case_args("A story", "https://example.org", "story", "dark", "9:16", narrator="gemini:Sulafat")
     assert "narrator=gemini" in grandfather and not any(a.startswith("gemini_voice=") for a in grandfather)
     assert "narrator=gemini" in grandmother and "gemini_voice=Sulafat" in grandmother
+
+
+def test_a_rerendered_storyteller_run_times_its_saved_audio_again_without_a_new_voice(tmp_path, monkeypatch):
+    from engine import case_render, expressive_voice
+    script = {"sections": [{"title": "A", "narration": "one two"}]}
+    (tmp_path / "voice_01.mp3").write_bytes(b"x")
+    (tmp_path / "subs_01.json").write_text(json.dumps([{"word": "one", "start": 9.0, "end": 9.4}]), encoding="utf-8")
+    (tmp_path / "voice_cache.json").write_text(json.dumps({"narration": case_render._narration_hashes(script), "narrator": "gemini:Algieba"}), encoding="utf-8")
+    monkeypatch.setattr(expressive_voice, "timed", lambda text, audio, hear: [{"word": "one", "start": 0.1, "end": 0.5}, {"word": "two", "start": 0.6, "end": 1.0}])
+    monkeypatch.setattr(gv, "speak", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no new voice")))
+    args = type("A", (), {"gemini_voice": "Algieba", "voice": None})()
+    audios, words = case_mode._narration(args, script, str(tmp_path), True, None, "gemini", "")
+    assert [w["start"] for w in words[0]] == [0.1, 0.6] and audios[0].endswith("voice_01.mp3")
