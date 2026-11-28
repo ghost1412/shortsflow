@@ -8,9 +8,9 @@
 > **[Demo page](https://ghost1412.github.io/shortsflow/)** · one-click installer for Windows; Mac, Linux and Docker use the options below.
 
 <div align="center">
-  <img src="../demos/demo_podcast_cuts.gif" width="260" alt="A podcast clip: the crop cuts to whoever is speaking, with word-by-word captions" />
+  <img src="../demos/demo_podcast_cuts.gif" width="260" alt="A podcast clip made by ShortsFlow: a 9:16 crop that moves between the speakers, with word-by-word captions" />
   <br/>
-  <sub>A real run: the 9:16 crop cuts to whoever is talking, with word-timed captions. <code>shortsflow clip interview.mp4 --captions</code></sub>
+  <sub>A real run: the 9:16 crop moves between the speakers, with word-timed captions. It tries to cut to whoever is talking and can pick the wrong person. <code>shortsflow clip interview.mp4 --captions</code></sub>
 </div>
 
 ### Try it
@@ -64,7 +64,7 @@ No account or API key is needed to clip a video. A key (or a free local Ollama) 
 
 ---
 
-## ✂️ Clipping demo: the crop follows whoever is talking
+## ✂️ Clipping demo: the crop moves between the speakers
 
 The first GIF above is a real run of `py main.py --source_video podcast.mp4 --layout active --use_remotion` on a two-person studio podcast
 (a 1080p video): the crop follows the speaker, cuts to the host when she speaks (found by voice pitch plus face detection), and Whisper word
@@ -497,7 +497,7 @@ python -m engine.branding existing_clip.mp4 --logo logo.png --handle @mychannel 
 ## 💡 Top Command Recipes
 
 ```bash
-# 1. Podcast Shorts that cut to whoever is talking (stacked split when unsure) + silence removal
+# 1. Podcast Shorts that try to cut to whoever is talking (stacked split when unsure; can pick the wrong person) + silence removal
 py main.py --source_video "https://www.youtube.com/watch?v=VIDEO_ID" --extract_mode shorts --layout active --tighten --use_remotion
 
 # 1b. Prompt-based clipping: only the moments that match your request (LLM search, keyword fallback offline)

@@ -16,10 +16,10 @@
 </p>
 
 <p align="center">
-  <img src="demos/demo_podcast_cuts.gif" width="240" alt="A podcast clip: the crop cuts to whoever is speaking, with word-by-word captions" />
+  <img src="demos/demo_podcast_cuts.gif" width="240" alt="A podcast clip made by ShortsFlow: a 9:16 crop that moves between the speakers, with word-by-word captions" />
   &nbsp;&nbsp;
   <img src="demos/demo_case_9x16.gif" width="240" alt="A case explainer made from one web page: an animated diagram over stock footage, a source chip and captions" />
-  <br/><sub><b>Clip it:</b> the 9:16 crop cuts to whoever is talking, with word-timed captions. &nbsp;|&nbsp; <b>Explain it:</b> one web page in, a narrated explainer with an animated diagram out (<code>--mode CASE</code>).</sub>
+  <br/><sub><b>Clip it:</b> the 9:16 crop follows the faces and tries to cut to whoever is talking, with word-timed captions. &nbsp;|&nbsp; <b>Explain it:</b> one web page in, a narrated explainer with an animated diagram out (<code>--mode CASE</code>).</sub>
 </p>
 
 ## Why ShortsFlow
@@ -44,7 +44,7 @@ shortsflow doctor              # "FIX" is needed to clip; "optional" adds featur
 shortsflow clip my_video.mp4   # vertical clips with plain captions
 ```
 
-**The look of the demo:** animated captions (these need [Node.js](https://nodejs.org) 18+), and a crop that cuts to whoever speaks (`--layout auto`):
+**The look of the demo:** animated captions (these need [Node.js](https://nodejs.org) 18+), and a crop that tries to cut to whoever speaks (`--layout auto`; it can pick the wrong person):
 
 ```bash
 shortsflow init                # once: sets up the animated captions
