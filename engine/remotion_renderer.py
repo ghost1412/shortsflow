@@ -81,6 +81,28 @@ def asset_aspect(path):
         return None
 
 
+def caption_words(transcript_data, start_offset=0.0):
+    """[{word, start, end}] on the clip's own clock from a transcript (segments with words, or a plain list of words). A clip is often
+    given the whole video's transcript: what was said before it starts is left out. (Pulled back to 0 s, those words were drawn
+    together as a wall of text on the first frame.)"""
+    raw = transcript_data if isinstance(transcript_data, list) else []
+    if isinstance(transcript_data, dict):
+        raw = [w for seg in transcript_data.get('segments', []) for w in seg.get('words', [])]
+    words = []
+    for w in raw:
+        start = float(w['start']) - start_offset
+        if 'end' in w:
+            end = float(w['end']) - start_offset
+        elif 'duration' in w:
+            end = float(w['start']) + float(w['duration']) - start_offset
+        else:
+            end = float(w['start']) + 0.5 - start_offset
+        if start < -0.001 and end <= 0.05:          # over before the clip begins
+            continue
+        words.append({"word": w['word'].strip(), "start": max(0.0, start), "end": end})
+    return words
+
+
 def clean_hook_text(text, max_words=9, max_chars=60):
     """Turn a clip's hook/title into a short on-screen headline; '' when there is nothing usable."""
     if not isinstance(text, str):
@@ -289,28 +311,7 @@ def render_with_remotion(
             with open(subs_path, "r", encoding="utf-8") as f:
                 transcript_data = json.load(f)
             
-            raw_words = []
-            if isinstance(transcript_data, list):
-                raw_words = transcript_data
-            elif isinstance(transcript_data, dict):
-                segments = transcript_data.get('segments', [])
-                for seg in segments:
-                    raw_words.extend(seg.get('words', []))
-                    
-            for w in raw_words:
-                w_start = float(w['start']) - start_offset
-                if 'end' in w:
-                    w_end = float(w['end']) - start_offset
-                elif 'duration' in w:
-                    w_end = float(w['start']) + float(w['duration']) - start_offset
-                else:
-                    w_end = float(w['start']) + 0.5 - start_offset
-                    
-                words.append({
-                    "word": w['word'].strip(),
-                    "start": max(0.0, w_start),
-                    "end": w_end
-                })
+            words = caption_words(transcript_data, start_offset)
         
         # Determine total duration in seconds
         if not duration:
