@@ -2,32 +2,27 @@
 
 Post from your own accounts. Edit freely - keep the honest tone; HN and Reddit punish hype.
 Best timing: Show HN on a weekday morning US Eastern; stay around for the first 2 hours to answer comments.
+Drafts last checked against the code on 2026-11-28. Check them again before posting: the tool changes quickly.
 
 ## Before you post (checklist)
 
-- [ ] `pip install shortsflow` works in a fresh venv; `shortsflow doctor` is green; `shortsflow clip some_video.mp4` makes shorts with no keys
-- [ ] The Windows installer (`ShortsFlow-Setup-<version>.exe` on the latest GitHub release) has been run end to end on a PC that is not yours (or a fresh VM) and made a short; note the SmartScreen "More info > Run anyway" step in your post
-- [ ] The daily channel workflow is green again (Groq model fix, 2026-11-03)
-- [ ] GHCR package `ghcr.io/ghost1412/shortsflow` is public and `docker run` starts the WebUI
+- [ ] **The release people will download has the fixes in the changelog's "Unreleased" section.** 0.9.5 does not: among other things, its speaker switching often shows the silent listener
+- [ ] `pip install shortsflow` works in a fresh environment; `shortsflow doctor` shows no missing required item; `shortsflow clip some_video.mp4` makes shorts with no keys
+- [ ] The Windows installer (on the latest GitHub release) has been run end to end on a PC that is not yours (or a fresh VM) and made a short; mention the SmartScreen "More info > Run anyway" step in your post
+- [ ] GHCR package `ghcr.io/ghost1412/shortsflow` is public and `docker run` starts the browser app
 - [ ] Colab notebook runs top to bottom
-- [ ] `pip install -U edge-tts` (Edge TTS breaks when Microsoft rotates its token)
 - [ ] CI badge on the README is green
-- [ ] README demo GIFs load; the clipping GIF credits its CC BY-SA source
+- [ ] README demo GIFs load and each credits its source and licence
+- [ ] You have watched, with sound, every video or GIF you link in the post
+- [ ] Each venue's self-promotion rules allow the post from your account (Show HN and some subreddits restrict new or low-activity accounts)
 
-## What is new since the first drafts (use these as the hook)
+## What to show
 
-- **One-click Windows install** (no Python, Node or API key first): download `ShortsFlow-Setup` from the Releases page, open ShortsFlow, paste a link or drop a video, press one button. Unsigned (SmartScreen warning), roughly 2 GB download (about 5 GB with an NVIDIA card), CPU works but is slow
-- **`shortsflow clip VIDEO_OR_LINK`**: one command, no API key; plain-language error messages and a friendlier `shortsflow doctor`
-- **Beginner browser tab** ("Start here"): link or upload, how many shorts, one button, plain progress ("Listening to the video...", "Finding the best moments...")
-- Still-image avatars now render as cut-outs (the green screen is removed)
-- `pip install shortsflow`, then `shortsflow init` / `shortsflow doctor`
-- Prompt-based clipping: `--find "where they discuss pricing"` clips only the moments that match
-- Edit the video by editing its transcript: `--cut "you know"` or delete words in `transcript.txt` and re-run with `--edit_transcript`
-- `--remove_fillers` cuts um/uh/er; `--tighten` removes silences
-- Active-speaker layout now uses a face detector (YuNet) plus voice-pitch diarisation instead of mouth motion alone
-- REST API with a job queue, API keys and signed webhooks (`shortsflow api`)
-- Brand kit: `--logo`, `--handle`, `--end_card`
-- Fully local: Whisper on your GPU, Ollama for the LLM, Kokoro for the voice (`--tts_provider kokoro`); only stock footage needs a key
+- **Long video to Shorts:** moments picked, cut to 9:16, captioned. No account or API key needed to clip.
+- **Highlights video:** the best moments of a long recording in order, with chapters, subtitles and optional cold open and pause cutting.
+- **Also in the same tool:** dubbing into another language, explainer videos from your sources, trip and event recaps, a voice-over in your own cloned voice (needs the optional voice server). The animated story look is experimental.
+- **Ask for moments:** `--find "where they discuss pricing"`. **Edit by transcript:** `--cut "you know"`, or delete words in `transcript.txt` and re-run with `--edit_transcript`.
+- **Runs on your PC:** Whisper locally, an Ollama model for the text work, Kokoro for narration (`--tts_provider kokoro`; the default narrator is Microsoft's online Edge voice).
 
 ---
 
@@ -39,19 +34,18 @@ Show HN: ShortsFlow – open-source, local-first alternative to Opus Clip
 **URL:** https://github.com/ghost1412/shortsflow
 
 **Text:**
-I built ShortsFlow to make vertical Shorts/Reels without paying per minute for clipping SaaS, and without uploading footage anywhere.
+I built ShortsFlow to make vertical Shorts from long videos without paying per minute for a clipping service or uploading my footage to one.
 
-On Windows there is a one-click installer (no Python or API key needed): open it, paste a link or drop in a video, press a button. Otherwise `pip install shortsflow` (or Docker, or Colab) and `shortsflow clip my_video.mp4` works with no key at all. Under the hood:
+On Windows there is a one-click installer (no Python or API key needed): open it, paste a link or drop in a video, press a button. Otherwise `pip install shortsflow` (or Docker, or Colab) and `shortsflow clip my_video.mp4` works with no key. Under the hood:
 
-- Whisper transcribes locally with word timestamps and an LLM scores the hooks. FFmpeg cuts 9:16 clips with face tracking, and captions are rendered with Remotion.
-- `--find "where they discuss pricing"` clips only the moments that match your request.
-- You can edit the video by editing its transcript: `--cut "you know"`, or delete words in the exported `transcript.txt` and re-run. The cuts are rendered into an edited copy and the captions are retimed to it.
-- For podcasts, `--layout active` cuts to whoever is talking. It combines a face detector with voice-pitch clustering, because mouth motion alone was weak on real footage (on one real two-person interview, pitch got the speaker right for 92% of speaking time versus 45% for mouth motion).
-- It can also generate from an idea (30+ formats: facts quizzes, Manim explainers, stories). That mode runs a YouTube channel, @spottheliee, from one GitHub Actions workflow.
+- Whisper transcribes on your machine with word timestamps; the best moments are picked and, if you have an AI model (a local Ollama one is enough) or a key, ranked and titled. FFmpeg cuts 9:16 clips with face tracking, and the animated captions are rendered with Remotion.
+- `--find "where they discuss pricing"` clips only the moments that match.
+- You can edit a video by editing its transcript.
+- The same tool makes a highlights video, dubs into another language, and makes explainer videos from your own sources. There is a REST API with webhooks and an MCP server.
 
-It can run fully locally: Whisper on your GPU, Ollama for the LLM, Kokoro for the voice. There is a REST API with webhooks for automation and an MCP server for agents. MIT licensed.
+What leaves your PC: your video does not. If you add an AI provider's key, transcript text goes to that provider, and a few other options (stock footage, online voices, publishing) are listed in the guide. With Ollama and the Kokoro voice, clipping needs nothing online beyond the video you give it. MIT licensed.
 
-Honest limitations: the Windows installer is not code-signed yet (SmartScreen will warn you), it downloads around 2 GB (about 5 GB with an NVIDIA card), and on a CPU-only machine transcribing a long video is slow. It started as a script and grew, so parts are still being refactored. The pitch-based speaker switching needs the two voices to differ by roughly 20%, and I have only checked it on a few interviews. Filler removal and the publishing integration (Upload-Post) have had little testing on real footage, so treat them as experimental. Rendering a short takes a few minutes, and a GPU helps a lot.
+Honest limitations: switching the camera between two speakers is the weakest part. It judges from mouth movement and voice pitch, can pick the wrong person, and often shows both when it is unsure; I have checked it on very few interviews. Moment picking is useful but not as good as a human editor, so expect to discard some clips. A small local model sometimes writes weak or wrong titles. The Windows installer is not code-signed (SmartScreen will warn you), the download is a few GB, and transcribing a long video on a CPU is slow.
 
 I'd love feedback on clipping quality and on which features are worth keeping.
 
@@ -62,19 +56,20 @@ I'd love feedback on clipping quality and on which features are worth keeping.
 **Title:** ShortsFlow – self-hosted Opus Clip alternative: long videos to captioned Shorts (pip/Docker, local Whisper, MIT)
 
 **Body:**
-Hi r/selfhosted! I've been building an open-source tool for making vertical short-form video without uploading footage to a SaaS.
+Hi r/selfhosted! I've been building an open-source tool that makes short vertical videos from long ones on your own machine.
 
-- **Clipping**: YouTube link or local file → local Whisper → hook scoring → 9:16 clips with face tracking and animated captions
-- **Ask for moments**: `--find "where they discuss pricing"`
-- **Edit by transcript**: delete words from a text file and the video follows
-- **Podcast mode**: cuts to the active speaker, or shows both stacked when it's unsure
-- **Fully local**: Whisper on your GPU, Ollama for the LLM, Kokoro for the voice; only stock footage (Pexels) needs an API key, and only for the generate-from-a-topic mode
-- **Automate it**: REST API with API keys and signed webhooks
-- **Install**: a one-click Windows installer from the Releases page (unsigned, so SmartScreen warns), `pip install shortsflow` then `shortsflow clip video.mp4` (no API key needed for clipping), `docker run -p 7860:7860 ghcr.io/ghost1412/shortsflow`, or open the Colab
+- **Clipping:** YouTube link or local file → local Whisper → moment picking → 9:16 clips with face tracking and animated captions
+- **Highlights video:** the best moments of a long recording, with chapters and subtitles
+- **Ask for moments:** `--find "where they discuss pricing"`
+- **Edit by transcript:** delete words from a text file and the video follows
+- **Two people on screen:** it tries to cut to whoever is speaking, or shows both stacked when unsure (the weakest part; it can pick the wrong one)
+- **Local:** Whisper on your GPU, Ollama for the text work, Kokoro for narration. Cloud AI, stock footage, online voices and publishing are optional
+- **Automate it:** REST API with API keys and signed webhooks
+- **Install:** a Windows installer from the Releases page (unsigned, so SmartScreen warns), `pip install shortsflow` then `shortsflow clip video.mp4`, `docker run -p 7860:7860 ghcr.io/ghost1412/shortsflow`, or the Colab notebook
 
 Repo: https://github.com/ghost1412/shortsflow
 
-Feedback and issues welcome. ROADMAP.md lists what's open, and there are a few `good first issue` tickets.
+Feedback and issues welcome. ROADMAP.md lists what's open.
 
 *(Check the subreddit's self-promotion rules first; some require mod approval or a flair like "Release".)*
 
@@ -82,18 +77,18 @@ Feedback and issues welcome. ROADMAP.md lists what's open, and there are a few `
 
 ## 3. r/LocalLLaMA (angle: runs on local models)
 
-**Title:** Open-source Shorts clipper that runs end-to-end on local models (Whisper + Ollama + Kokoro), with a REST API and MCP server
+**Title:** Open-source Shorts clipper that runs on local models (Whisper + Ollama + Kokoro), with a REST API and MCP server
 
-**Body:** Lead with the local stack: Whisper on the GPU, Ollama for hook scoring and `--find`, Kokoro for the voice. Mention the Gemini → Ollama → Hugging Face fallback order, and that a 7B model is enough for scoring but sometimes invents details in clip titles, so check them. Keep stock footage as the only cloud dependency.
+**Body:** Lead with the local stack: Whisper on the GPU, an Ollama model for ranking, titles and `--find`, Kokoro for narration. Choosing Ollama (`--llm_provider ollama`) means no text goes to a cloud model. Left on automatic, the app tries the providers you have keys for first and then Ollama, so say which you mean. Be plain that a 7B model is enough to rank moments but its titles and notes are sometimes weak or wrong.
 
 ---
 
 ## 4. MCP directories
 
 Short description (reuse everywhere):
-> ShortsFlow MCP server: generate vertical Shorts from a topic or clip viral moments out of a YouTube video. Tools: generate_short, extract_clips (face tracking / active-speaker layout), get_render_status, generate_social_package, list_supported_modes. Local-first, MIT.
+> ShortsFlow MCP server: make vertical Shorts from a topic or cut moments out of a long video, dub a video, or make an explainer. Tools: generate_short, extract_clips, create_explainer, dub_video, generate_social_package, publish_video, get_render_status, list_videos, list_supported_modes. Local-first, MIT.
 
-- **awesome-mcp-servers** (github.com/punkpeye/awesome-mcp-servers): open a PR adding one line under a media/video category:
+- **awesome-mcp-servers** (github.com/punkpeye/awesome-mcp-servers): one line under a media/video category:
   `- [ghost1412/shortsflow](https://github.com/ghost1412/shortsflow) 🐍 🏠 - Generate Shorts from topics or clip YouTube videos into captioned vertical shorts.`
 - **Smithery** (smithery.ai): sign in with GitHub → "Add server" → point at the repo (`mcp_server.py`, stdio).
 - **Glama** (glama.ai/mcp/servers): "Add server" with the repo URL.
@@ -102,5 +97,5 @@ Short description (reuse everywhere):
 
 ## 5. Product Hunt (optional, later)
 
-Tagline: "Open-source Opus Clip - local Shorts from any video or idea"
-Wait until the Colab notebook and Docker image are confirmed working; PH visitors won't install from source.
+Tagline: "Open-source Opus Clip - local Shorts from any long video"
+Wait until the installer, Colab notebook and Docker image are confirmed working; most visitors won't install from source.
