@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: story look: an animal named by its colour ("white dove") is drawn in that colour when the plan gives none.
+
 - Fix: voice server narration: when the timing of the captions broke down part-way through a section (seen in Hindi: captions up to 3.5 s late, then a burst of words), the audio is now listened to again.
 
 - Story look, Hindi: when the plan names people in English ("Akbar"), the story's own Hindi spelling is used, so the same person is no longer added twice with two faces. With the voice server, a section without a mood now gets one from its place and wording instead of every section being spoken at the same strength.

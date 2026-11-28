@@ -346,7 +346,7 @@ def _from_parts(plan, item):
     if snakes:
         base["hair"] = "snakes"
     who = who or item["name"]
-    plan["characters"][who] = story_art.clean_spec(base)
+    plan["characters"][who] = case_story.coat_from_name(who, story_art.clean_spec(base))
     return who
 
 

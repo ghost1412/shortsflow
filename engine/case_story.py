@@ -115,6 +115,14 @@ def facts_from(name, text):
     return facts
 
 
+def coat_from_name(name, spec):
+    """An animal named by its colour ("white dove") is that colour when the plan gave none."""
+    if spec.get("species", "human") == "human" or spec.get("coat_colour"):
+        return spec
+    colour = next((w for w in re.findall(r"[a-z]+", str(name).lower()) if w in story_art.story_beasts.COATS), "")
+    return dict(spec, coat_colour=colour) if colour else spec
+
+
 def apply_facts(spec, facts):
     """`spec` changed to agree with `facts`."""
     if spec.get("species", "human") != "human" or not facts:
@@ -470,7 +478,8 @@ def check_plan(reply, script, library=None):
     for name, spec in chars.items():
         renamed.setdefault(spelt.get(name, name), spec)
     chars = renamed
-    chars = {name: spec if name in library else no_stray_snakes(name, apply_facts(spec, facts_from(name, told)), told) for name, spec in chars.items()}
+    chars = {name: spec if name in library else coat_from_name(name, no_stray_snakes(name, apply_facts(spec, facts_from(name, told)), told))
+             for name, spec in chars.items()}
     chars = tell_apart(chars, fixed=library)
     raw_sections = data.get("sections") if isinstance(data.get("sections"), list) else []
     out_sections = []

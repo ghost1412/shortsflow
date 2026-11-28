@@ -37,3 +37,10 @@ def test_a_saved_look_is_left_alone():
     saved = dict(cs.story_art.DEFAULT_SPEC)
     got = cs.tell_apart({"Asha": saved, "Ravi": dict(saved)}, fixed={"Asha"})
     assert got["Asha"] == saved and got["Ravi"]["outfit_colour"] != saved["outfit_colour"]
+
+
+def test_an_animal_named_by_its_colour_gets_that_colour_unless_the_plan_chose_one():
+    dove = cs.story_art.clean_spec({"species": "bird"})
+    assert cs.coat_from_name("white dove", dove)["coat_colour"] == "white"
+    assert cs.coat_from_name("white dove", dict(dove, coat_colour="grey"))["coat_colour"] == "grey"
+    assert cs.coat_from_name("Mr White", cs.story_art.clean_spec({}))["coat_colour"] == ""      # a person's name, not a coat
