@@ -16,7 +16,7 @@ def _kept_times(a, b, keeps):
     """Where the stretch a..b (seconds into a moment) lands once only the `keeps` pieces are left, or None when all of it was cut."""
     if keeps is None:
         return a, b
-    if not any(min(b, y) - max(a, x) > 0 for x, y in keeps):
+    if not any(min(b, y) - max(a, x) > 0 or (b <= a and x <= a <= y) for x, y in keeps):      # Whisper gives some words no length
         return None
     return tuple(sum(max(0.0, min(t, y) - x) for x, y in keeps) for t in (a, b))
 
@@ -42,6 +42,15 @@ def reel_words(parts, transcript_data, xf=0.0):
                 words.append((offset + max(0.0, ws), offset + min(duration, max(we, ws + 0.12)), text))
         offset += duration - xf
     words.sort(key=lambda t: t[0])
+    # words Whisper put at the very same moment ("there something that") are shown together, not dropped
+    together = []
+    for s, e, t in words:
+        if together and s - together[-1][0] < 0.04:
+            s0, e0, t0 = together[-1]
+            together[-1] = (s0, max(e0, e), f"{t0} {t}")
+        else:
+            together.append((s, e, t))
+    words = together
     # never show two words at once: a word ends when the next begins
     fixed = []
     for i, (s, e, t) in enumerate(words):

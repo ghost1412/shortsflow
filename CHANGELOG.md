@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: words the transcriber gives no length (a few per hundred) were missing from the highlights captions, and a cold open could start part-way through its line because of them. They are now shown with the next word, and such a line is not used as the teaser.
+
 - Highlights video from the command line: the default length is now 3 minutes (it was 30 seconds, the default meant for Shorts), and an unreadable chapter-title reply is asked once more instead of silently giving keyword titles. `--cold_open` now works together with `--tighten`.
 
 - Fix: `--tighten` and `--remove_fillers` did nothing for the highlights video. Long pauses are now cut there too (gentler than in Shorts: only pauses over about a second), and its captions, subtitles, cold open and chapter times follow the cuts.

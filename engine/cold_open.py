@@ -22,6 +22,8 @@ MIN_TEASER = 1.5
 MAX_TEASER = 6.0
 MAX_TOTAL = 59.9         # the pipeline keeps shorts under a minute
 TAIL = 0.15
+FIRST_WORDS = 4          # the timings of a line's first words are what the teaser is cut by ...
+NO_LENGTH = 0.04         # ... and a word "said" in less than this has no real timing: the line may start earlier than it says
 
 
 def _default_score(text):
@@ -53,6 +55,9 @@ def pick_hook(words, duration, hint=None, score_fn=None, min_clip=MIN_CLIP, min_
             continue
         if len(text.split()) < 4 or _is_leadin(text, 6):
             continue
+        opening = [w for w in words if s - 0.01 <= float(w["start"]) <= e][:FIRST_WORDS]
+        if any(float(w["end"]) - float(w["start"]) < NO_LENGTH or " " in str(w["word"]).strip() for w in opening):    # or words reel_words joined
+            continue                                      # the cut would start part-way through the line
         sc = score_fn(text)
         sc += 2.0 if text.rstrip().endswith(("!", "?")) else 0.0
         sc += 2.0 * (s / duration)                                              # later in the clip = more of a payoff
