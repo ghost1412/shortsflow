@@ -4,6 +4,10 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Subtitle files (`--srt`): a clip's cues hold only the words inside the clip (an "And" cut off its front is no longer there), and a clip cut by `--tighten` gets cues on its tightened timeline instead of the original one.
+
+- Clip report: it now says what ShortsFlow itself noticed about each clip (opens on "It ..." or "And ...", stops mid-thought, long silence) with an exact start or end to try in the editor; a clip with nothing to note shows nothing. Also in results.json as `notes`. Advice only: no clip is changed.
+
 - Game clips: a built-in title no longer talks about a fight (it appeared on racing footage too) or says what everyone clips, and a clip title made only of numbers ("1044?!") is asked for again, then replaced with words.
 
 - Explainer: the numbers on a picture and its list now follow the process. A label such as "Indoor coil" was tied to the first "coils" in the narration and jumped ahead of the step before it. A label also appears where most of its words are said, not at the first single word it shares with an earlier sentence.

@@ -44,6 +44,38 @@ def star_hint(stream=None):
     return True
 
 
+def cue_text(seg):
+    """The text of a subtitle cue: the words the segment still has (a clip keeps only the words inside it), else its own text."""
+    words = seg.get("words")
+    if words:
+        text = " ".join("".join(str(w.get("word", "")) for w in words).split())
+        if text:
+            return text
+    return str(seg.get("text", "")).strip()
+
+
+def clip_cues(segments, start, end):
+    """Subtitle segments of one clip [start, end] (source seconds) on the clip's own timeline. A segment that starts before the clip or ends after
+    it keeps only the words inside it ("And how is ..." is not shown when the clip begins after the "And"); a segment without word times
+    keeps its text and its times clamped to the clip."""
+    out, length = [], end - start
+    for seg in segments:
+        if seg["end"] <= start or seg["start"] >= end:
+            continue
+        words = [dict(w, start=float(w["start"]) - start, end=float(w["end"]) - start) for w in seg.get("words") or []
+                 if isinstance(w, dict) and "start" in w and "end" in w and float(w["end"]) > start and float(w["start"]) < end]
+        if seg.get("words"):
+            if not words:
+                continue
+            cue = dict(seg, words=words, start=max(0.0, words[0]["start"]), end=min(length, words[-1]["end"]))
+        else:
+            cue = dict(seg, start=max(0.0, seg["start"] - start), end=min(length, seg["end"] - start))
+        cue["text"] = cue_text(cue)
+        if cue["text"]:
+            out.append(cue)
+    return out
+
+
 def export_srt(transcript_data, output_path):
     """Exports transcript segments to a standard .srt file."""
     segments = transcript_data.get('segments', [])
@@ -60,7 +92,7 @@ def export_srt(transcript_data, output_path):
         for i, seg in enumerate(segments, 1):
             start = format_time(seg.get('start', 0))
             end = format_time(seg.get('end', 0))
-            text = seg.get('text', '').strip()
+            text = cue_text(seg)
             f.write(f"{i}\n{start} --> {end}\n{text}\n\n")
 
 def print_clip_score_table(highlights):

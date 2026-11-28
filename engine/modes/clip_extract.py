@@ -715,8 +715,10 @@ def write_outputs(args, session_dir, highlights, extracted_files, transcript_pat
         
     # every run writes clip_report.md (what was picked and why); --clip_report csv|both adds the spreadsheet
     from engine.clip_report import build_rows, write_report
+    from engine.clip_checks import notes_for_run
+    run_notes = notes_for_run(highlights, session_dir, tightened=bool(args.tighten), reel=reel_mode)       # what the tool noticed about each clip
     try:
-        report_rows = build_rows(highlights, [] if reel_mode else extracted_files, highlights_meta, session_dir)
+        report_rows = build_rows(highlights, [] if reel_mode else extracted_files, highlights_meta, session_dir, notes=run_notes)
         for path in write_report(report_rows, session_dir, getattr(args, "clip_report", None) or "md", source=str(args.source_video)):
             print(f"[Log] Clip report: {path}")
     except (OSError, ValueError) as e:
@@ -769,6 +771,7 @@ def write_outputs(args, session_dir, highlights, extracted_files, transcript_pat
                 **({"cold_open": cold_infos[clip_path]} if clip_path in cold_infos else {}),
                 **({"edit": edit_logs[clip_path], "edit_summary": edit_logs[clip_path]["summary"]} if clip_path in edit_logs else {}),
                 **({"fallback": True} if h.get("fallback") else {}),       # a fixed window, not a picked moment (analysis failed)
+                **({"notes": run_notes[i]} if i < len(run_notes) and run_notes[i] else {}),      # what the tool noticed: shown to the person, never applied
                 "viral_score": h.get("viral_score", 85),
                 "hook": h.get("hook_text", meta_item.get("title", "")),
                 "reason": h.get("reason") or h.get("llm_reason") or "High-engagement segment",
@@ -865,13 +868,20 @@ def run(args, target_bitrate, target_preset):
                     break
                 if i < len(highlights):
                     hi = highlights[i]
-                    # Copies: one transcript serves every clip, so one clip's offsets must not leak into the next
-                    clip_segs = []
-                    for seg in t_data.get('segments', []):
-                        if seg['end'] <= hi['start'] or seg['start'] >= hi['end']:
-                            continue
-                        clip_segs.append(dict(seg, start=max(0.0, seg['start'] - hi['start']),
-                                              end=min(hi['end'] - hi['start'], seg['end'] - hi['start'])))
+                    # Copies: one transcript serves every clip, so one clip's offsets must not leak into the next. The cues hold only the words inside
+                    # the clip, and a clip that --tighten cut takes the transcript retimed to what is left (the original times would drift)
+                    from engine.pipeline import clip_cues, cue_text
+                    from engine.video_gen import load_tight
+                    tight_file = load_tight(os.path.join(session_dir, "temp_segments", f"seg_{i}.mp4")) if args.extract_mode != "long" else None
+                    clip_segs = None
+                    if tight_file:
+                        try:
+                            with open(tight_file, "r", encoding="utf-8") as tf:
+                                clip_segs = [dict(s, text=cue_text(s)) for s in json.load(tf).get("segments", [])]
+                        except (OSError, ValueError):
+                            clip_segs = None
+                    if clip_segs is None:
+                        clip_segs = clip_cues(t_data.get('segments', []), hi['start'], hi['end'])
                     from engine.cold_open import shift_cues
                     clip_segs = shift_cues(clip_segs, cold_infos.get(clip_file))     # a cold open moves every cue later
                     srt_path = clip_file.rsplit('.', 1)[0] + ".srt"

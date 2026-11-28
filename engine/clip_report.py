@@ -4,7 +4,12 @@ import csv
 import os
 
 FORMATS = ("md", "csv", "both")
-COLUMNS = ("clip", "title", "start", "end", "duration_s", "score", "label", "hook", "reason", "file", "thumbnail")
+COLUMNS = ("clip", "title", "start", "end", "duration_s", "score", "label", "hook", "reason", "file", "thumbnail", "notes")
+
+
+def as_line(notes):
+    from engine.clip_checks import as_line as line
+    return line(notes)
 
 
 def _label(score):
@@ -32,8 +37,9 @@ def _rel(path, base):
         return path.replace("\\", "/")
 
 
-def build_rows(highlights, files, meta, session_dir):
-    """One dict per clip, in COLUMNS order, from the pipeline's own lists (highlights, rendered files, metadata)."""
+def build_rows(highlights, files, meta, session_dir, notes=None):
+    """One dict per clip, in COLUMNS order, from the pipeline's own lists (highlights, rendered files, metadata). `notes` is one list per clip
+    from engine.clip_checks (what the tool itself noticed and what to try); the column is empty for a clip with none."""
     rows = []
     for i, h in enumerate(highlights):
         m = meta[i] if i < len(meta) else {}
@@ -55,6 +61,7 @@ def build_rows(highlights, files, meta, session_dir):
             "hook": (h.get("hook_text") or "").strip(),
             "reason": "a fixed window, not a picked moment (the analysis failed)" if h.get("fallback") else " ".join(str(h.get("reason") or h.get("llm_reason") or "").split())[:240],
             "file": _rel(clip_path, session_dir), "thumbnail": _rel(thumb, session_dir),
+            "notes": as_line(notes[i]) if notes and i < len(notes) and notes[i] else "",
         })
     return rows
 
@@ -68,11 +75,13 @@ def to_markdown(rows, source=""):
     if source:
         lines += [f"Source: `{source}`", ""]
     lines += [f"{len(rows)} clip(s).", ""]
-    lines += ["| # | Title | Time | Score | Why it was picked | File | Thumbnail |", "| --- | --- | --- | --- | --- | --- | --- |"]
+    noted = any(r.get("notes") for r in rows)           # the column only exists when the tool noticed something
+    lines += ["| # | Title | Time | Score | Why it was picked | File | Thumbnail |" + (" Worth a look |" if noted else ""),
+              "| --- | --- | --- | --- | --- | --- | --- |" + (" --- |" if noted else "")]
     for r in rows:
         score = f"{r['label']} ({r['score']})" if r["score"] != "" else r["label"]
         lines.append(f"| {r['clip']} | {_md_cell(r['title'])} | {r['start']}-{r['end']} ({r['duration_s']} s) | {score} | "
-                     f"{_md_cell(r['reason'])} | {_md_cell(r['file'])} | {_md_cell(r['thumbnail'])} |")
+                     f"{_md_cell(r['reason'])} | {_md_cell(r['file'])} | {_md_cell(r['thumbnail'])} |" + (f" {_md_cell(r.get('notes') or '')} |" if noted else ""))
     return "\n".join(lines) + "\n"
 
 

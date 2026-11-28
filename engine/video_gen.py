@@ -115,6 +115,30 @@ def _save_split_spans(segment, spans):
         print(f"[Warning] Could not note the two-person stretches of {segment}: {e}")
 
 
+def _tight_file(segment):
+    return os.path.splitext(segment)[0] + ".tight.json"
+
+
+def _save_tight(segment, transcript):
+    """Which retimed transcript belongs to a segment cut by --tighten ('' when it was not cut): written for every new cut, so an old one is never reused."""
+    try:
+        os.makedirs(os.path.dirname(segment) or ".", exist_ok=True)
+        with open(_tight_file(segment), "w", encoding="utf-8") as f:
+            json.dump({"transcript": transcript or ""}, f)
+    except OSError as e:
+        print(f"[Warning] Could not note the tightened transcript of {segment}: {e}")
+
+
+def load_tight(segment):
+    """Path of the retimed transcript of a segment that --tighten cut in this run, None when it was not cut."""
+    try:
+        with open(_tight_file(segment), encoding="utf-8") as f:
+            path = (json.load(f) or {}).get("transcript") or ""
+    except (OSError, ValueError):
+        return None
+    return path if path and os.path.isfile(path) else None
+
+
 def _load_split_spans(segment):
     try:
         with open(_spans_file(segment), encoding="utf-8") as f:
@@ -2937,6 +2961,7 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
 
         # Reframing: Auto-Crop 16:9 to 9:16 for Shorts
         _save_split_spans(target, [])
+        _save_tight(target, "")
         active_shots = None
         if mode == "shorts" and layout in ("active", "auto"):
             from engine.speaker_focus import plan_speaker_shots
@@ -3219,6 +3244,7 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
                         tight = tighten_segment(task_path, hi, silence_intervals, transcript_data,
                                                 os.path.join(output_dir, "temp_segments"), i, info=tight_info, **fine)
                         if tight:
+                            _save_tight(task_path, tight[1])
                             task_path, r_subs, r_dur = tight[0], tight[1], tight[2]
                             r_offset = 0.0
                             print(f"[Log] Tightened Short {i+1}: {hi['end'] - hi['start']:.1f}s -> {r_dur:.1f}s")
@@ -3274,6 +3300,7 @@ def extract_segments(source_path, highlights, transcript_path, output_dir, mode=
                     tight = tighten_segment(task_path, hi, silence_intervals, transcript_data,
                                             os.path.join(output_dir, "temp_segments"), i, info=tight_info, **fine)
                     if tight:
+                        _save_tight(task_path, tight[1])
                         task_path = tight[0]
                         with open(tight[1], 'r', encoding='utf-8') as f:
                             cap_data = json.load(f)
