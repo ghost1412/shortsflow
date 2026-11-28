@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Review cards in the browser app show what ShortsFlow noticed about a clip ("Worth a look"), and a thumbs-down can say what was wrong (weak opening, wrong person, wrong cut, captions, boring, title); a reason that keeps coming up turns into plain advice with the option to try.
+
 - Subtitle files (`--srt`): a clip's cues hold only the words inside the clip (an "And" cut off its front is no longer there), and a clip cut by `--tighten` gets cues on its tightened timeline instead of the original one.
 
 - Clip report: it now says what ShortsFlow itself noticed about each clip (opens on "It ..." or "And ...", stops mid-thought, long silence) with an exact start or end to try in the editor; a clip with nothing to note shows nothing. Also in results.json as `notes`. Advice only: no clip is changed.

@@ -12,6 +12,18 @@ import json
 import os
 import time
 
+# What was wrong with a clip you gave a thumbs down: the label in the app, and what to try when it keeps being the reason.
+REASONS = {
+    "opening": ("The opening is weak", "Several clips were marked for a weak opening: try --cold_open (starts on the strongest line), or move the start in the editor."),
+    "person": ("The wrong person is shown", "Several clips showed the wrong person: try --layout split (both people stacked) or --layout fit (the whole picture)."),
+    "cut": ("It is cut at the wrong place", "Several clips were cut at the wrong place: check the end in the editor (move it to a full stop); a clip can also be rendered again with a new start and end."),
+    "captions": ("The captions", "Several clips were marked for their captions: try another style (--caption_style MINIMAL or GLOW_BOX) or another place (--caption_position)."),
+    "boring": ("Not an interesting moment", "Several clips were marked as not interesting: ask for more clips and keep the best (--clip_count), and say what the video is about (--user_context)."),
+    "title": ("The title or description", "Several clips were marked for their title: say what the video is about (--user_context) and pick one of the other title ideas."),
+}
+MIN_REASON_COUNT = 3      # a reason has to come up this many times ...
+MIN_REASON_SHARE = 0.4    # ... and in this share of the clips that were given a reason, before it becomes advice
+
 MIN_RATINGS = 8
 MIN_PER_SIDE = 3          # liked AND disliked clips needed before a preference means anything
 MIN_DIFFERENCE = 3.0      # seconds between the liked and disliked average lengths
@@ -32,13 +44,14 @@ def load(path=None):
         return []
 
 
-def record(title, duration, score, liked, path=None):
-    """Append one rating; returns the number of ratings stored (0 when the file could not be written)."""
+def record(title, duration, score, liked, path=None, reason=None):
+    """Append one rating (a thumbs-down may say what was wrong: a key of REASONS); returns the number of ratings stored (0 when the file could not be written)."""
     path = path or feedback_path()
     entries = load(path)
     entries.append({"title": str(title or "")[:120], "duration": round(float(duration or 0), 1),
                     "score": None if score is None else round(float(score), 1), "liked": bool(liked),
-                    "time": time.strftime("%Y-%m-%dT%H:%M:%S")})
+                    "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    **({"reason": reason} if reason in REASONS and not liked else {})})
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = path + ".tmp"
@@ -90,6 +103,18 @@ def apply_preferences(highlights, entries=None):
     return out
 
 
+def advice(entries=None):
+    """Plain advice from the reasons given with thumbs-downs ('' until one reason is clearly the usual one)."""
+    entries = load() if entries is None else entries
+    reasons = [e["reason"] for e in entries if not e.get("liked") and e.get("reason") in REASONS]
+    if len(reasons) < MIN_REASON_COUNT:
+        return ""
+    top = max(REASONS, key=reasons.count)
+    if reasons.count(top) < MIN_REASON_COUNT or reasons.count(top) < MIN_REASON_SHARE * len(reasons):
+        return ""
+    return REASONS[top][1]
+
+
 def summary(entries=None):
     """One plain line about what has been learned, for the review screen."""
     entries = load() if entries is None else entries
@@ -99,6 +124,7 @@ def summary(entries=None):
     pref = preferred_duration(entries)
     liked = sum(1 for e in entries if e.get("liked"))
     base = f"{n} rating{'s' if n != 1 else ''} saved ({liked} liked)."
+    tip = advice(entries)
     if pref:
-        return base + f" You tend to like clips of about {pref:.0f} s; those are now ranked slightly higher."
-    return base + f" Rate at least {MIN_RATINGS} clips (with both thumbs) to personalise the picks."
+        return base + f" You tend to like clips of about {pref:.0f} s; those are now ranked slightly higher." + (f" {tip}" if tip else "")
+    return base + f" Rate at least {MIN_RATINGS} clips (with both thumbs) to personalise the picks." + (f" {tip}" if tip else "")

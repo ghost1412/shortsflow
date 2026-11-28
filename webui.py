@@ -535,10 +535,11 @@ def recap_kind_changed(kind):
             gr.update(visible=trip, value=trip), gr.update(value=not trip))
 
 
-def rate_clip(card, liked):
-    """Thumbs up / down on a review card: saved locally; the picker learns which clip length you tend to like (engine/feedback.py)."""
+def rate_clip(card, liked, reason=None):
+    """Thumbs up / down on a review card: saved locally; the picker learns which clip length you tend to like, and a reason given with a
+    thumbs-down becomes advice once it keeps coming up (engine/feedback.py)."""
     from engine import feedback
-    n = feedback.record(card.get("title"), card.get("duration") or 0, card.get("score"), liked)
+    n = feedback.record(card.get("title"), card.get("duration") or 0, card.get("score"), liked, reason=reason)
     if not n:
         return "Could not save the rating on this computer."
     return ("Thanks! " if liked else "Noted. ") + feedback.summary()
@@ -1931,6 +1932,7 @@ def build_ui():
                                 dur = f" · {c['duration']:.0f}s" if c.get("duration") else ""
                                 gr.Markdown(f"### {c['title']}\n**{score}**{dur}" + (f"  \n_{c['reason']}_" if c.get("reason") else "")
                                             + (f"  \n🎬 Edited: {c['edit_summary']}" if c.get("edit_summary") else "")
+                                            + (f"\n\n{review.notes_text(c)}" if c.get("notes") else "")
                                             + ("  \n⚠️ Fallback pick: the analysis failed, so this is a fixed window, not a chosen moment." if c.get("fallback") else ""))
                                 with gr.Accordion("Title, description and tags (to copy)", open=False):
                                     gr.Textbox(value=review.card_text(c), lines=6, interactive=False, show_label=False,
@@ -1941,9 +1943,12 @@ def build_ui():
                                 with gr.Row():
                                     up = gr.Button("👍 Good pick", size="sm")
                                     down = gr.Button("👎 Not good", size="sm")
+                                    from engine import feedback as _fb
+                                    why = gr.Dropdown([(label, key) for key, (label, _) in _fb.REASONS.items()],
+                                                      value=None, label="What was wrong? (optional)", interactive=True, scale=2)
                                     fb = gr.Markdown("")
                                 up.click(lambda c=c: rate_clip(c, True), None, fb)
-                                down.click(lambda c=c: rate_clip(c, False), None, fb)
+                                down.click(lambda w, c=c: rate_clip(c, False, w), why, fb)
                                 rm = gr.Button("Remove this short", size="sm")
                                 rm.click(lambda cs, i=c["index"]: [x for x in cs if x["index"] != i], q_cards, q_cards)
                                 if c.get("can_rerender"):

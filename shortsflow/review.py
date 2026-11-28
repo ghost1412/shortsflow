@@ -58,6 +58,7 @@ def load_results(json_path):
             "hook": (c.get("hook") or "").strip(),
             "reason": (c.get("reason") or "").strip(),
             "edit_summary": (c.get("edit_summary") or "").strip(),
+            "notes": [n for n in (c.get("notes") or []) if isinstance(n, dict) and n.get("text")],       # what the tool noticed (engine/clip_checks.py)
             "fallback": bool(c.get("fallback")),
             "score": score,
             "label": score_label(score),
@@ -73,6 +74,14 @@ def load_results(json_path):
             "can_rerender": bool(settings and data.get("source_video")),
         })
     return cards
+
+
+def notes_text(card):
+    """The tool's own notes about a clip as a short markdown block for its review card ('' when it noticed nothing)."""
+    lines = []
+    for n in card.get("notes") or []:
+        lines.append(f"- {n['text']}" + (f" _Try: {n['try']}_" if n.get("try") else ""))
+    return "**Worth a look:**\n" + "\n".join(lines) if lines else ""
 
 
 def card_text(card):
