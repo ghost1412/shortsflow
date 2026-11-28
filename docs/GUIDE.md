@@ -125,7 +125,7 @@ python main.py --source_video "https://www.youtube.com/watch?v=VIDEO_ID" --extra
 
 ## Highlights video
 
-One video of the best moments of a talk, match, film or event. The moments stay in their original order, you choose the length, and it is landscape like the source, with optional transitions and captions. `--cold_open` starts it with a few seconds of one strong later line (chapters and subtitles move with it; not with `--tighten`, and check the line: speech recognition can garble it).
+One video of the best moments of a talk, match, film or event. The moments stay in their original order, you choose the length, and it is landscape like the source, with optional transitions and captions. `--cold_open` starts it with a few seconds of one strong later line (check the line: speech recognition can garble it). `--tighten` cuts its pauses of more than about a second, so leave it off when silent moments matter, such as an on-screen demonstration. Captions, subtitles, chapters and the cold open follow the cuts. Without `--target_duration` the video is about 3 minutes.
 
 **In the app:** **Highlights video** card.
 
