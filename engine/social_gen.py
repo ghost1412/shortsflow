@@ -212,6 +212,8 @@ def ground_clip_metadata(parsed, text, hook=None, user_context=None, ask=None):
 
     def problems_of(title, description):
         found = title_variants.grounding_problems(title, text, extras)
+        if not any(c.isalpha() for c in str(title)):          # "1044?!" (a radio code heard in a game) is said, and tells a viewer nothing
+            found.append("the title is only numbers and punctuation, which tells a viewer nothing")
         found += title_variants.grounding_problems(_description_lead(description), text, extras, names=False, min_digits=2)
         return found
     problems = problems_of(parsed.get("title", ""), parsed.get("description", ""))
@@ -224,7 +226,7 @@ def ground_clip_metadata(parsed, text, hook=None, user_context=None, ask=None):
             retry = robust_json_parse(ask(
                 f"The clip says only this:\n\"{text}\"\n\nYour title and description contained details the clip does not say: {'; '.join(problems)}.\n"
                 f"Title: {parsed.get('title')}\nDescription: {parsed.get('description')}\n\n"
-                "Rewrite both so they use ONLY numbers, names and facts from the clip. Keep the title under 60 characters and keep the hashtags. "
+                "Rewrite both so they use ONLY numbers, names and facts from the clip, with a title in words. Keep the title under 60 characters and keep the hashtags. "
                 'Return ONLY JSON: {"title": "...", "description": "..."}'))
             if isinstance(retry, dict) and retry.get("title") and not problems_of(str(retry["title"]), str(retry.get("description") or "")):
                 parsed["title"] = str(retry["title"])[:95]
@@ -233,7 +235,7 @@ def ground_clip_metadata(parsed, text, hook=None, user_context=None, ask=None):
         except Exception as e:
             print(f"[Warning] The rewrite request failed ({str(e)[:70]}).")
     # fall back to what is certainly true: the hook (a stated claim from the clip) or the first sentence said
-    first = (hook or text.split(".")[0] or "Must-watch moment").strip()
+    first = next((s.strip() for s in (hook, text.split(".")[0]) if s and any(c.isalpha() for c in s)), "Must-watch moment")
     parsed["title"] = first[:80]
     if title_variants.grounding_problems(_description_lead(parsed.get("description", "")), text, extras, names=False, min_digits=2):
         hashtags = " ".join(w for w in str(parsed.get("description", "")).split() if w.startswith("#"))

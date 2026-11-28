@@ -133,8 +133,9 @@ def windows_for(duration, length, hop=None):
 
 
 # Titles for action moments when no AI text provider answers (the clip's own words are empty, so there is nothing to quote).
-ACTION_HOOKS = ["No time to blink", "Things got intense", "Watch the whole fight", "This got out of hand", "Pure chaos",
-                "One mistake and it's over", "Did you see that coming?", "The fight everyone clips", "It gets wild at the end"]
+# an action moment is only known to be loud and fast: no title may say what happens in it (a fight, a race, a twist at the end) or who watched it
+ACTION_HOOKS = ["No time to blink", "Things got intense", "Hold on tight", "This got out of hand", "Pure chaos",
+                "One mistake and it's over", "Did you see that coming?", "No time to think", "That escalated quickly"]
 
 
 _FILLER = {"yeah", "okay", "ok", "oh", "uh", "um", "huh", "hey", "no", "yes", "well", "right", "so", "hmm", "ah"}
