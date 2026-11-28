@@ -26,3 +26,11 @@ def test_a_rushed_pass_is_listened_to_again():
 def test_when_every_pass_is_rushed_the_words_are_spread_over_the_speech():
     got = ev.timed(TEXT, "a.mp3", lambda audio, text: BAD)
     assert not ev.rushed(got) and got[0]["start"] == 0.0 and 9.5 < got[-1]["end"] <= 10.1 and len(got) == 20
+
+
+def test_when_the_recogniser_writes_the_speech_another_way_its_times_and_pauses_are_still_used():
+    script = "alpha bravo charlie delta echo foxtrot golf hotel"
+    other = [{"word": "x" * len(w), "start": s, "end": s + 0.4} for w, s in zip(script.split(), [0.0, 0.5, 1.0, 1.5, 6.0, 6.5, 7.0, 7.5])]   # a 4 s pause
+    got = ev.align(script, other)
+    assert [w["word"] for w in got] == script.split()
+    assert all(abs(g["start"] - h["start"]) < 0.25 for g, h in zip(got, other)), [g["start"] for g in got]

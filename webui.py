@@ -2445,11 +2445,12 @@ def build_ui():
                         c_transition = gr.Dropdown([("Big section number", "number"), ("Fade", "fade"), ("Slide", "slide"), ("Zoom", "zoom"), ("Wipe", "wipe"), ("Cut", "cut")],
                                                    value="number", label="Transition between sections",
                                                    info="To compare: render once, then pick another here, choose the run under 'Or redo an earlier run', tick Quick draft and press Make (about a minute: the script and voice are reused).")
-                        c_narrator = gr.Radio([("Standard voice", "standard"), ("Expressive: the local voice server", "voice_server")], value="standard",
+                        c_narrator = gr.Radio([("Standard voice", "standard"), ("Storyteller: grandfather (Gemini, online)", "gemini"), ("Storyteller: grandmother (Gemini, online)", "gemini:Sulafat"), ("Expressive: the local voice server", "voice_server")], value="standard",
                                               label="Narrator",
                                               info="Expressive speaks each section in its mood (tense, excited, serious...) in the presenter's voice, with the Chatterbox "
                                                    "voice server on this PC. Install and start it on the Voice-over card first; it uses the GPU while it speaks. "
-                                                   "If it is not running, the standard voice is used.")
+                                                   "If it is not running, the standard voice is used. Storyteller acts the story: the narration text goes to Google with your "
+                                                   "Gemini key (a preview with a small free quota); if it cannot finish, the standard voice is used for the whole video.")
                         with gr.Accordion("Narrate in your own voice (with the expressive narrator)", open=False):
                             gr.Markdown("Give 10-30 seconds of clean speech; the voice server copies it for the whole narration. It stays on this PC. "
                                         "**Only your own voice, or the voice of someone who agreed.**")

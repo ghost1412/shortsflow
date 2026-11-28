@@ -418,7 +418,7 @@ def speak_sections(script, session_dir, provider=None, voice=None, clone_voice=N
                                                                 first=i == 1)
             except Exception as e:
                 expressive, narrator_used = None, "standard"            # a redo with narrator=voice_server speaks it again
-                print(f"[Warning] The voice server failed for '{sec['title']}' ({str(e)[:120]}); the rest of this video uses the standard voice.")
+                print(f"[Warning] The chosen narrator failed for '{sec['title']}' ({str(e)[:120]}); the standard voice is used.")
         if not result_audio and provider == "elevenlabs" and generate_is_default and os.getenv("ELEVENLABS_API_KEY") and not eleven_failed:
             try:
                 result_audio, result_subs = speak_elevenlabs(
@@ -590,6 +590,15 @@ def sfx_for(props, path):
 def _narration_hashes(script):
     import hashlib
     return [hashlib.sha1(str(s.get("narration", "")).encode("utf-8")).hexdigest()[:12] for s in script["sections"]]
+
+
+def narrator_of(session_dir):
+    """What the narration saved in `session_dir` was spoken with, "" when nothing is saved."""
+    try:
+        with open(os.path.join(session_dir, "voice_cache.json"), encoding="utf-8") as f:
+            return str(json.load(f).get("narrator", "standard"))
+    except (OSError, ValueError):
+        return ""
 
 
 def cached_voice(script, session_dir, narrator=None):

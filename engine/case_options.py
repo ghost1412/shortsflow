@@ -71,7 +71,9 @@ OPTIONS = (
            "cloud, or off for no pictures (the look's own background)", check=_cartoon),
     Option("narrator", "choice", "standard", "who speaks the narration: standard (ElevenLabs with credits, else the free Edge voice), or voice_server: the "
            "local voice server (Chatterbox, installed on the Voice-over card; started for the narration and stopped after it), each section in its mood and in the presenter's voice; "
-           "it uses the GPU while it speaks", ("standard", "voice_server")),
+           "it uses the GPU while it speaks; or gemini: a storyteller who acts the story, online (the narration text goes to Google with your "
+           "GEMINI_API_KEY; a preview with a small free quota; if it cannot finish, the whole video uses the standard voice)", ("standard", "voice_server", "gemini")),
+    Option("gemini_voice", "text", "Algieba", "with narrator=gemini: the storyteller's voice, Algieba (a grandfather, the default) or Sulafat (a grandmother); other Google prebuilt voice names work too"),
     Option("voice_sample", "path", "", "with narrator=voice_server: a recording of the voice to copy instead of the presenter's (yours, or someone "
            "who agreed; .wav or .mp3, 10-30 seconds of clean speech). It stays on this PC", check=_voice_sample),
     Option("transition", "choice", "number", "how one section gives way to the next: number (a big section number and title), fade, slide, zoom, wipe "

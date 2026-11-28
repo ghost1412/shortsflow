@@ -493,6 +493,11 @@ def case_args(topic, sources_text="", template="case", theme="dark", formats=("1
               "layouts": layouts if layouts in ("auto", "template") else "auto"}
     if transition in _case_options.TRANSITIONS and transition != "number":
         values["transition"] = transition
+    if str(narrator).startswith("gemini"):                 # "gemini" or "gemini:Sulafat"
+        values["narrator"] = "gemini"
+        name = str(narrator).partition(":")[2]
+        if re.fullmatch(r"[A-Za-z]{2,30}", name):
+            values["gemini_voice"] = name
     if narrator == "voice_server":
         values["narrator"] = "voice_server"
         if voice_sample:

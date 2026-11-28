@@ -116,6 +116,33 @@ def language_sample(language, folder, make=None):
     return wav
 
 
+MATCH_NEEDED = 0.3        # fewer words than this spelt the same: the recogniser wrote it another way (Hindi speech came back in Urdu letters)
+
+
+def _by_position(words, spelt, heard, heard_spelt):
+    """Times by how far through the speech each word comes: the heard words' times are right even when their spelling is no use, so a
+    script word a third of the way through (by letters) is placed where the speech was a third of the way through, pauses included."""
+    marks, done = [], 0
+    total = sum(max(len(h), 1) for h in heard_spelt)
+    for h, spelling in zip(heard, heard_spelt):
+        size = max(len(spelling), 1)
+        marks.append((done / total, (done + size) / total, float(h["start"]), float(h["end"])))
+        done += size
+
+    def at(share, starting):
+        for lo, hi, start, end in marks:
+            if share < hi - 1e-9 or (not starting and share <= hi + 1e-9):
+                return start + (end - start) * max(0.0, min(1.0, (share - lo) / (hi - lo)))
+        return marks[-1][3]
+    weights = [max(len(w), 1) for w in spelt]
+    out, done = [], 0
+    for word, size in zip(words, weights):
+        start, end = at(done / sum(weights), True), at((done + size) / sum(weights), False)
+        out.append({"word": word, "start": round(start, 3), "end": round(max(end, start + 0.04), 3)})
+        done += size
+    return out
+
+
 def align(script_text, heard):
     """[{word, start, end}] with the script's own words and the heard words' times. `heard` is Whisper's [{word, start, end}]. Matched words
     take their times; words in between are spread over the gap; words the recogniser missed at the ends are spread over the edges."""
@@ -133,8 +160,11 @@ def align(script_text, heard):
             at += step * n
         return out
     a, b = [_norm(w) for w in words], [_norm(h["word"]) for h in heard]
+    blocks = difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks()
+    if sum(block.size for block in blocks) < MATCH_NEEDED * len(words):
+        return _by_position(words, a, heard, b)
     times = [None] * len(words)
-    for block in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks():
+    for block in blocks:
         for k in range(block.size):
             h = heard[block.b + k]
             times[block.a + k] = (float(h["start"]), float(h["end"]))

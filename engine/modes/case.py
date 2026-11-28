@@ -78,6 +78,8 @@ def _make_script(args, session_dir, opts):
 def _narrator_tag(narrator, voice_sample, avatar, voice=None, language="en"):
     """What the narration is spoken with, as kept in voice_cache.json, so a redo with another narrator, another recording or another presenter
     voice speaks it again: "standard", "voice_server:own_<hash>.wav" (a person's recording) or "voice_server:voice_<edge voice>.wav"."""
+    if narrator == "gemini":
+        return f"gemini:{voice or 'Algieba'}"
     if narrator != "voice_server":
         return "standard"
     if voice_sample and os.path.isfile(voice_sample):
@@ -96,7 +98,7 @@ def _narration(args, script, session_dir, resumed, avatar=None, narrator="standa
     """([audio], [words]): the saved narration of a resumed session, else newly spoken (ElevenLabs when its key is set)."""
     from engine import case_render as cr
     if resumed:
-        cached = cr.cached_voice(script, session_dir, _narrator_tag(narrator, voice_sample, avatar, getattr(args, "voice", None), _language(script)))
+        cached = cr.cached_voice(script, session_dir, _narrator_tag(narrator, voice_sample, avatar, _spoken_by(args, narrator), _language(script)))
         if cached:
             print("[Log] Reusing the saved narration (no new voice is made).")
             return cached
@@ -106,6 +108,10 @@ def _narration(args, script, session_dir, resumed, avatar=None, narrator="standa
     from engine import expressive_voice as ev, voice_server
     with voice_server.while_needed(ev.server_url()):              # started here when it must be, and stopped again before the render
         return _speak(args, script, session_dir, avatar, narrator, voice_sample)
+
+
+def _spoken_by(args, narrator):
+    return (getattr(args, "gemini_voice", None) or "Algieba") if narrator == "gemini" else getattr(args, "voice", None)
 
 
 def _language(script):
@@ -128,6 +134,23 @@ def _speak(args, script, session_dir, avatar, narrator, voice_sample):
         voice = eleven if provider == "elevenlabs" else edge_voice
         print(f"[Log] Voice: {avatars.VOICES[edge_voice][0]} (the presenter's voice).")
     expressive = None
+    if narrator == "gemini":
+        from engine import gemini_voice
+        if gemini_voice.available():
+            chosen = _spoken_by(args, narrator)
+
+            def tell(text, audio, subs, sample=None, mood=None, first=False):
+                return gemini_voice.speak(text, audio, subs, mood=mood, first=first, voice=chosen)
+            expressive = {"speak": tell, "sample": None, "tag": f"gemini:{chosen}"}
+            print(f"[Log] Narration: the Gemini storyteller ({chosen}); the narration text is sent to Google.")
+            spoken = cr.speak_sections(script, session_dir, provider=provider, voice=voice, edge_voice=edge_voice, expressive=expressive,
+                                       clone_voice=os.getenv("VOICE_CLONE_SAMPLE") or None)
+            if cr.narrator_of(session_dir) != expressive["tag"]:
+                print("[Warning] The storyteller voice could not finish, so the whole narration is made again with the standard voice (one voice per video).")
+                return cr.speak_sections(script, session_dir, provider=provider, voice=voice, edge_voice=edge_voice, expressive=None,
+                                         clone_voice=os.getenv("VOICE_CLONE_SAMPLE") or None)
+            return spoken
+        print("[Warning] narrator=gemini needs GEMINI_API_KEY; the standard voice is used.")
     if narrator == "voice_server":
         from engine import expressive_voice as ev
         if ev.available():
@@ -220,6 +243,7 @@ def run(args, target_bitrate=None, target_preset=None):
     avatar = avatars.load(opts["avatar"], os.getcwd())
     if opts["voice_sample"] and opts["narrator"] != "voice_server":
         print("[Warning] voice_sample is used only with narrator=voice_server (the local voice server copies it); it is ignored.")
+    args.gemini_voice = opts["gemini_voice"]
     audios, words = _narration(args, script, session_dir, bool(resume), avatar, opts["narrator"], opts["voice_sample"])
     timing = cr.plan_timing([cr._duration(a) for a in audios])
     narration_warnings = cr.timing_warnings(words, [cr._duration(a) for a in audios], [x.get("title") for x in script["sections"]])
