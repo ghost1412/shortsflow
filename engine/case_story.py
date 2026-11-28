@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import unicodedata
 
 from engine import story_art, story_objects
 
@@ -24,7 +25,11 @@ def library_dir():
 
 
 def _slug(name):
-    return re.sub(r"[^a-z0-9]+", "_", str(name).lower()).strip("_")[:40]
+    """A file name for a person: the letters and digits of ANY alphabet (a Hindi vowel sign counts), so two names never share one file.
+    (Only a-z used to be kept: every Hindi name became "" and one person's face was drawn for another.)"""
+    kept = "".join(c if unicodedata.category(c)[0] in "LMN" else "_" for c in str(name).lower())
+    slug = re.sub(r"_+", "_", kept).strip("_")[:40].strip("_")
+    return slug or "person_" + hashlib.sha1(str(name).encode("utf-8")).hexdigest()[:10]
 
 
 def load_library(directory=None):
@@ -55,8 +60,8 @@ def save_character(name, spec, directory=None):
 
 def sentences(text):
     """The sentences of a narration, in order."""
-    parts = re.split(r"(?<=[.!?])[\"')\]]*\s+", str(text or "").strip())
-    return [p.strip() for p in parts if p.strip()]
+    from engine.case_study import split_sentences
+    return split_sentences(text)
 
 
 # a saved "name" that is only a role or a family word belongs to the story it was made for: the next story's grandmother or king is somebody else

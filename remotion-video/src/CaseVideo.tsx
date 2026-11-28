@@ -22,6 +22,7 @@ export const caseVideoSchema = z.object({
   hook: z.string().default(""),               // one gripping line shown big on the cover card (the title becomes a small label above it)
   outroSeconds: z.number().default(3),
   verified: z.boolean().default(true),
+  namesChecked: z.boolean().default(true),      // false for a script the name check cannot read (Hindi, Japanese ...): only figures were checked
   removedClaims: z.number().default(0),         // sentences the check removed because the sources do not hold them
   sources: z.array(z.string()).default([]),
   captionsOff: z.boolean().default(false),
@@ -1173,7 +1174,7 @@ const Captions: React.FC<{ words: Props["words"]; accent: string; pill: string }
   words.forEach((w, i) => {
     cur.push(w);
     const gap = i + 1 < words.length ? words[i + 1].start - w.end : 1;
-    if (cur.length >= 5 || /[.!?]$/.test(w.word) || gap > 0.6) { chunks.push(cur); cur = []; }
+    if (cur.length >= 5 || /[.!?\u0964\u0965\u3002\uff01\uff1f]$/.test(w.word) || gap > 0.6) { chunks.push(cur); cur = []; }
   });
   if (cur.length) chunks.push(cur);
   const chunk = chunks.find((c) => now >= c[0].start - 0.05 && now <= c[c.length - 1].end + 0.25);
@@ -1243,7 +1244,7 @@ export const CaseVideo: React.FC<Props> = (props) => {
           {(() => {
             const heading = props.verified ? "Sources" : "Unverified";
             const outroLines = props.verified
-                ? [...props.sources.slice(0, 3), ...(props.removedClaims > 0 ? [`${props.removedClaims} sentence${props.removedClaims === 1 ? "" : "s"} left out: the sources do not hold ${props.removedClaims === 1 ? "it" : "them"}.`] : ["Every figure and name was found in the sources."])]
+                ? [...props.sources.slice(0, 3), ...(props.removedClaims > 0 ? [`${props.removedClaims} sentence${props.removedClaims === 1 ? "" : "s"} left out: the sources do not hold ${props.removedClaims === 1 ? "it" : "them"}.`] : [props.namesChecked ? "Every figure and name was found in the sources." : "Every figure written in digits was found in the sources. Names were not checked."])]
                 : ["No sources were given. Check the facts before you rely on them."];
             const outroFrames = Math.round(props.outroSeconds * fps);
             return storyBackdrops.length

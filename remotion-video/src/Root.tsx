@@ -86,6 +86,7 @@ export const RemotionRoot: React.FC = () => {
           hook: "",
           outroSeconds: 3,
           verified: true,
+          namesChecked: true,
           removedClaims: 0,
           sources: [],
           captionsOff: false,

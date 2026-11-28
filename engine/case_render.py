@@ -17,6 +17,12 @@ FPS = 30
 SIZES = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080), "4:5": (1080, 1350)}
 
 
+def names_can_be_checked(script):
+    """The source check knows names by their capital letters, so it only holds for narration written mostly in the Latin alphabet."""
+    letters = [c for s in script.get("sections", []) for c in str(s.get("narration") or "") if c.isalpha()]
+    return not letters or sum(c < "\u0250" for c in letters) > len(letters) / 2
+
+
 def plan_timing(durations, intro=1.8, pad=0.5):
     """[(start, end)] of every section: the first starts after the intro, each lasts its narration plus `pad` seconds of air."""
     out, t = [], float(intro)
@@ -38,7 +44,7 @@ def beats_for(words, duration, min_len=3.5, max_len=6.5):
     for i, w in enumerate(words):
         length = w["end"] - start
         nxt = words[i + 1]["start"] if i + 1 < len(words) else duration
-        sentence_end = str(w["word"]).rstrip("\"')").endswith((".", "!", "?"))
+        sentence_end = str(w["word"]).rstrip("\"')").endswith((".", "!", "?", "\u0964", "\u0965", "\u3002", "\uff01", "\uff1f"))
         if (length >= min_len and sentence_end) or length >= max_len or (length >= min_len + 1.5 and nxt - w["end"] > 0.35):
             cut = round(min(w["end"] + 0.15, duration), 2)
             if duration - cut < 2.0:
@@ -253,7 +259,8 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
     for sec, (start, end), ws, clip, foot, pic in zip(script["sections"], timing, words_per_section, clips, footage, art):
         labels, cues = list(sec.get("on_screen") or []), None
         if sec["scene"] == "story" and not (pic and pic.get("kind") == "story"):       # no story picture: the first sentence is shown as a quote
-            first = (re.split(r"(?<=[.!?])\s", str(sec.get("narration") or "").strip())[0])[:110]
+            from engine.case_study import split_sentences
+            first = (split_sentences(sec.get("narration")) or [""])[0][:110]
             sec = dict(sec, scene="quote")
             labels = [first] if first else [sec["title"]]
         if sec["scene"] == "illustration" and not pic:      # its picture could not be made: the plain checklist shows the labels
@@ -297,6 +304,7 @@ def build_props(script, timing, words_per_section, theme="dark", accent=None, in
             sections[-1]["footage"] = [{"src": f["path"], "seconds": f.get("seconds") or 10.0, "kind": f.get("kind", "video")} for f in foot]
         words += [{"word": w["word"], "start": round(w["start"] + start, 3), "end": round(w["end"] + start, 3)} for w in ws]
     props = {"title": script["title"], "hook": str(script.get("hook") or ""), "theme": theme, "introSeconds": intro, "outroSeconds": outro, "verified": bool(script.get("verified")),
+             "namesChecked": names_can_be_checked(script),
              "sources": list(dict.fromkeys(source_label(s["ref"]) for s in script.get("sources", []))), "removedClaims": len(script.get("dropped") or []),
              "captionsOff": not captions, "sections": sections, "words": words,
              "bgMusicVolume": music_volume, "transition": transition}

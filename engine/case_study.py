@@ -378,9 +378,17 @@ def unsupported(sentence, source_text):
     return out
 
 
+SENTENCE_BREAK = re.compile(r"(?<=[.!?\u0964\u0965\u2026])[\"')\]]*\s+|(?<=[\u3002\uff01\uff1f])[\"')\]\u300d\u300f]*\s*")
+
+
+def split_sentences(text):
+    """The sentences of a narration in any of the scripts the video can show, in order."""
+    return [s.strip() for s in SENTENCE_BREAK.split(str(text or "").strip()) if s and s.strip()]
+
+
 def clean_narration(text, source_text):
     """(narration, dropped): `text` without the sentences that hold something the sources do not."""
-    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", str(text or "")) if s.strip()]
+    sentences = split_sentences(text)
     kept, dropped = [], []
     for s in sentences:
         bad = unsupported(s, source_text)
@@ -756,7 +764,7 @@ MOODS = ("tense", "excited", "serious", "warm", "calm")
 def check_hook(text, source_text=None):
     """(hook, '') when `text` can open the video, else ('', why): it must exist, be one short line, and hold nothing the sources do not say."""
     hook = " ".join(str(text or "").split()).strip().strip('"').strip()
-    if hook and (not re.search(r"[A-Za-z]{2,}", hook) or hook[0] in "{[<"):
+    if hook and (sum(c.isalpha() for c in hook) < 2 or hook[0] in "{[<"):              # letters of any alphabet
         return "", "it is not a line of words"                       # a stray bracket from a JSON answer is not a hook
     if not hook:
         return "", "the model gave none"
@@ -798,14 +806,14 @@ def make_hook(first, sections, source_text, ask):
     try:
         reply = ask("Write the opening line of a short explainer video: ONE line of 12 words or fewer that makes a viewer keep watching (a surprising "
                     "fact, a number, a stake or a question). Use ONLY facts, numbers and names from this narration:\n\n" + told
-                    + "\n\nReturn only the line, no quotes, no explanation.")
+                    + "\n\nWrite it in the same language and script as the narration. Return only the line, no quotes, no explanation.")
     except Exception as e:                      # the model is busy: fall back below
         reply, why = "", f"the model did not answer ({str(e)[:80]})"
     hook, why2 = check_hook(hook_line(reply), source_text)
     if hook:
         print(f"[Log] Hook: {hook}")
         return hook
-    first_sentence = re.split(r"(?<=[.!?])\s+", sections[0]["narration"].strip())[0] if sections else ""
+    first_sentence = (split_sentences(sections[0]["narration"]) or [""])[0] if sections else ""
     hook, _ = check_hook(first_sentence, source_text)
     if hook:
         print(f"[Log] Hook: the first sentence of the narration ({why2 or why}).")
