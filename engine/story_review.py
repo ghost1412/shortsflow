@@ -16,7 +16,7 @@ import json
 import os
 import re
 
-from engine import story_art, story_objects
+from engine import case_story, story_art, story_objects
 
 KINDS = ("person", "creature", "thing")
 MAX_NEEDED = 12
@@ -48,6 +48,22 @@ def _named(name, text):
 
 
 # ---------------------------------------------------------------- 1. what has to be on screen
+
+# beings a narration may call creatures that are simply people to draw, and the look tradition gives them when the model describes none
+PERSON_ROLES = {"witch": {"figure": "woman", "age": "old", "headgear": "hood", "outfit": "robe", "outfit_colour": "black", "mood": "stern"},
+                "hag": {"figure": "woman", "age": "old", "headgear": "hood", "outfit": "robe", "outfit_colour": "black", "mood": "stern"},
+                "sorceress": {"figure": "woman", "headgear": "hood", "outfit": "robe", "outfit_colour": "purple"},
+                "enchantress": {"figure": "woman", "outfit": "robe", "outfit_colour": "purple"},
+                "wizard": {"age": "old", "facial_hair": "long_beard", "headgear": "hood", "outfit": "robe", "outfit_colour": "blue"},
+                "sorcerer": {"facial_hair": "beard", "headgear": "hood", "outfit": "robe", "outfit_colour": "purple"}}
+
+
+def _person_role(item):
+    """The role ("witch") when this "creature" is really a person: that word in its name, no animal's shape and no monster features."""
+    role = next((w for w in re.findall(r"[a-z]+", item["name"].lower()) if w in PERSON_ROLES), None)
+    species = str(item.get("species") or "").strip().lower()
+    return role if role and species in ("", "human", "other") and not item.get("features") else None
+
 
 def needed_question(script):
     lines = [f"{si}.{k} {s}" for si, sents in enumerate(_sentences(script), 1) for k, s in enumerate(sents, 1)]
@@ -356,6 +372,7 @@ def review_coverage(plan, script, ask, folder, drawn, vision, render, report):
     report["needed"] = [w["name"] for w in wanted]
     setting = plan.get("setting") or script.get("title", "")
     sents = _sentences(script)
+    wanted = [dict(w, kind="person") if w["kind"] == "creature" and _person_role(w) else w for w in wanted]
     missing = [dict(w, count=len(sents[w["section"]])) for w in wanted if not shown_as(plan, w)]
     people = [m for m in missing if m["kind"] == "person"][:MAX_NEW_PEOPLE]
     unknown = [m["name"] for m in people if m["name"] not in plan["characters"]]
@@ -365,6 +382,13 @@ def review_coverage(plan, script, ask, folder, drawn, vision, render, report):
         why = ""
         if item["kind"] == "person":
             spec = plan["characters"].get(name) or next((s for n, s in specs.items() if _same(n, name)), None)
+            role = next((w for w in re.findall(r"[a-z]+", name.lower()) if w in PERSON_ROLES), None)
+            if not spec and role:
+                spec = story_art.clean_spec(PERSON_ROLES[role])
+            if spec and name not in plan["characters"]:       # the same rules as the first plan: believe the name and the narration, no twins
+                told = " ".join(str(s.get("narration") or "") for s in script["sections"])
+                spec = case_story.apply_facts(spec, case_story.facts_from(name, told))
+                spec = case_story.tell_apart({**plan["characters"], name: spec}, fixed=set(plan["characters"]))[name]
             if item not in people:
                 why = f"only {MAX_NEW_PEOPLE} missing people are added"
             elif not spec:

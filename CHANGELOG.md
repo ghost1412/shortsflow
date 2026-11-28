@@ -4,6 +4,8 @@ Release notes for the `shortsflow` package and the Windows installer. Newest fir
 
 ## Unreleased
 
+- Fix: story look: a witch, wizard or sorceress the story review listed as a "creature" went missing when no image model could check a drawing. With no monster features they are drawn as people.
+
 - Fix: story look: when the text model left people's looks blank, children and an "Old Woman" were all drawn as the same grown man. A person's name and plain statements in the narration ("... are the young children of ...") now decide child or woman, and two people are never drawn exactly alike. Children also have a child's proportions now (a larger round head, small shoulders, bigger eyes), not a shrunken grown-up's.
 
 - Fix: with a local model (Ollama), titles and descriptions were often missing for most clips of a run. They are asked for at the same time, the model answers one at a time, and the ones waiting ran out of their 12 seconds. They now take turns.
